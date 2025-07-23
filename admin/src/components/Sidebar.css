@@ -1,0 +1,55 @@
+.sidebar {
+  width: 260px;
+  background-color: #5A0505;
+   background-image: url('../assets/Rectangle.png'); 
+  color: #fff;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
+
+
+.sidebar-header {
+  padding: 20px 0;
+  text-align: center;
+  border-bottom: 1px solid #3d4f62;
+}
+
+.sidebar .logo {
+  width: 150px;
+  margin-bottom: 10px;
+}
+
+.sidebar-nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 20px 0 0 0;
+}
+
+.sidebar-nav li {
+  margin-bottom: 10px;
+}
+
+.sidebar-nav a {
+  display: flex;
+  align-items: center;
+  color: #a9b7c5;
+  text-decoration: none;
+  padding: 15px 20px;
+  border-radius: 8px;
+  transition: background-color 0.3s, color 0.3s;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.sidebar-nav a:hover,
+.sidebar-nav a.active {
+  background-color: #e0e0e0;
+  color: #1a2c3e;
+}
+
+.sidebar-nav a svg {
+  margin-right: 15px;
+  font-size: 1.2rem;
+} 

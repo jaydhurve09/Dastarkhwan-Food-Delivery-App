@@ -1,13 +1,13 @@
 import 'dotenv/config';
 import express from 'express';
-import admin from 'firebase-admin';
-import { readFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname } from 'path';
 import cors from 'cors';
 import morgan from 'morgan';
 import userRoutes from './routes/userRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import authRoutes from './routes/authRoutes.js';
+import { db, auth } from './config/firebase.js'; // Import Firebase services
 
 // Get current file path
 const __filename = fileURLToPath(import.meta.url);
@@ -16,19 +16,11 @@ const __dirname = dirname(__filename);
 const app = express();
 const port = process.env.PORT || 5000;
 
-// Read and parse the service account file
-const serviceAccountPath = join(__dirname, 'firebaseAdminConfig.json');
-const serviceAccount = JSON.parse(await readFile(serviceAccountPath, 'utf8'));
-
-// Initialize Firebase Admin
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  // Uncomment if you're using Realtime Database
-  // databaseURL: "https://dastarkhawn-demo-default-rtdb.firebaseio.com"
-});
-
 // Global middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
@@ -39,12 +31,13 @@ app.use((req, res, next) => {
   next();
 });
 
-// Add a test route
+// Health check route
 app.get('/', (req, res) => {
   res.json({
     status: 'success',
     message: 'Dastarkhwan API is running',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
   });
 });
 
@@ -52,30 +45,42 @@ app.get('/', (req, res) => {
 app.get('/test-firebase', async (req, res) => {
   try {
     // Test Firestore
-    const db = admin.firestore();
     const testRef = db.collection('test');
-    await testRef.add({ test: new Date().toISOString() });
+    const docRef = await testRef.add({ 
+      test: new Date().toISOString(),
+      message: 'Firebase connection test'
+    });
     
     // Test Auth
-    const auth = admin.auth();
     const users = await auth.listUsers(1);
     
     res.json({
       status: 'success',
-      firestore: 'working',
-      auth: users.users.length > 0 ? 'users exist' : 'no users (this is ok)',
-      timestamp: new Date().toISOString()
+      message: 'Firebase connection test successful',
+      firestore: {
+        success: true,
+        documentId: docRef.id,
+        message: 'Write successful'
+      },
+      auth: {
+        success: true,
+        userCount: users.users.length,
+        message: `Found ${users.users.length} user(s)`
+      }
     });
   } catch (error) {
     console.error('Firebase test error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       status: 'error',
-      message: error.message 
+      message: 'Firebase test failed',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
 
 // API Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admins', adminRoutes);
 
@@ -89,10 +94,43 @@ app.use((req, res, next) => {
 
 // Global error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).send('Something broke!');
+  console.error('Global error handler:', err.stack);
+  
+  // Handle JWT errors
+  if (err.name === 'JsonWebTokenError') {
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid token',
+      error: 'Not authorized, token failed'
+    });
+  }
+  
+  // Handle validation errors
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation Error',
+      error: err.message
+    });
+  }
+
+  // Handle other errors
+  res.status(err.statusCode || 500).json({
+    success: false,
+    message: 'Something went wrong!',
+    error: process.env.NODE_ENV === 'development' ? err.message : 'Internal Server Error',
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  });
 });
 
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+// Start the server
+const server = app.listen(port, () => {
+  console.log(`Server is running in ${process.env.NODE_ENV || 'development'} mode on port ${port}`);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err, promise) => {
+  console.error(`Error: ${err.message}`);
+  // Close server & exit process
+  server.close(() => process.exit(1));
 });

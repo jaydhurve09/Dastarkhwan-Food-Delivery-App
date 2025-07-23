@@ -1,6 +1,9 @@
 import { User } from '../models/User.js';
 import { validationResult } from 'express-validator';
 import bcrypt from 'bcrypt';
+import { admin, auth } from '../config/firebase.js';
+// 'admin' is the initialized firebase app instance
+// 'auth' is the initialized firebase auth instance
 
 // Hash password before saving
 const hashPassword = async (password) => {

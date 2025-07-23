@@ -1,80 +1,129 @@
 import { Admin } from '../models/Admin.js';
-import bcrypt from 'bcrypt';
-import admin from 'firebase-admin';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { adminAuth } from '../config/firebase.js';
+import { ROLES } from '../config/constants.js';
 import dotenv from 'dotenv';
+import bcrypt from 'bcrypt';
 
-// Get current file path
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+// Configure dotenv to load .env file
+dotenv.config({ path: '.env' });
 
-// Load environment variables
-dotenv.config({ path: join(__dirname, '../../.env') });
+console.log('🔍 Environment variables loaded');
+console.log(`📁 FIREBASE_CONFIG_PATH: ${process.env.FIREBASE_CONFIG_PATH}`);
+console.log(`🌐 FIREBASE_DATABASE_URL: ${process.env.FIREBASE_DATABASE_URL}`);
 
-// Initialize Firebase Admin if not already initialized
-if (!admin.apps.length) {
-  try {
-    admin.initializeApp({
-      credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
-      databaseURL: process.env.FIREBASE_DATABASE_URL
-    });
-    console.log('Firebase Admin initialized successfully');
-  } catch (error) {
-    console.error('Firebase admin initialization error', error);
-    process.exit(1);
-  }
+// Verify required environment variables
+const requiredVars = ['FIREBASE_DATABASE_URL'];
+const missingVars = requiredVars.filter(varName => !process.env[varName]);
+
+if (missingVars.length > 0) {
+  console.error('❌ Missing required environment variables:', missingVars.join(', '));
+  console.error('Please check your .env file and ensure all required variables are set.');
+  process.exit(1);
 }
 
-// Function to create super admin
-async function createSuperAdmin() {
+const createSuperAdmin = async () => {
   const name = 'Super Admin';
   const email = 'superadmin@dastarkhwan.com';
   const password = 'ChangeMe123!'; // This should be changed after first login
   
+  console.log('🚀 Starting super admin creation process...');
+  console.log(`📧 Email: ${email}`);
+  
   try {
-    // Check if super admin already exists
+    console.log('🔍 Checking if super admin already exists...');
     const existingAdmin = await Admin.findByEmail(email);
     
     if (existingAdmin) {
-      console.log('Super admin already exists');
-      console.log(`Email: ${existingAdmin.email}`);
-      console.log(`ID: ${existingAdmin.id}`);
+      console.log('ℹ️ Super admin already exists');
+      console.log(`📧 Email: ${existingAdmin.email}`);
+      console.log(`🆔 ID: ${existingAdmin.id}`);
+      console.log('✅ No action needed');
       return;
     }
     
-    // Hash password
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
-    
-    // Create Firestore admin record
-    const superAdmin = new Admin({
+    // 1. Create admin in Firestore with hashed password
+    const adminData = {
       name,
       email,
-      password: hashedPassword,
-      role: Admin.ROLES.SUPER_ADMIN,
-      isActive: true
-    });
+      password, // This will be hashed by the beforeCreate hook
+      role: ROLES.SUPER_ADMIN,
+      isActive: true,
+      permissions: Object.values(Admin.PERMISSIONS) // Grant all permissions
+    };
+
+    const admin = await Admin.create(adminData);
+    console.log('✅ Admin created in Firestore:', admin.id);
+
+    // 2. Create Firebase Auth user
+    try {
+      const userRecord = await adminAuth.createUser({
+        email,
+        password,
+        emailVerified: true,
+        displayName: name,
+        disabled: false
+      });
+
+      console.log('✅ Firebase Auth user created:', userRecord.uid);
+
+      // 3. Set custom claims for role-based access
+      await adminAuth.setCustomUserClaims(userRecord.uid, {
+        role: admin.role,
+        adminId: admin.id
+      });
+
+      console.log('✅ Custom claims set for user');
+    } catch (error) {
+      if (error.code === 'auth/email-already-exists') {
+        console.log('ℹ️  Firebase Auth user already exists, updating...');
+        const userRecord = await adminAuth.getUserByEmail(email);
+        
+        // Update the existing user
+        await adminAuth.updateUser(userRecord.uid, {
+          password,
+          disabled: false
+        });
+
+        // Set custom claims
+        await adminAuth.setCustomUserClaims(userRecord.uid, {
+          role: admin.role,
+          adminId: admin.id
+        });
+        
+        console.log('✅ Existing Firebase Auth user updated');
+      } else {
+        throw error;
+      }
+    }
     
-    // Save to Firestore
-    await superAdmin.save();
-    
-    // Create Firebase Auth user
-    const userRecord = await admin.auth().createUser({
-      email,
-      password,
-      displayName: name,
-      disabled: false
-    });
-    
-    console.log('Successfully created super admin:');
-    console.log(`Email: ${email}`);
-    console.log(`Temporary Password: ${password}`);
-    console.log('IMPORTANT: Change this password immediately after first login!');
-    console.log(`Firebase UID: ${userRecord.uid}`);
+    console.log('\n🎉 Successfully created super admin!');
+    console.log('==================================');
+    console.log(`👤 Name: ${name}`);
+    console.log(`📧 Email: ${email}`);
+    console.log(`🔑 Temporary Password: ${password}`);
+    console.log(`🆔 Firebase UID: ${userRecord.uid}`);
+    console.log(`📋 Firestore Document ID: ${savedAdmin.id}`);
+    console.log('==================================\n');
+    console.log('🚨 IMPORTANT: Change this password immediately after first login!');
     
   } catch (error) {
-    console.error('Error creating super admin:', error);
+    console.error('\n❌ Error creating super admin:');
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    
+    if (error.code) {
+      console.error('Error code:', error.code);
+    }
+    
+    if (error.details) {
+      console.error('Error details:', JSON.stringify(error.details, null, 2));
+    }
+    
+    console.error('\n💡 Troubleshooting tips:');
+    console.error('1. Verify your Firebase Admin SDK service account has the correct permissions');
+    console.error('2. Check that the Firestore database is properly initialized');
+    console.error('3. Ensure the service account has the "Firebase Authentication Admin" role');
+    
     process.exit(1);
   }
 }

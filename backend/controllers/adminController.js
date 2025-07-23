@@ -1,7 +1,9 @@
 import { Admin } from '../models/Admin.js';
 import { validationResult } from 'express-validator';
 import bcrypt from 'bcrypt';
-import admin from 'firebase-admin';
+import { admin, auth } from '../config/firebase.js';
+// 'admin' is the initialized firebase app instance
+// 'auth' is the initialized firebase auth instance
 
 // Hash password helper
 const hashPassword = async (password) => {
@@ -9,10 +11,17 @@ const hashPassword = async (password) => {
   return await bcrypt.hash(password, saltRounds);
 };
 
-// @desc    Create a new admin
+// @desc    Create a new admin (Super Admin only)
 // @route   POST /api/admins
-// @access  Private/Admin
+// @access  Private/Super Admin
 const createAdmin = async (req, res) => {
+  // Only super admins can create new admin accounts
+  if (req.user.role !== Admin.ROLES.SUPER_ADMIN) {
+    return res.status(403).json({
+      success: false,
+      message: 'Only super admins can create new admin accounts'
+    });
+  }
   try {
     // Validate request body
     const errors = validationResult(req);
@@ -168,12 +177,11 @@ const updateAdmin = async (req, res) => {
       });
     }
 
-    // Only super_admin can update other super_admins
-    if (existingAdmin.role === Admin.ROLES.SUPER_ADMIN && 
-        req.user.role !== Admin.ROLES.SUPER_ADMIN) {
+    // Only super_admin can update other admins
+    if (req.user.role !== Admin.ROLES.SUPER_ADMIN) {
       return res.status(403).json({
         success: false,
-        message: 'Only a super admin can update another super admin'
+        message: 'Only super admins can update admin accounts'
       });
     }
 
@@ -188,11 +196,31 @@ const updateAdmin = async (req, res) => {
       }
     }
 
-    // Only super_admin can change roles
-    if ('role' in updates && req.user.role !== Admin.ROLES.SUPER_ADMIN) {
+    // Only super_admin can change roles or permissions
+    if (req.user.role !== Admin.ROLES.SUPER_ADMIN) {
+      // Prevent changing roles
+      if ('role' in updates) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only super admins can change admin roles'
+        });
+      }
+      
+      // Prevent modifying permissions
+      if ('permissions' in updates) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only super admins can modify admin permissions'
+        });
+      }
+    }
+    
+    // Only super admins can assign super admin role
+    if ('role' in updates && updates.role === Admin.ROLES.SUPER_ADMIN && 
+        req.user.role !== Admin.ROLES.SUPER_ADMIN) {
       return res.status(403).json({
         success: false,
-        message: 'Only super admin can change admin roles'
+        message: 'Only super admins can assign the super admin role'
       });
     }
 
@@ -260,13 +288,23 @@ const deleteAdmin = async (req, res) => {
       });
     }
 
-    // Only super_admin can delete other super_admins
-    if (adminToDelete.role === Admin.ROLES.SUPER_ADMIN && 
-        req.user.role !== Admin.ROLES.SUPER_ADMIN) {
+    // Only super_admin can delete admins
+    if (req.user.role !== Admin.ROLES.SUPER_ADMIN) {
       return res.status(403).json({
         success: false,
-        message: 'Only a super admin can delete another super admin'
+        message: 'Only super admins can delete admin accounts'
       });
+    }
+    
+    // Prevent deleting the last super admin
+    if (adminToDelete.role === Admin.ROLES.SUPER_ADMIN) {
+      const superAdmins = await Admin.find({ role: Admin.ROLES.SUPER_ADMIN });
+      if (superAdmins.length <= 1) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot delete the last super admin'
+        });
+      }
     }
 
     // Check if admin exists

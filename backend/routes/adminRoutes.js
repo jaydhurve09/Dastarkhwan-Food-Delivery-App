@@ -23,8 +23,36 @@ const router = express.Router();
 router.use(protect);
 
 // Admin role required for all routes
-router.use(authorize(Admin.ROLES.SUPER_ADMIN, Admin.ROLES.SYSTEM_ADMIN, 
-  Admin.ROLES.DATA_ADMIN, Admin.ROLES.RESTAURANT_ADMIN, Admin.ROLES.SUPPORT_AGENT));
+router.use(authorize(Admin.ROLES.SUPER_ADMIN, Admin.ROLES.SUB_ADMIN));
+
+// Middleware to check if user is Super Admin
+const requireSuperAdmin = (req, res, next) => {
+  if (req.user.role !== Admin.ROLES.SUPER_ADMIN) {
+    return res.status(403).json({
+      success: false,
+      message: 'Not authorized. Only Super Admins can perform this action.'
+    });
+  }
+  next();
+};
+
+// Middleware to check admin management permissions
+const checkAdminManagement = (req, res, next) => {
+  // Allow access to own profile
+  if (req.params.id === req.user.id) {
+    return next();
+  }
+  
+  // Only Super Admins can manage other admins
+  if (req.user.role !== Admin.ROLES.SUPER_ADMIN) {
+    return res.status(403).json({
+      success: false,
+      message: 'Not authorized. Only Super Admins can manage other admin accounts.'
+    });
+  }
+  
+  next();
+};
 
 // @route   GET /api/admins/me
 // @desc    Get current admin profile
@@ -34,7 +62,7 @@ router.get('/me', getCurrentAdmin);
 // @route   PUT /api/admins/me
 // @desc    Update current admin profile
 // @access  Private
-router.put('/me', [
+router.put('/me', checkAdminManagement, [
   body('name')
     .optional()
     .trim()
@@ -60,9 +88,9 @@ router.put('/me', [
 ], validate, updateCurrentAdmin);
 
 // @route   POST /api/admins
-// @desc    Create a new admin
-// @access  Private/Admin
-router.post('/', [
+// @desc    Create a new admin (Super Admin only)
+// @access  Private/Super Admin
+router.post('/', requireSuperAdmin, [
   body('name')
     .trim()
     .notEmpty()
@@ -96,9 +124,9 @@ router.post('/', [
 ], validate, createAdmin);
 
 // @route   GET /api/admins
-// @desc    Get all admins
-// @access  Private/Admin
-router.get('/', [
+// @desc    Get all admins (Super Admin only)
+// @access  Private/Super Admin
+router.get('/', requireSuperAdmin, [
   query('limit')
     .optional()
     .isInt({ min: 1, max: 100 })
@@ -116,18 +144,18 @@ router.get('/', [
 ], validate, getAdmins);
 
 // @route   GET /api/admins/:id
-// @desc    Get admin by ID
-// @access  Private/Admin
-router.get('/:id', [
+// @desc    Get admin by ID (Self or Super Admin)
+// @access  Private
+router.get('/:id', checkAdminManagement, [
   param('id')
     .isString()
     .withMessage('Invalid admin ID')
 ], validate, getAdmin);
 
 // @route   PUT /api/admins/:id
-// @desc    Update admin
-// @access  Private/Admin
-router.put('/:id', [
+// @desc    Update admin (Self or Super Admin with restrictions)
+// @access  Private
+router.put('/:id', checkAdminManagement, [
   param('id')
     .isString()
     .withMessage('Invalid admin ID'),
@@ -167,9 +195,9 @@ router.put('/:id', [
 ], validate, updateAdmin);
 
 // @route   DELETE /api/admins/:id
-// @desc    Delete admin
-// @access  Private/Admin
-router.delete('/:id', [
+// @desc    Delete admin (Super Admin only)
+// @access  Private/Super Admin
+router.delete('/:id', requireSuperAdmin, [
   param('id')
     .isString()
     .withMessage('Invalid admin ID')

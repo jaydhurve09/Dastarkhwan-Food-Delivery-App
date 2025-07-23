@@ -7,11 +7,25 @@ export class Admin extends BaseModel {
   // Define valid admin roles
   static ROLES = {
     SUPER_ADMIN: 'super_admin',
-    SYSTEM_ADMIN: 'system_admin',
-    DATA_ADMIN: 'data_admin',
-    RESTAURANT_ADMIN: 'restaurant_admin',
-    SUPPORT_AGENT: 'support_agent'
+    SUB_ADMIN: 'sub_admin'
   };
+
+  // Hash password before saving
+  static async beforeCreate(data) {
+    if (data.password) {
+      const bcrypt = await import('bcrypt');
+      const saltRounds = 10;
+      data.password = await bcrypt.hash(data.password, saltRounds);
+    }
+    return data;
+  }
+
+  // Verify password
+  async verifyPassword(candidatePassword) {
+    if (!this.password) return false;
+    const bcrypt = await import('bcrypt');
+    return await bcrypt.compare(candidatePassword, this.password);
+  }
 
   // Define permission scopes
   static PERMISSIONS = {
@@ -34,10 +48,6 @@ export class Admin extends BaseModel {
     // Order management
     MANAGE_ORDERS: 'manage_orders',
     VIEW_ORDERS: 'view_orders',
-    
-    // Delivery management
-    MANAGE_DELIVERY: 'manage_delivery',
-    VIEW_DELIVERY: 'view_delivery',
     
     // Payment management
     MANAGE_PAYMENTS: 'manage_payments',
@@ -62,34 +72,19 @@ export class Admin extends BaseModel {
 
   // Role to permissions mapping
   static ROLE_PERMISSIONS = {
+    // Super Admin has all permissions
     [this.ROLES.SUPER_ADMIN]: Object.values(this.PERMISSIONS),
-    [this.ROLES.SYSTEM_ADMIN]: [
-      this.PERMISSIONS.MANAGE_SETTINGS,
-      this.PERMISSIONS.VIEW_ANALYTICS,
-      this.PERMISSIONS.EXPORT_DATA,
-      this.PERMISSIONS.MANAGE_NOTIFICATIONS
-    ],
-    [this.ROLES.DATA_ADMIN]: [
-      this.PERMISSIONS.VIEW_ANALYTICS,
-      this.PERMISSIONS.EXPORT_DATA,
-      this.PERMISSIONS.VIEW_USERS,
-      this.PERMISSIONS.VIEW_ORDERS,
-      this.PERMISSIONS.VIEW_PAYMENTS,
-      this.PERMISSIONS.VIEW_PROMOCODES
-    ],
-    [this.ROLES.RESTAURANT_ADMIN]: [
-      this.PERMISSIONS.VIEW_RESTAURANTS,
-      this.PERMISSIONS.MANAGE_MENUS,
-      this.PERMISSIONS.VIEW_ORDERS,
-      this.PERMISSIONS.MANAGE_ORDERS,
-      this.PERMISSIONS.VIEW_PAYMENTS,
-      this.PERMISSIONS.VIEW_PROMOCODES
-    ],
-    [this.ROLES.SUPPORT_AGENT]: [
+    
+    // Sub Admin has limited permissions (customize as needed)
+    [this.ROLES.SUB_ADMIN]: [
       this.PERMISSIONS.VIEW_USERS,
       this.PERMISSIONS.VIEW_ORDERS,
       this.PERMISSIONS.VIEW_PAYMENTS,
       this.PERMISSIONS.VIEW_PROMOCODES,
+      this.PERMISSIONS.VIEW_ANALYTICS,
+      this.PERMISSIONS.VIEW_RESTAURANTS,
+      this.PERMISSIONS.VIEW_MENUS,
+      this.PERMISSIONS.VIEW_CMS,
       this.PERMISSIONS.SEND_NOTIFICATIONS
     ]
   };
@@ -99,7 +94,7 @@ export class Admin extends BaseModel {
     this.name = data.name || ''; // Required
     this.email = data.email ? data.email.toLowerCase() : ''; // Required, lowercase
     this.password = data.password || ''; // Required
-    this.role = data.role || Admin.ROLES.SUPPORT_AGENT;
+    this.role = data.role || Admin.ROLES.SUB_ADMIN; // Default to SUB_ADMIN
     
     // Initialize permissions based on role if not explicitly provided
     const rolePermissions = Admin.ROLE_PERMISSIONS[this.role] || [];
@@ -142,7 +137,8 @@ export class Admin extends BaseModel {
     if (!this.email) throw new Error('Email is required');
     if (!this.password) throw new Error('Password is required');
     
-    const validRoles = ['superadmin', 'cms_manager', 'order_viewer', 'support_agent', 'finance_manager'];
+    // Validate role against ROLES enum
+    const validRoles = Object.values(Admin.ROLES);
     if (!validRoles.includes(this.role)) {
       throw new Error(`Invalid role. Must be one of: ${validRoles.join(', ')}`);
     }
@@ -176,8 +172,8 @@ export class Admin extends BaseModel {
 
   // Method to check if admin has specific permission
   hasPermission(permissionKey) {
-    // Superadmin has all permissions
-    if (this.role === 'superadmin') return true;
+    // Super Admin has all permissions
+    if (this.role === Admin.ROLES.SUPER_ADMIN) return true;
     return this.permissions[permissionKey] === true;
   }
 }

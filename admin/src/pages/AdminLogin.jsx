@@ -48,6 +48,7 @@ export default function AdminLogin() {
     container: {
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif',
       minHeight: '100vh',
+      width: '100%',
       background: 'linear-gradient(135deg, #7f1d1d 0%, #991b1b 35%, #92400e 100%)',
       display: 'flex',
       alignItems: 'center',
@@ -224,9 +225,6 @@ export default function AdminLogin() {
     <div style={styles.container}>
       <div style={styles.overlay}></div>
       <div style={styles.pattern}></div>
-      <div style={styles.demoCredentials}>
-        Email: <span style={styles.mono}>admin@example.com</span> | Password: <span style={styles.mono}>admin123</span>
-      </div>
       {/* Header */}
       <div style={styles.loginContainer}>
         <div style={styles.loginCard}>

@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useNavigate } from 'react-router-dom';
+import { authService } from '../services/authService';
 // Added FaEye and FaEyeSlash icons
 import { FaUserShield, FaLock, FaClock, FaUserCircle, FaSignOutAlt, FaKey, FaClipboardList, FaTasks, FaFileAlt, FaBell, FaCaretDown, FaTimesCircle, FaEdit, FaEye, FaEyeSlash, FaUserTie } from "react-icons/fa";
 
@@ -41,11 +43,28 @@ const AdminSettings = () => {
   const addAdminMultiSelectRef = useRef(null); // Ref for the Add Admin multi-select container
   const editAdminMultiSelectRef = useRef(null); // Ref for the Edit Admin multi-select container
   const profileDropdownRef = useRef(null); // Ref for profile dropdown container
+  const navigate = useNavigate();
 
   const [loggedInUser, setLoggedInUser] = useState({
     name: 'Admin User',
     role: currentUserRole,
   });
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+      // Clear any user data from state
+      setLoggedInUser({ name: '', role: '' });
+      // Redirect to login page
+      navigate('/admin/login');
+    } catch (error) {
+      console.error('Logout failed:', error);
+      // Even if there's an error, still clear user data and redirect
+      setLoggedInUser({ name: '', role: '' });
+      navigate('/admin/login');
+    }
+  };
 
   // Effect for closing dropdowns/menus when clicking outside
   useEffect(() => {
@@ -177,12 +196,6 @@ const AdminSettings = () => {
     setShowEditSubAdminModal(false);
     setShowEditModalRolesDropdown(false);
     setShowEditPassword(false); // Reset password visibility when closing modal
-  };
-
-  const handleLogout = () => {
-    console.log('User logged out from Admin Settings!');
-    setShowProfileDropdown(false);
-    alert('You have been successfully logged out from Admin Settings.');
   };
 
   // Inline Styles

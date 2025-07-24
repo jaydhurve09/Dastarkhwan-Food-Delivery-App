@@ -1,4 +1,5 @@
 import { BaseModel } from './BaseModel.js';
+import bcrypt from 'bcryptjs';
 
 export class User extends BaseModel {
   static collectionName = 'users';
@@ -25,6 +26,21 @@ export class User extends BaseModel {
     this.accountCreated = data.accountCreated || new Date();
     this.orderCount = data.orderCount || 0;
     this.totalSpent = data.totalSpent || 0;
+    this.firebaseUid = data.firebaseUid || '';
+  }
+
+  // Hash password before saving to Firestore
+  async beforeSave() {
+    if (this.password && !this.password.startsWith('$2a$') && this.password.length < 60) {
+      const salt = await bcrypt.genSalt(10);
+      this.password = await bcrypt.hash(this.password, salt);
+    }
+    return true;
+  }
+
+  // Compare entered password with hashed password
+  async comparePassword(candidatePassword) {
+    return await bcrypt.compare(candidatePassword, this.password);
   }
 
   // Convert to Firestore document format
@@ -41,6 +57,7 @@ export class User extends BaseModel {
       accountCreated: this.accountCreated,
       orderCount: this.orderCount,
       totalSpent: this.totalSpent,
+      firebaseUid: this.firebaseUid,
       updatedAt: new Date()
     };
   }
@@ -61,14 +78,51 @@ export class User extends BaseModel {
     return true;
   }
 
-  // Static method to find user by email
+  // Static method to find user by email (case-insensitive)
   static async findByEmail(email) {
-    if (!email) return null;
-    const results = await this.find({
-      where: { email: email.toLowerCase() },
-      limit: 1
-    });
-    return results[0] || null;
+    if (!email) {
+      console.log('No email provided to findByEmail');
+      return null;
+    }
+    
+    const normalizedEmail = email.toLowerCase().trim();
+    console.log('Searching for email (normalized):', normalizedEmail);
+    
+    try {
+      // First try exact match (for backward compatibility)
+      let results = await this.find({
+        where: { email: normalizedEmail },
+        limit: 1
+      });
+      
+      // If no exact match, try case-insensitive search
+      if (!results.length) {
+        console.log('No exact match, trying case-insensitive search');
+        const snapshot = await this.getCollection()
+          .where('email', '>=', normalizedEmail)
+          .where('email', '<=', normalizedEmail + '\uf8ff')
+          .limit(1)
+          .get();
+          
+        results = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return new this({ id: doc.id, ...data });
+        });
+      }
+      
+      const user = results[0] || null;
+      console.log('User found:', user ? `Yes (ID: ${user.id})` : 'No');
+      
+      if (user) {
+        console.log('User email in DB:', user.email);
+        console.log('Password exists:', !!user.password);
+      }
+      
+      return user;
+    } catch (error) {
+      console.error('Error in findByEmail:', error);
+      throw error;
+    }
   }
 
   // Static method to find user by phone
@@ -79,6 +133,39 @@ export class User extends BaseModel {
       limit: 1
     });
     return results[0] || null;
+  }
+
+  // Static method to find user by Firebase UID
+  static async findByFirebaseUid(firebaseUid) {
+    if (!firebaseUid) {
+      console.log('No Firebase UID provided to findByFirebaseUid');
+      return null;
+    }
+    
+    console.log('Searching for user with Firebase UID:', firebaseUid);
+    
+    try {
+      const snapshot = await this.getCollection()
+        .where('firebaseUid', '==', firebaseUid)
+        .limit(1)
+        .get();
+
+      if (snapshot.empty) {
+        console.log('No user found with Firebase UID:', firebaseUid);
+        return null;
+      }
+
+      // Get the first matching document
+      const doc = snapshot.docs[0];
+      const user = new this({ id: doc.id, ...doc.data() });
+      
+      console.log('User found with Firebase UID:', firebaseUid);
+      return user;
+      
+    } catch (error) {
+      console.error('Error in findByFirebaseUid:', error);
+      throw error;
+    }
   }
 
   // Method to update user's FCM token
@@ -95,5 +182,4 @@ export class User extends BaseModel {
   }
 }
 
-// Export a singleton instance
 export default new User();

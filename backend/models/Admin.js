@@ -149,11 +149,51 @@ export class Admin extends BaseModel {
   // Static method to find admin by email
   static async findByEmail(email) {
     if (!email) return null;
-    const results = await this.find({
-      where: { email: email.toLowerCase() },
-      limit: 1
-    });
-    return results[0] || null;
+    
+    const normalizedEmail = email.toLowerCase().trim();
+    console.log('Searching for admin with email (normalized):', normalizedEmail);
+    
+    try {
+      const snapshot = await this.getCollection()
+        .where('email', '==', normalizedEmail)
+        .limit(1)
+        .get();
+
+      if (snapshot.empty) {
+        console.log('No admin found with email:', normalizedEmail);
+        return null;
+      }
+
+      // Get the first matching document
+      const doc = snapshot.docs[0];
+      const admin = new this({ id: doc.id, ...doc.data() });
+      
+      console.log('Admin found with email:', normalizedEmail);
+      return admin;
+      
+    } catch (error) {
+      console.error('Error in findByEmail:', error);
+      throw error;
+    }
+  }
+
+  // Static method to find admin by ID
+  static async findById(id) {
+    if (!id) return null;
+    
+    try {
+      const doc = await this.getCollection().doc(id).get();
+      
+      if (!doc.exists) {
+        console.log('No admin found with ID:', id);
+        return null;
+      }
+      
+      return new this({ id: doc.id, ...doc.data() });
+    } catch (error) {
+      console.error('Error finding admin by ID:', error);
+      throw error;
+    }
   }
 
   // Static method to find active admins
@@ -175,6 +215,45 @@ export class Admin extends BaseModel {
     // Super Admin has all permissions
     if (this.role === Admin.ROLES.SUPER_ADMIN) return true;
     return this.permissions[permissionKey] === true;
+  }
+
+  // Save the admin document to Firestore
+  async save() {
+    try {
+      const adminData = this.toFirestore();
+      
+      // Update timestamps
+      const now = new Date();
+      if (!this.id) {
+        adminData.createdAt = now;
+      }
+      adminData.updatedAt = now;
+
+      let adminRef;
+      if (this.id) {
+        // Update existing document
+        adminRef = this.constructor.getCollection().doc(this.id);
+        await adminRef.update(adminData);
+      } else {
+        // Create new document
+        adminRef = await this.constructor.getCollection().add(adminData);
+        this.id = adminRef.id;
+      }
+      
+      return this;
+    } catch (error) {
+      console.error('Error saving admin:', error);
+      throw error;
+    }
+  }
+
+  // Convert instance to JSON, excluding sensitive data
+  toJSON() {
+    const data = { ...this };
+    // Remove sensitive data
+    delete data.password;
+    delete data.firebaseUid;
+    return data;
   }
 }
 

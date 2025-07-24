@@ -93,28 +93,30 @@ export const loginAdmin = async (req, res) => {
 // @access  Private
 export const logoutAdmin = async (req, res) => {
   try {
-    // Get the token from the header
-    const token = req.headers.authorization?.split(' ')[1];
+    const authHeader = req.headers.authorization;
     
-    if (!token) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({
         success: false,
         message: 'No token provided'
       });
     }
 
+    const idToken = authHeader.split(' ')[1];
+
     let decodedToken;
     try {
-      // Try to verify the token
-      decodedToken = await adminAuth.verifyIdToken(token);
+      decodedToken = await adminAuth.verifyIdToken(idToken);
     } catch (error) {
-      // If token is invalid or expired, still consider it a successful logout
-      console.log('Token verification failed during logout (expected if token expired):', error.message);
-      return res.json({
-        success: true,
-        message: 'Successfully logged out (token was invalid or expired)'
+      console.error('Token verification failed:', error.message);
+      return res.status(401).json({
+        success: false,
+        message: 'Not authorized, token failed',
+        error: error.message
       });
     }
+
+    const uid = decodedToken.uid;
 
     // Log the logout event
     if (decodedToken.adminId) {
@@ -128,15 +130,10 @@ export const logoutAdmin = async (req, res) => {
         }
       });
     }
-    
-    // Revoke the token to prevent further use
-    try {
-      await adminAuth.revokeRefreshTokens(decodedToken.sub);
-    } catch (error) {
-      console.error('Error revoking refresh tokens:', error);
-      // Continue with logout even if revoke fails
-    }
-    
+
+    // Revoke all refresh tokens
+    await adminAuth.revokeRefreshTokens(uid);
+
     res.json({
       success: true,
       message: 'Successfully logged out'
@@ -150,6 +147,7 @@ export const logoutAdmin = async (req, res) => {
     });
   }
 };
+
 
 // @desc    Get current logged in admin
 // @route   GET /api/auth/me

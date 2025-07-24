@@ -70,69 +70,65 @@ const createUser = async (req, res) => {
 // @access  Private/Admin
 const getUsers = async (req, res) => {
   try {
-    const { limit = 10, offset = 0 } = req.query;
-    const users = await User.find({
-      limit: parseInt(limit),
-      offset: parseInt(offset)
+    const snapshot = await User.getCollection().get();
+    
+    if (snapshot.empty) {
+      return res.status(404).json({
+        success: false,
+        message: 'No users found'
+      });
+    }
+
+    const users = [];
+    snapshot.forEach(doc => {
+      users.push({
+        id: doc.id,
+        ...doc.data()
+      });
     });
 
-    // Remove passwords from response
-    const sanitizedUsers = users.map(user => {
-      const userObj = { ...user };
-      delete userObj.password;
-      return userObj;
-    });
-
-    res.status(200).json({
+    res.json({
       success: true,
-      count: sanitizedUsers.length,
-      data: sanitizedUsers
+      count: users.length,
+      data: users
     });
   } catch (error) {
     console.error('Error getting users:', error);
     res.status(500).json({
       success: false,
-      message: 'Error retrieving users'
+      message: 'Server error',
+      error: error.message
     });
   }
 };
 
 // @desc    Get single user by ID
 // @route   GET /api/users/:id
-// @access  Private
-const getUser = async (req, res) => {
+// @access  Private/Admin
+const getUserById = async (req, res) => {
   try {
-    const { id } = req.params;
-    const user = await User.findById(id);
-
-    if (!user) {
+    const userDoc = await User.getCollection().doc(req.params.id).get();
+    
+    if (!userDoc.exists) {
       return res.status(404).json({
         success: false,
-        message: `User not found with id ${id}`
+        message: 'User not found'
       });
     }
 
-    // Check if the user is authorized to access this resource
-    if (req.user.id !== id && req.user.role !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to access this resource'
-      });
-    }
-
-    // Remove password from response
-    const userResponse = { ...user };
-    delete userResponse.password;
-
-    res.status(200).json({
+    res.json({
       success: true,
-      data: userResponse
+      data: {
+        id: userDoc.id,
+        ...userDoc.data()
+      }
     });
   } catch (error) {
     console.error('Error getting user:', error);
     res.status(500).json({
       success: false,
-      message: 'Error retrieving user'
+      message: 'Server error',
+      error: error.message
     });
   }
 };
@@ -243,7 +239,7 @@ const deleteUser = async (req, res) => {
 export {
   createUser,
   getUsers,
-  getUser,
+  getUserById,
   updateUser,
   deleteUser
 };

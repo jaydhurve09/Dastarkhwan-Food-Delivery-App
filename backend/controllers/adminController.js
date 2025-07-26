@@ -291,11 +291,21 @@ const getSubAdmins = async (req, res) => {
     }
 
     // Get all subadmins (non-super admins)
-    const subadmins = await Admin.find({ role: Admin.ROLES.SUB_ADMIN });
+    const snapshot = await Admin.getCollection()
+      .where('role', '==', Admin.ROLES.SUB_ADMIN)
+      .get();
+    
+    const subadmins = [];
+    snapshot.forEach(doc => {
+      subadmins.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
     
     // Remove sensitive data
     const sanitizedAdmins = subadmins.map(admin => {
-      const adminData = admin.toJSON();
+      const adminData = { ...admin };
       delete adminData.password;
       return adminData;
     });
@@ -309,7 +319,8 @@ const getSubAdmins = async (req, res) => {
     console.error('Error fetching subadmins:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching subadmins'
+      message: 'Error fetching subadmins',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

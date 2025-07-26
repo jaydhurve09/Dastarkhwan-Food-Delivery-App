@@ -90,13 +90,29 @@ const createSubAdmin = async (req, res) => {
     // Create admin in Firestore
     try {
       console.log('[FIRESTORE] Creating admin document...');
+      
+      // Initialize all permissions as false
+      const permissionsObj = Object.values(Admin.PERMISSIONS).reduce((acc, perm) => {
+        acc[perm] = false;
+        return acc;
+      }, {});
+      
+      // Set only the specified permissions to true
+      if (permissions && Array.isArray(permissions)) {
+        permissions.forEach(perm => {
+          if (Object.values(Admin.PERMISSIONS).includes(perm)) {
+            permissionsObj[perm] = true;
+          }
+        });
+      }
+      
       const newAdmin = new Admin({
         name: displayName,
         email,
         password: hashedPassword,
         firebaseUid: firebaseUser.uid,
         role: Admin.ROLES.SUB_ADMIN,
-        permissions: permissions || [],
+        permissions: permissionsObj,
         isActive: true
       });
 
@@ -127,7 +143,10 @@ const createSubAdmin = async (req, res) => {
         name: newAdmin.name,
         email: newAdmin.email,
         role: newAdmin.role,
-        permissions: newAdmin.permissions,
+        // Convert permissions object to array of permission strings where value is true
+        permissions: Object.entries(newAdmin.permissions || {})
+          .filter(([_, value]) => value === true)
+          .map(([key]) => key),
         isActive: newAdmin.isActive,
         createdAt: newAdmin.createdAt,
         updatedAt: newAdmin.updatedAt

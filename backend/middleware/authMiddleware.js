@@ -101,19 +101,31 @@ export const protect = async (req, res, next) => {
 };
 
 export const admin = (req, res, next) => {
+  console.log('[AUTH] admin middleware called');
+  console.log('[AUTH] User object in admin middleware:', JSON.stringify(req.user, null, 2));
+  
   if (req.user && (req.user.role === 'admin' || req.user.role === 'super_admin')) {
+    console.log('[AUTH] User is authorized as admin or super admin, proceeding...');
     return next();
   }
-  res.status(403).json({
+  
+  console.log('[AUTH] User is not authorized as an admin');
+  return res.status(403).json({
     success: false,
     message: 'Not authorized as an admin'
   });
 };
 
 export const superAdmin = (req, res, next) => {
+  console.log('[AUTH] superAdmin middleware called');
+  console.log('[AUTH] User object:', req.user);
+  
   if (req.user && req.user.role === 'super_admin') {
+    console.log('[AUTH] User is a super admin, proceeding...');
     return next();
   }
+  
+  console.log('[AUTH] User is not authorized as a super admin');
   res.status(403).json({
     success: false,
     message: 'Not authorized as a super admin'

@@ -15,81 +15,100 @@ const hashPassword = async (password) => {
 // @route   POST /api/admins/subadmins
 // @access  Private/Super Admin
 const createSubAdmin = async (req, res) => {
+  console.log('[CONTROLLER] createSubAdmin called');
+  
   try {
-    // Only super admins can create new admin accounts
-    if (req.user.role !== Admin.ROLES.SUPER_ADMIN) {
-      return res.status(403).json({
+    console.log('[CONTROLLER] Request body:', JSON.stringify(req.body, null, 2));
+    
+    // Extract data from request body
+    const { email, password, permissions } = req.body;
+    
+    // Basic validation (should be caught by validation middleware, but just in case)
+    if (!email || !password) {
+      console.log('[CONTROLLER] Missing required fields');
+      return res.status(400).json({
         success: false,
-        message: 'Only super admins can create new admin accounts'
+        message: 'Email and password are required'
       });
     }
-
-    // Validate request body
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { email, password, permissions } = req.body;
 
     // Check if admin already exists
+    console.log('[CONTROLLER] Checking if admin exists with email:', email);
     const existingAdmin = await Admin.findByEmail(email);
     if (existingAdmin) {
-      return res.status(400).json({ 
+      console.log('[CONTROLLER] Admin already exists with email:', email);
+      return res.status(400).json({
         success: false,
-        message: 'Admin with this email already exists' 
+        message: 'Admin with this email already exists'
       });
     }
-    
-    // Use the part before @ as the display name
-    const displayName = email.split('@')[0];
 
-    // Validate permissions
-    const validPermissions = Object.values(Admin.PERMISSIONS);
-    if (permissions && Array.isArray(permissions)) {
+    // Use the email prefix as the display name
+    const displayName = email.split('@')[0];
+    console.log('[CONTROLLER] Generated display name:', displayName);
+
+    // Validate permissions if provided
+    if (permissions && Array.isArray(permissions) && permissions.length > 0) {
+      console.log('[CONTROLLER] Validating permissions:', permissions);
+      const validPermissions = Object.values(Admin.PERMISSIONS);
       const invalidPermissions = permissions.filter(p => !validPermissions.includes(p));
+      
       if (invalidPermissions.length > 0) {
+        console.log('[CONTROLLER] Invalid permissions found:', invalidPermissions);
         return res.status(400).json({
           success: false,
-          message: `Invalid permission(s): ${invalidPermissions.join(', ')}`
+          message: `Invalid permission(s): ${invalidPermissions.join(', ')}`,
+          validPermissions: validPermissions
         });
       }
     }
 
-    // Hash password
+    // Hash the password
+    console.log('[CONTROLLER] Hashing password');
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Create Firebase Auth user
+    let firebaseUser;
     try {
       console.log('[FIREBASE] Creating Firebase Auth user...');
-      // First create the Firebase Auth user using the auth instance
-      const firebaseUser = await auth.createUser({
+      firebaseUser = await auth.createUser({
         email,
         password,
-        displayName: displayName,
+        displayName,
         disabled: false
       });
       console.log('[FIREBASE] Firebase Auth user created:', firebaseUser.uid);
+    } catch (firebaseError) {
+      console.error('[FIREBASE] Error creating Firebase Auth user:', firebaseError);
+      return res.status(500).json({
+        success: false,
+        message: 'Error creating user in authentication service',
+        error: process.env.NODE_ENV === 'development' ? firebaseError.message : undefined
+      });
+    }
 
-      console.log('[FIRESTORE] Creating Firestore admin document...');
-      // Create new subadmin with specified permissions
+    // Create admin in Firestore
+    try {
+      console.log('[FIRESTORE] Creating admin document...');
       const newAdmin = new Admin({
         name: displayName,
         email,
         password: hashedPassword,
-        firebaseUid: firebaseUser.uid, // Store the Firebase UID
+        firebaseUid: firebaseUser.uid,
         role: Admin.ROLES.SUB_ADMIN,
-        permissions: permissions || []
+        permissions: permissions || [],
+        isActive: true
       });
 
-      // Save to Firestore
       await newAdmin.save();
       console.log('[FIRESTORE] Admin document created successfully');
 
-      // Log the action
+      // Log the admin creation
       try {
         const { AdminLog } = await import('../models/AdminLog.js');
         await AdminLog.create({
           action: 'create_subadmin',
+          adminId: req.user.id,
           adminEmail: req.user.email,
           targetEmail: email,
           details: {
@@ -99,37 +118,54 @@ const createSubAdmin = async (req, res) => {
         console.log('[LOGGING] Admin action logged successfully');
       } catch (logError) {
         console.error('[LOGGING] Failed to log admin creation:', logError);
+        // Don't fail the request if logging fails
       }
 
-      // Don't send password back
-      const adminResponse = { ...newAdmin };
-      delete adminResponse.password;
-      
-      console.log('[SUCCESS] Sending success response');
+      // Prepare response (don't send password)
+      const adminResponse = {
+        id: newAdmin.id,
+        name: newAdmin.name,
+        email: newAdmin.email,
+        role: newAdmin.role,
+        permissions: newAdmin.permissions,
+        isActive: newAdmin.isActive,
+        createdAt: newAdmin.createdAt,
+        updatedAt: newAdmin.updatedAt
+      };
+
+      console.log('[CONTROLLER] Subadmin created successfully');
       return res.status(201).json({
         success: true,
         message: 'Subadmin created successfully',
         admin: adminResponse
       });
-    } catch (firebaseError) {
-      console.error('[FIREBASE] Error during user creation:', firebaseError);
-      // If Firestore save fails but Firebase Auth succeeded, clean up the Firebase Auth user
+
+    } catch (dbError) {
+      console.error('[FIRESTORE] Error creating admin document:', dbError);
+      
+      // Clean up Firebase Auth user if Firestore save fails
       if (firebaseUser && firebaseUser.uid) {
         try {
-          console.log('[CLEANUP] Attempting to clean up Firebase Auth user...');
+          console.log('[CLEANUP] Deleting Firebase Auth user due to Firestore error...');
           await auth.deleteUser(firebaseUser.uid);
-          console.log('[CLEANUP] Firebase Auth user cleaned up successfully');
+          console.log('[CLEANUP] Firebase Auth user deleted successfully');
         } catch (cleanupError) {
           console.error('[CLEANUP] Error cleaning up Firebase Auth user:', cleanupError);
         }
       }
-      throw firebaseError;
+
+      return res.status(500).json({
+        success: false,
+        message: 'Error creating admin in database',
+        error: process.env.NODE_ENV === 'development' ? dbError.message : undefined
+      });
     }
+
   } catch (error) {
-    console.error('Error creating subadmin:', error);
-    res.status(500).json({
+    console.error('[CONTROLLER] Unexpected error in createSubAdmin:', error);
+    return res.status(500).json({
       success: false,
-      message: 'Error creating subadmin',
+      message: 'An unexpected error occurred',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }

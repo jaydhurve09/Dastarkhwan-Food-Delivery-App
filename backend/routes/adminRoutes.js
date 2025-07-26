@@ -40,33 +40,56 @@ router.get('/me', getCurrentAdmin);
 // @route   POST /api/admins/subadmins
 // @desc    Create a new subadmin (Super Admin only)
 // @access  Private/Super Admin
+
+// Validation rules
+const subAdminValidations = [
+  body('email')
+    .trim()
+    .isEmail()
+    .withMessage('Please provide a valid email')
+    .normalizeEmail(),
+  body('password')
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters long')
+    .matches(/[A-Z]/)
+    .withMessage('Password must contain at least one uppercase letter')
+    .matches(/[a-z]/)
+    .withMessage('Password must contain at least one lowercase letter')
+    .matches(/[0-9]/)
+    .withMessage('Password must contain at least one number'),
+  body('permissions')
+    .optional()
+    .isArray()
+    .withMessage('Permissions must be an array')
+];
+
+// Create a validation middleware with the rules
+const validateSubAdmin = [
+  (req, res, next) => {
+    console.log('\n[ROUTE] Starting subadmin creation request');
+    console.log('[ROUTE] Request body:', JSON.stringify(req.body, null, 2));
+    next();
+  },
+  ...subAdminValidations,
+  validate(subAdminValidations),
+  (req, res, next) => {
+    console.log('[ROUTE] Validation passed, checking admin role...');
+    next();
+  }
+];
+
+// Apply all middleware in the correct order
 router.post(
   '/subadmins',
-  [
-    body('email')
-      .trim()
-      .isEmail()
-      .withMessage('Please provide a valid email')
-      .normalizeEmail(),
-      
-    body('password')
-      .isLength({ min: 8 })
-      .withMessage('Password must be at least 8 characters long')
-      .matches(/[A-Z]/)
-      .withMessage('Password must contain at least one uppercase letter')
-      .matches(/[a-z]/)
-      .withMessage('Password must contain at least one lowercase letter')
-      .matches(/[0-9]/)
-      .withMessage('Password must contain at least one number'),
-      
-    body('permissions')
-      .optional()
-      .isArray()
-      .withMessage('Permissions must be an array')
-  ],
-  validate,  
-  superAdmin,  
-  createSubAdmin  
+  protect,
+  ...validateSubAdmin,
+  admin,
+  superAdmin,
+  (req, res, next) => {
+    console.log('[ROUTE] All middleware passed, calling createSubAdmin...');
+    next();
+  },
+  createSubAdmin
 );
 
 // @route   GET /api/admins/subadmins

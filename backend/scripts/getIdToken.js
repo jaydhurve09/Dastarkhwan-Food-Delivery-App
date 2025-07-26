@@ -8,7 +8,7 @@ const firebaseConfig = {
 };
 
 const email = 'superadmin@dastarkhwan.com';
-const password = 'ChangeMe123!';
+const password = 'Test@1234';
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth();

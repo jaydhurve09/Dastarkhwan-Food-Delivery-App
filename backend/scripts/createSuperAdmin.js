@@ -23,7 +23,7 @@ if (missingVars.length > 0) {
 
 const createSuperAdmin = async () => {
   const name = 'Super Admin';
-  const email = 'superadmin2@dastarkhwan.com';
+  const email = 'superadmin@dastarkhwan.com';
   const password = 'Test@1234'; // This should be changed after first login
   
   console.log('🚀 Starting super admin creation process...');
@@ -53,13 +53,24 @@ const createSuperAdmin = async () => {
 
     // 2. Create admin in Firestore
     console.log('📝 Creating admin in Firestore...');
+    // Create permissions object with all permissions set to true for super admin
+    const permissions = {};
+    Object.values(Admin.PERMISSIONS).forEach(permission => {
+      permissions[permission] = true;
+    });
+
+    // Hash the password before saving
+    const bcrypt = await import('bcrypt');
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
     const adminData = {
       name,
       email,
-      password, // This will be hashed by the beforeCreate hook
+      password: hashedPassword, // Using the hashed password
       role: ROLES.SUPER_ADMIN,
       isActive: true,
-      permissions: Object.values(Admin.PERMISSIONS), // All permissions
+      permissions, // Boolean map of all permissions
       firebaseUid: userRecord.uid,
       createdAt: new Date(),
       updatedAt: new Date()

@@ -11,7 +11,255 @@ const hashPassword = async (password) => {
   return await bcrypt.hash(password, saltRounds);
 };
 
-// @desc    Create a new admin (Super Admin only)
+// @desc    Create a new subadmin (Super Admin only)
+// @route   POST /api/admins/subadmins
+// @access  Private/Super Admin
+const createSubAdmin = async (req, res) => {
+  try {
+    // Only super admins can create new admin accounts
+    if (req.user.role !== Admin.ROLES.SUPER_ADMIN) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only super admins can create new admin accounts'
+      });
+    }
+
+    // Validate request body
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { email, password, permissions } = req.body;
+
+    // Check if admin already exists
+    const existingAdmin = await Admin.findByEmail(email);
+    if (existingAdmin) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Admin with this email already exists' 
+      });
+    }
+    
+    // Use the part before @ as the display name
+    const displayName = email.split('@')[0];
+
+    // Validate permissions
+    const validPermissions = Object.values(Admin.PERMISSIONS);
+    if (permissions && Array.isArray(permissions)) {
+      const invalidPermissions = permissions.filter(p => !validPermissions.includes(p));
+      if (invalidPermissions.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid permission(s): ${invalidPermissions.join(', ')}`
+        });
+      }
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    try {
+      console.log('[FIREBASE] Creating Firebase Auth user...');
+      // First create the Firebase Auth user using the auth instance
+      const firebaseUser = await auth.createUser({
+        email,
+        password,
+        displayName: displayName,
+        disabled: false
+      });
+      console.log('[FIREBASE] Firebase Auth user created:', firebaseUser.uid);
+
+      console.log('[FIRESTORE] Creating Firestore admin document...');
+      // Create new subadmin with specified permissions
+      const newAdmin = new Admin({
+        name: displayName,
+        email,
+        password: hashedPassword,
+        firebaseUid: firebaseUser.uid, // Store the Firebase UID
+        role: Admin.ROLES.SUB_ADMIN,
+        permissions: permissions || []
+      });
+
+      // Save to Firestore
+      await newAdmin.save();
+      console.log('[FIRESTORE] Admin document created successfully');
+
+      // Log the action
+      try {
+        const { AdminLog } = await import('../models/AdminLog.js');
+        await AdminLog.create({
+          action: 'create_subadmin',
+          adminEmail: req.user.email,
+          targetEmail: email,
+          details: {
+            permissions: permissions || []
+          }
+        });
+        console.log('[LOGGING] Admin action logged successfully');
+      } catch (logError) {
+        console.error('[LOGGING] Failed to log admin creation:', logError);
+      }
+
+      // Don't send password back
+      const adminResponse = { ...newAdmin };
+      delete adminResponse.password;
+      
+      console.log('[SUCCESS] Sending success response');
+      return res.status(201).json({
+        success: true,
+        message: 'Subadmin created successfully',
+        admin: adminResponse
+      });
+    } catch (firebaseError) {
+      console.error('[FIREBASE] Error during user creation:', firebaseError);
+      // If Firestore save fails but Firebase Auth succeeded, clean up the Firebase Auth user
+      if (firebaseUser && firebaseUser.uid) {
+        try {
+          console.log('[CLEANUP] Attempting to clean up Firebase Auth user...');
+          await auth.deleteUser(firebaseUser.uid);
+          console.log('[CLEANUP] Firebase Auth user cleaned up successfully');
+        } catch (cleanupError) {
+          console.error('[CLEANUP] Error cleaning up Firebase Auth user:', cleanupError);
+        }
+      }
+      throw firebaseError;
+    }
+  } catch (error) {
+    console.error('Error creating subadmin:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating subadmin',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// @desc    Update subadmin permissions (Super Admin only)
+// @route   PUT /api/admins/subadmins/:id/permissions
+// @access  Private/Super Admin
+const updateSubAdminPermissions = async (req, res) => {
+  try {
+    // Only super admins can update permissions
+    if (req.user.role !== Admin.ROLES.SUPER_ADMIN) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only super admins can update admin permissions'
+      });
+    }
+
+    const { permissions } = req.body;
+    const { id } = req.params;
+
+    // Validate permissions
+    if (!Array.isArray(permissions)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Permissions must be an array'
+      });
+    }
+
+    const validPermissions = Object.values(Admin.PERMISSIONS);
+    const invalidPermissions = permissions.filter(p => !validPermissions.includes(p));
+    
+    if (invalidPermissions.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid permissions: ${invalidPermissions.join(', ')}`
+      });
+    }
+
+    // Get the subadmin to update
+    const subadmin = await Admin.findById(id);
+    if (!subadmin) {
+      return res.status(404).json({
+        success: false,
+        message: 'Subadmin not found'
+      });
+    }
+
+    // Don't allow modifying super admins
+    if (subadmin.role === Admin.ROLES.SUPER_ADMIN) {
+      return res.status(403).json({
+        success: false,
+        message: 'Cannot modify super admin permissions'
+      });
+    }
+
+    // Update permissions
+    subadmin.permissions = permissions;
+    await subadmin.save();
+
+    // Log the permission update
+    try {
+      const { AdminLog } = await import('../models/AdminLog.js');
+      await AdminLog.create({
+        action: 'update_subadmin_permissions',
+        route: `/api/admins/subadmins/${id}/permissions`,
+        details: {
+          adminEmail: req.user.email,
+          subadminEmail: subadmin.email,
+          updatedPermissions: permissions
+        }
+      });
+    } catch (logError) {
+      console.error('Failed to log permission update:', logError);
+    }
+
+    // Remove sensitive data from response
+    const adminResponse = subadmin.toJSON();
+    delete adminResponse.password;
+
+    res.json({
+      success: true,
+      data: adminResponse
+    });
+  } catch (error) {
+    console.error('Error updating subadmin permissions:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error updating subadmin permissions'
+    });
+  }
+};
+
+// @desc    Get all subadmins (Super Admin only)
+// @route   GET /api/admins/subadmins
+// @access  Private/Super Admin
+const getSubAdmins = async (req, res) => {
+  try {
+    if (req.user.role !== Admin.ROLES.SUPER_ADMIN) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only super admins can view all subadmins'
+      });
+    }
+
+    // Get all subadmins (non-super admins)
+    const subadmins = await Admin.find({ role: Admin.ROLES.SUB_ADMIN });
+    
+    // Remove sensitive data
+    const sanitizedAdmins = subadmins.map(admin => {
+      const adminData = admin.toJSON();
+      delete adminData.password;
+      return adminData;
+    });
+
+    res.json({
+      success: true,
+      count: sanitizedAdmins.length,
+      data: sanitizedAdmins
+    });
+  } catch (error) {
+    console.error('Error fetching subadmins:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching subadmins'
+    });
+  }
+};
+
+// @desc    Create a new admin (legacy, use createSubAdmin instead)
 // @route   POST /api/admins
 // @access  Private/Super Admin
 const createAdmin = async (req, res) => {
@@ -22,6 +270,7 @@ const createAdmin = async (req, res) => {
       message: 'Only super admins can create new admin accounts'
     });
   }
+  
   try {
     // Validate request body
     const errors = validationResult(req);
@@ -439,9 +688,12 @@ const updateCurrentAdmin = async (req, res) => {
 
 export {
   createAdmin,
+  createSubAdmin,
   getAdmins,
+  getSubAdmins,
   getAdmin,
   updateAdmin,
+  updateSubAdminPermissions,
   deleteAdmin,
   getCurrentAdmin,
   updateCurrentAdmin

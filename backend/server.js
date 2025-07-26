@@ -9,6 +9,7 @@ import adminRoutes from './routes/adminRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import userAuthRoutes from './routes/userAuthRoutes.js';
 import adminAuthRoutes from './routes/adminAuthRoutes.js';
+import menuItemRoutes from './routes/menuItemRoutes.js';
 import { db, auth } from './config/firebase.js'; // Import Firebase services
 
 // Get current file path
@@ -29,6 +30,7 @@ app.use(morgan('dev'));
 // API Routes
 app.use('/api/auth', userAuthRoutes);
 app.use('/api/auth/admin', adminAuthRoutes);
+app.use('/api/menu-items', menuItemRoutes);
 app.use('/api/users', userRoutes);
 
 // Simple request logging middleware

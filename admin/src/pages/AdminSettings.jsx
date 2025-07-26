@@ -54,48 +54,18 @@ const AdminSettings = () => {
   const handleLogout = async () => {
     try {
       await authService.logout();
-      // Clear any user data from state
-      setLoggedInUser({ name: '', role: '' });
-      // Redirect to login page
       navigate('/admin/login');
     } catch (error) {
-      console.error('Logout failed:', error);
-      // Even if there's an error, still clear user data and redirect
-      setLoggedInUser({ name: '', role: '' });
+      console.error('Logout error:', error);
+      // Still navigate to login page even if there's an error
       navigate('/admin/login');
     }
   };
 
-  // Effect for closing dropdowns/menus when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      // Close Add Admin roles dropdown
-      if (addAdminMultiSelectRef.current && !addAdminMultiSelectRef.current.contains(event.target)) {
-        setShowAddAdminRolesDropdown(false);
-      }
-      // Close Edit Admin roles dropdown
-      if (editAdminMultiSelectRef.current && !editAdminMultiSelectRef.current.contains(event.target)) {
-        setShowEditModalRolesDropdown(false);
-      }
-      // Close profile dropdown
-      if (profileDropdownRef.current && !profileDropdownRef.current.contains(event.target)) {
-        setShowProfileDropdown(false);
-      }
-      // Close 3-dot menu
-      if (menuOpen !== null) { // Only check if a menu is actually open
-          const currentMenuElement = document.getElementById(`three-dot-menu-${menuOpen}`);
-          const threeDotButtonElement = document.getElementById(`three-dot-button-${menuOpen}`);
-          if (currentMenuElement && !currentMenuElement.contains(event.target) && threeDotButtonElement && !threeDotButtonElement.contains(event.target)) {
-              setMenuOpen(null);
-          }
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [showAddAdminRolesDropdown, showEditModalRolesDropdown, showProfileDropdown, menuOpen]);
+  // Toggle profile dropdown
+  const toggleProfileDropdown = () => {
+    setShowProfileDropdown(!showProfileDropdown);
+  };
 
   const getCurrentTimestamp = () => {
     const now = new Date();
@@ -540,7 +510,7 @@ const AdminSettings = () => {
           <button
             style={iconButton}
             title="User Profile"
-            onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+            onClick={toggleProfileDropdown}
           >
             <FaUserCircle />
           </button>
@@ -563,9 +533,16 @@ const AdminSettings = () => {
                   <FaKey /> Change Password
                 </button>
               )}
-              <button
-                onClick={handleLogout}
-                style={logoutButton}
+              <button 
+                onClick={() => {
+                  handleLogout();
+                  setShowProfileDropdown(false);
+                }}
+                style={{
+                  ...dropdownButton,
+                  backgroundColor: '#dc3545',
+                  marginTop: '10px'
+                }}
                 onMouseEnter={(e) => (e.target.style.backgroundColor = '#c82333')}
                 onMouseLeave={(e) => (e.target.style.backgroundColor = '#dc3545')}
               >

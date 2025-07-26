@@ -92,35 +92,52 @@ export class BaseModel {
    * Find documents matching the query
    */
   static async find({ where = {}, orderBy = null, limit = null, offset = 0 } = {}) {
-    let query = this.getCollection();
+    console.log('[FIRESTORE] Starting find query with params:', { where, orderBy, limit, offset });
+    
+    try {
+      let query = this.getCollection();
 
-    // Apply where conditions
-    Object.entries(where).forEach(([field, value]) => {
-      if (value !== undefined && value !== null) {
-        query = query.where(field, '==', value);
+      // Apply where conditions
+      Object.entries(where).forEach(([field, value]) => {
+        if (value !== undefined && value !== null) {
+          console.log(`[FIRESTORE] Adding where condition: ${field} == ${value}`);
+          query = query.where(field, '==', value);
+        }
+      });
+
+      // Apply ordering
+      if (orderBy) {
+        console.log(`[FIRESTORE] Adding order by: ${orderBy.field} ${orderBy.direction || 'asc'}`);
+        query = query.orderBy(orderBy.field, orderBy.direction || 'asc');
       }
-    });
 
-    // Apply ordering
-    if (orderBy) {
-      query = query.orderBy(orderBy.field, orderBy.direction || 'asc');
-    }
-
-    // Apply pagination
-    if (offset > 0) {
-      const snapshot = await query.limit(offset).get();
-      const lastDoc = snapshot.docs[snapshot.docs.length - 1];
-      if (lastDoc) {
-        query = query.startAfter(lastDoc);
+      // Apply pagination
+      if (offset > 0) {
+        console.log(`[FIRESTORE] Applying offset: ${offset}`);
+        const snapshot = await query.limit(offset).get();
+        const lastDoc = snapshot.docs[snapshot.docs.length - 1];
+        if (lastDoc) {
+          query = query.startAfter(lastDoc);
+        }
       }
-    }
 
-    if (limit) {
-      query = query.limit(parseInt(limit));
-    }
+      if (limit) {
+        console.log(`[FIRESTORE] Applying limit: ${limit}`);
+        query = query.limit(parseInt(limit));
+      }
 
-    const snapshot = await query.get();
-    return snapshot.docs.map(doc => this.fromFirestore(doc));
+      console.log('[FIRESTORE] Executing Firestore query...');
+      const snapshot = await query.get();
+      console.log(`[FIRESTORE] Query complete, found ${snapshot.size} documents`);
+      
+      const results = snapshot.docs.map(doc => this.fromFirestore(doc));
+      console.log(`[FIRESTORE] Mapped ${results.length} documents to model instances`);
+      
+      return results;
+    } catch (error) {
+      console.error('[FIRESTORE] Error in find query:', error);
+      throw error;
+    }
   }
 
   /**

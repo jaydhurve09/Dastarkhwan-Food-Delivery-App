@@ -2,15 +2,19 @@ import express from 'express';
 import { body, param, query } from 'express-validator';
 import { 
   createAdmin, 
+  createSubAdmin,
   getAdmins, 
+  getSubAdmins,
   getAdmin, 
   updateAdmin, 
+  updateSubAdminPermissions,
   deleteAdmin, 
   getCurrentAdmin,
   updateCurrentAdmin
 } from '../controllers/adminController.js';
 import { protect, admin, superAdmin } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validationMiddleware.js';
+import adminLogger from '../middleware/adminLogger.js';
 import { Admin } from '../models/Admin.js';
 
 // Helper to get role names for validation messages
@@ -25,10 +29,59 @@ router.use(protect);
 // Admin role required for all routes
 router.use(admin);
 
+// Log admin actions for all routes except GET
+router.use(adminLogger);
+
 // @route   GET /api/admins/me
 // @desc    Get current admin profile
 // @access  Private
 router.get('/me', getCurrentAdmin);
+
+// @route   POST /api/admins/subadmins
+// @desc    Create a new subadmin (Super Admin only)
+// @access  Private/Super Admin
+router.post(
+  '/subadmins',
+  [
+    body('email')
+      .trim()
+      .isEmail()
+      .withMessage('Please provide a valid email')
+      .normalizeEmail(),
+      
+    body('password')
+      .isLength({ min: 8 })
+      .withMessage('Password must be at least 8 characters long')
+      .matches(/[A-Z]/)
+      .withMessage('Password must contain at least one uppercase letter')
+      .matches(/[a-z]/)
+      .withMessage('Password must contain at least one lowercase letter')
+      .matches(/[0-9]/)
+      .withMessage('Password must contain at least one number'),
+      
+    body('permissions')
+      .optional()
+      .isArray()
+      .withMessage('Permissions must be an array')
+  ],
+  validate,  
+  superAdmin,  
+  createSubAdmin  
+);
+
+// @route   GET /api/admins/subadmins
+// @desc    Get all subadmins (Super Admin only)
+// @access  Private/Super Admin
+router.get('/subadmins', getSubAdmins);
+
+// @route   PUT /api/admins/subadmins/:id/permissions
+// @desc    Update subadmin permissions (Super Admin only)
+// @access  Private/Super Admin
+router.put('/subadmins/:id/permissions', [
+  body('permissions')
+    .isArray()
+    .withMessage('Permissions must be an array')
+], validate, updateSubAdminPermissions);
 
 // @route   PUT /api/admins/me
 // @desc    Update current admin profile

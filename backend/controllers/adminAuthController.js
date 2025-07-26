@@ -23,17 +23,63 @@ export const loginAdmin = async (req, res) => {
     const admin = await Admin.findByEmail(email);
     console.log('Admin found:', admin ? 'Yes' : 'No');
     
+    // Prepare common log data
+    const logData = {
+      route: '/api/auth/admin/login',
+      details: {
+        ip: req.ip,
+        userAgent: req.get('user-agent'),
+        email: email
+      }
+    };
+    
     if (!admin) {
       console.log('No admin found with email:', email);
+      
+      // Log failed login attempt with non-existent email
+      try {
+        const { AdminLog } = await import('../models/AdminLog.js');
+        await AdminLog.create({
+          ...logData,
+          action: 'login',
+          details: {
+            ...logData.details,
+            status: 'failed',
+            reason: 'email_not_found'
+          }
+        });
+      } catch (logError) {
+        console.error('Failed to log login attempt:', logError);
+      }
+      
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password'
       });
     }
 
+    // No need to store adminId since we have email in details
+    
     // Check if admin is active
     if (admin.isActive === false) {
       console.log('Admin account is deactivated:', admin.id);
+      
+      // Log deactivated account attempt
+      try {
+        const { AdminLog } = await import('../models/AdminLog.js');
+        await AdminLog.create({
+          action: 'login',
+          route: logData.route,
+          details: {
+            ...logData.details,
+            status: 'failed',
+            reason: 'account_deactivated'
+          }
+        });
+      } catch (logError) {
+        console.error('Failed to log login attempt:', logError);
+      }
+      
       return res.status(403).json({
         success: false,
         message: 'This account has been deactivated'
@@ -47,60 +93,71 @@ export const loginAdmin = async (req, res) => {
     
     if (!isMatch) {
       console.log('Invalid password for admin:', admin.id);
+      
+      // Log failed login attempt
+      try {
+        const { AdminLog } = await import('../models/AdminLog.js');
+        await AdminLog.create({
+          action: 'login',
+          route: logData.route,
+          details: {
+            ...logData.details,
+            status: 'failed',
+            reason: 'invalid_password'
+          }
+        });
+      } catch (logError) {
+        console.error('Failed to log login attempt:', logError);
+      }
+      
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password'
       });
     }
 
-    // Get or create Firebase user
-    console.log('Processing Firebase user for admin:', admin.id);
-    
-    if (!admin.firebaseUid) {
-      console.log('No Firebase UID found for admin, creating Firebase user...');
-      try {
-        // Create Firebase Auth user if it doesn't exist
-        const userRecord = await adminAuth.createUser({
-          email: admin.email,
-          password: admin.password, // This will be hashed by Firebase
-          displayName: admin.name,
-          emailVerified: true,
-          disabled: false
-        });
-        
-        // Update admin with Firebase UID
-        admin.firebaseUid = userRecord.uid;
-        await admin.save();
-        console.log('Created Firebase user with UID:', userRecord.uid);
-      } catch (error) {
-        console.error('Error creating Firebase user:', error);
-        // If user already exists in Firebase Auth but UID wasn't saved
-        if (error.code === 'auth/email-already-exists') {
-          const userRecord = await adminAuth.getUserByEmail(admin.email);
-          admin.firebaseUid = userRecord.uid;
-          await admin.save();
-          console.log('Linked existing Firebase user with UID:', userRecord.uid);
-        } else {
-          throw error;
-        }
-      }
-    }
-
-    // Create custom token for the admin
-    console.log('Creating Firebase token for admin:', admin.id);
-    const token = await adminAuth.createCustomToken(admin.firebaseUid, {
-      adminId: admin.id,
-      role: admin.role,
-      email: admin.email
-    });
+    // Create session token (JWT)
+    console.log('Creating session token for admin:', admin.id);
+    const jwt = (await import('jsonwebtoken')).default;
+    const token = jwt.sign(
+      {
+        adminId: admin.id,
+        email: admin.email,
+        role: admin.role
+      },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '24h' }
+    );
     
     console.log('Admin login successful');
 
+    // Log the successful login (only one log entry)
+    try {
+      const { AdminLog } = await import('../models/AdminLog.js');
+      await AdminLog.create({
+        action: 'login',
+        route: '/api/auth/admin/login',
+        details: {
+          ip: req.ip,
+          userAgent: req.get('user-agent'),
+          email: admin.email,
+          status: 'success',
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (logError) {
+      console.error('Failed to log admin login:', logError);
+      // Don't fail the login if logging fails
+    }
+
     // Return token and admin data (excluding sensitive info)
+    const adminData = admin.toJSON();
+    delete adminData.password; // Ensure password hash is not sent to client
+    
     res.json({
       success: true,
       token,
-      admin: admin.toJSON()
+      admin: adminData
     });
 
   } catch (error) {

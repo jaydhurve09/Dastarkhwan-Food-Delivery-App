@@ -95,6 +95,11 @@ export class Admin extends BaseModel {
     this.email = data.email ? data.email.toLowerCase() : ''; // Required, lowercase
     this.password = data.password || ''; // Required
     this.role = data.role || Admin.ROLES.SUB_ADMIN; // Default to SUB_ADMIN
+    this.firebaseUid = data.firebaseUid || null; // Firebase Authentication UID
+    this.isActive = data.isActive !== undefined ? data.isActive : true;
+    this.lastLogin = data.lastLogin || null;
+    this.createdAt = data.createdAt || new Date();
+    this.updatedAt = data.updatedAt || new Date();
     
     // Initialize permissions based on role if not explicitly provided
     const rolePermissions = Admin.ROLE_PERMISSIONS[this.role] || [];
@@ -109,16 +114,11 @@ export class Admin extends BaseModel {
     if (data.permissions) {
       Object.assign(this.permissions, data.permissions);
     }
-    
-    this.isActive = data.isActive !== undefined ? data.isActive : true;
-    this.lastLogin = data.lastLogin || null;
-    this.createdAt = data.createdAt || new Date();
-    this.updatedAt = data.updatedAt || new Date();
   }
 
   // Convert to Firestore document format
   toFirestore() {
-    return {
+    const data = {
       name: this.name,
       email: this.email,
       password: this.password,
@@ -129,6 +129,11 @@ export class Admin extends BaseModel {
       createdAt: this.createdAt,
       updatedAt: new Date() // Always update on save
     };
+    // Ensure firebaseUid is included when saving to Firestore
+    if (this.firebaseUid) {
+      data.firebaseUid = this.firebaseUid;
+    }
+    return data;
   }
 
   // Validation method
@@ -257,5 +262,7 @@ export class Admin extends BaseModel {
   }
 }
 
-// Export a singleton instance
-export default new Admin();
+export default Admin;
+
+// For backward compatibility
+export const adminInstance = new Admin();

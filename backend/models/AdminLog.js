@@ -6,10 +6,9 @@ export class AdminLog extends BaseModel {
 
   constructor(data = {}) {
     super();
-    this.adminId = data.adminId || null;        // Reference to Admin document
     this.action = data.action || '';           // The action performed
     this.route = data.route || '';             // API route where action occurred
-    this.details = data.details || {};         // Additional details about the action
+    this.details = data.details || {};         // Additional details including admin email
     this.timestamp = data.timestamp || new Date(); // When the action occurred
     
     // Ensure the model has an ID for new instances
@@ -21,7 +20,6 @@ export class AdminLog extends BaseModel {
   // Convert to Firestore document format
   toFirestore() {
     return {
-      adminId: this.adminId,
       action: this.action,
       route: this.route,
       details: this.details,
@@ -37,17 +35,10 @@ export class AdminLog extends BaseModel {
     return log;
   }
 
-  // Optional: Create a method to get the related admin
-  async getAdmin() {
-    if (!this.adminId) return null;
-    const { Admin } = await import('./Admin.js');
-    return Admin.findById(this.adminId);
-  }
-
-  // Static method to find logs by admin ID
-  static async findByAdminId(adminId, limit = 50) {
+  // Static method to find logs by admin email
+  static async findByAdminEmail(email, limit = 50) {
     const snapshot = await this.getCollection()
-      .where('adminId', '==', adminId)
+      .where('details.email', '==', email)
       .orderBy('timestamp', 'desc')
       .limit(parseInt(limit))
       .get();

@@ -13,6 +13,7 @@ import Notification from './pages/Notification';
 import FeedbackAndComplaints from './pages/FeedbackAndComplaints';
 import DeliveryPartnerManagement from './pages/DeliveryPartnerManagement';
 import AdminLogin from './pages/AdminLogin';
+import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
 function App() {
@@ -21,30 +22,38 @@ function App() {
       <div className="app-container">
         <Routes>
           {/* Public Routes */}
-          <Route path="/admin/login" element={<AdminLogin />}  />
+          <Route path="/admin/login" element={<AdminLogin />} />
           
-          {/* Protected Routes - Show Sidebar */}
-          <Route element={
-            <>
-              <Sidebar />
-              <div className="main-content">
-                <Outlet />
-              </div>
-            </>
-          }>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/users" element={<UserManagement />} />
-            <Route path="/orders" element={<OrdersDelivery />} />
-            <Route path="/payment" element={<PaymentReport />} />
-            <Route path="/promo" element={<PromoCode />} />
-            <Route path="/restaurants" element={<RestaurantMonitoring />} />
-            <Route path="/admin/cms" element={<CMSManagement />} />
-            <Route path="/admin/settings" element={<AdminSettings />} />
-            <Route path="/admin/feedback" element={<FeedbackAndComplaints />} />
-            <Route path="/admin/notifications" element={<Notification />} />
-            <Route path="/delivery-partners" element={<DeliveryPartnerManagement />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+          {/* Protected Routes - Requires Authentication */}
+          <Route element={<ProtectedRoute />}>
+            <Route element={
+              <>
+                <Sidebar />
+                <div className="main-content">
+                  <Outlet />
+                </div>
+              </>
+            }>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/users" element={<UserManagement />} />
+              <Route path="/orders" element={<OrdersDelivery />} />
+              <Route path="/payment" element={<PaymentReport />} />
+              <Route path="/promo" element={<PromoCode />} />
+              <Route path="/restaurants" element={<RestaurantMonitoring />} />
+              <Route path="/admin/cms" element={<CMSManagement />} />
+              <Route path="/admin/settings" element={<AdminSettings />} />
+              <Route path="/admin/feedback" element={<FeedbackAndComplaints />} />
+              <Route path="/admin/notifications" element={<Notification />} />
+              <Route path="/delivery-partners" element={<DeliveryPartnerManagement />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
           </Route>
+          
+          {/* Redirect root to login if not authenticated */}
+          <Route 
+            path="/" 
+            element={<Navigate to="/admin/login" replace />} 
+          />
         </Routes>
       </div>
     </Router>

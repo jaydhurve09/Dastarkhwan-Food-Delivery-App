@@ -2,6 +2,11 @@ import axios from 'axios';
 
 const API_URL = 'http://localhost:5000/api/auth';
 
+// Get token from localStorage
+const getToken = () => {
+  return localStorage.getItem('adminToken');
+};
+
 const login = async (email, password) => {
   try {
     const response = await axios.post(`${API_URL}/admin/login`, {
@@ -77,7 +82,22 @@ export const authService = {
   login,
   logout,
   getCurrentUser,
-  getAuthToken
+  getAuthToken,
+  getToken
 };
 
-export default authService;
+export {
+  login,
+  logout,
+  getCurrentUser,
+  getAuthToken,
+  getToken
+};
+
+export default {
+  login,
+  logout,
+  getCurrentUser,
+  getAuthToken,
+  getToken
+};

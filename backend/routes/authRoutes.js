@@ -1,13 +1,13 @@
 import express from 'express';
 import { body } from 'express-validator';
-import { loginAdmin, logoutAdmin, getMe } from '../controllers/authController.js';
-import { protect } from '../middleware/authMiddleware.js';
+import { loginAdmin, logoutAdmin, getAdminProfile } from '../controllers/adminAuthController.js';
+import { protect, admin } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
 // Public routes
 router.post(
-  '/login',
+  '/admin/login',
   [
     body('email').isEmail().withMessage('Please include a valid email'),
     body('password').exists().withMessage('Password is required')
@@ -18,7 +18,11 @@ router.post(
 // Protected routes (require authentication)
 router.use(protect);
 
-router.get('/me', getMe);
-router.post('/logout', logoutAdmin);
+// Logout route - only requires authentication, not admin role
+router.post('/admin/logout', logoutAdmin);
+
+// Admin-only routes (require both authentication and admin role)
+router.use(admin);
+router.get('/admin/me', getAdminProfile);
 
 export default router;

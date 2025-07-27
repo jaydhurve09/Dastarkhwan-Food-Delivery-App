@@ -1,119 +1,114 @@
 // middleware/authMiddleware.js
 import Admin from '../models/Admin.js';
-import { isBlacklisted } from '../utils/tokenBlacklist.js';
 import jwt from 'jsonwebtoken';
+import { isBlacklisted } from '../utils/tokenBlacklist.js';
+import { adminAuth } from '../config/firebase.js';
 
 export const protect = async (req, res, next) => {
-  console.log('[AUTH] Protect middleware called');
+  console.log('[AUTH] Protect middleware called for:', req.method, req.originalUrl);
   
+  let token;
+  const authHeader = req.headers.authorization;
+  
+  // Check for token in Authorization header first
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+    console.log('[AUTH] Token found in Authorization header');
+  } 
+  // Then check cookies
+  else if (req.cookies?.token) {
+    token = req.cookies.token;
+    console.log('[AUTH] Token found in cookies');
+  }
+
+  if (!token) {
+    console.log('[AUTH] No token provided');
+    return res.status(401).json({
+      success: false,
+      message: 'Not authorized, no token'
+    });
+  }
+
   try {
-    let token;
+    console.log('[AUTH] Verifying JWT token');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret_key_here');
+    console.log('[AUTH] Decoded token:', JSON.stringify(decoded, null, 2));
     
-    // Get token from header
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-      token = req.headers.authorization.split(' ')[1];
-      console.log('[AUTH] Token found in header');
+    if (!decoded || (!decoded.uid && !decoded.sub)) {
+      console.log('[AUTH] Invalid token payload');
+      throw new Error('Invalid token payload');
     }
-
-    if (!token) {
-      console.log('[AUTH] No token provided');
+    
+    // Use either uid (from our JWT) or sub (from Firebase)
+    const uid = decoded.uid || decoded.sub;
+    console.log(`[AUTH] Looking up admin by UID: ${uid}`);
+    
+    // Find admin by firebaseUid
+    const adminDocs = await Admin.find({
+      where: { firebaseUid: uid },
+      limit: 1
+    });
+    
+    const admin = adminDocs.length > 0 ? adminDocs[0] : null;
+    
+    if (!admin) {
+      console.log(`[AUTH] No admin found with UID: ${uid}`);
       return res.status(401).json({
         success: false,
-        message: 'Not authorized, no token provided'
+        message: 'Admin not found'
       });
     }
-
-    // Check if token is blacklisted
-    if (isBlacklisted(token)) {
-      console.log('[AUTH] Token is blacklisted');
-      return res.status(401).json({
-        success: false,
-        message: 'Token has been invalidated. Please log in again.'
-      });
-    }
-
-    try {
-      console.log('[AUTH] Verifying JWT token');
-      // Verify JWT token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-      
-      if (!decoded || !decoded.email) {
-        console.log('[AUTH] Invalid token payload - missing email:', decoded);
-        throw new Error('Invalid token payload - missing email');
-      }
-      
-      console.log('[AUTH] Token verified, email:', decoded.email);
-      
-      // Get admin by email
-      console.log('[AUTH] Looking up admin in Firestore by email...');
-      const admins = await Admin.find({ 
-        where: { email: decoded.email.toLowerCase() },
-        limit: 1
-      });
-      
-      console.log('[AUTH] Firestore query complete, found admins:', admins.length);
-      
-      const admin = admins.length > 0 ? admins[0] : null;
-      
-      if (!admin) {
-        console.log('[AUTH] No admin found for email:', decoded.email);
-        return res.status(401).json({
-          success: false,
-          message: 'Admin not found or token is invalid'
-        });
-      }
-      
-      // Check if admin account is active
-      if (admin.isActive === false) {
-        console.log('[AUTH] Admin account is deactivated:', admin.email);
-        return res.status(403).json({
-          success: false,
-          message: 'This account has been deactivated'
-        });
-      }
-      
-      // Add admin to request object
-      req.admin = admin;
-      req.user = { 
-        id: admin.id, 
-        email: admin.email,
-        role: admin.role 
-      };
-      
-      console.log('[AUTH] Authentication successful for admin:', admin.email);
-      next();
-    } catch (error) {
-      console.error('[AUTH] Token verification error:', error);
-      return res.status(401).json({
-        success: false,
-        message: 'Not authorized, token failed',
-        error: process.env.NODE_ENV === 'development' ? error.message : undefined
-      });
-    }
+    
+    // Attach user to request object
+    req.user = {
+      uid: uid,
+      email: decoded.email || admin.email,
+      role: decoded.role || admin.role
+    };
+    
+    console.log('[AUTH] Authentication successful for admin:', req.user);
+    next();
+    
   } catch (error) {
     console.error('[AUTH] Authentication error:', error);
-    return res.status(500).json({
+    return res.status(401).json({
       success: false,
-      message: 'Server error during authentication',
+      message: 'Not authorized, token failed',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
+// Grant access to specific roles
 export const admin = (req, res, next) => {
   console.log('[AUTH] admin middleware called');
-  console.log('[AUTH] User object in admin middleware:', JSON.stringify(req.user, null, 2));
   
-  if (req.user && (req.user.role === 'admin' || req.user.role === 'super_admin')) {
-    console.log('[AUTH] User is authorized as admin or super admin, proceeding...');
+  // Bypass admin check for logout route
+  if (req.path === '/api/auth/admin/logout' && req.method === 'POST') {
+    console.log('[AUTH] Bypassing admin check for logout route');
     return next();
   }
   
-  console.log('[AUTH] User is not authorized as an admin');
-  return res.status(403).json({
-    success: false,
-    message: 'Not authorized as an admin'
-  });
+  // Check if user is authenticated
+  if (!req.user) {
+    console.log('[AUTH] No user in request');
+    return res.status(401).json({
+      success: false,
+      message: 'Not authorized, no user data'
+    });
+  }
+  
+  // Check if user has admin role
+  if (req.user.role !== 'super_admin' && req.user.role !== 'sub_admin') {
+    console.log('[AUTH] User is not an admin');
+    return res.status(403).json({
+      success: false,
+      message: 'Not authorized as an admin'
+    });
+  }
+  
+  console.log('[AUTH] Admin access granted');
+  next();
 };
 
 export const superAdmin = (req, res, next) => {
@@ -138,8 +133,9 @@ export const optionalAuth = async (req, res, next) => {
     
     if (token) {
       try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-        const admin = await Admin.findById(decoded.adminId);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret_key_here');
+        const adminId = decoded.id || decoded.adminId;
+        const admin = await Admin.findById(adminId);
         
         if (admin && admin.isActive !== false) {
           req.admin = admin;

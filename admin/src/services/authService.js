@@ -29,25 +29,38 @@ const login = async (email, password) => {
 
 const logout = async () => {
   try {
-    // Get token before removing it
     const token = localStorage.getItem('adminToken');
     
-    // Call backend logout endpoint if token exists
-    if (token) {
-      await axios.post(`${API_URL}/admin/logout`, {}, {
+    // Call backend logout endpoint
+    const response = await axios.post(
+      `${API_URL}/admin/logout`, 
+      {},
+      {
+        withCredentials: true, // Important for cookies
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
-      });
+      }
+    );
+
+    // Only clear local storage if the request was successful
+    if (response.data.success) {
+      localStorage.removeItem('adminToken');
+      localStorage.removeItem('adminUser');
+      // Clear any existing cookies
+      document.cookie = 'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+      return response.data;
     }
+    
+    throw new Error(response.data.message || 'Logout failed');
   } catch (error) {
-    console.error('Logout error:', error);
+    console.error('Logout error:', error.response?.data || error.message);
     // Even if the API call fails, we should still clear local storage
-  } finally {
-    // Always clear local storage
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminUser');
+    document.cookie = 'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    throw error;
   }
 };
 

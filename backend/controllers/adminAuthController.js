@@ -1,7 +1,9 @@
 // controllers/adminAuthController.js
 import { Admin } from '../models/Admin.js';
+import { AdminLog } from '../models/AdminLog.js';
 import { adminAuth } from '../config/firebase.js';
 import { addToBlacklist } from '../utils/tokenBlacklist.js';
+import jwt from 'jsonwebtoken';
 
 // @desc    Authenticate admin & get token
 // @route   POST /api/auth/admin/login
@@ -38,7 +40,6 @@ export const loginAdmin = async (req, res) => {
       
       // Log failed login attempt with non-existent email
       try {
-        const { AdminLog } = await import('../models/AdminLog.js');
         await AdminLog.create({
           ...logData,
           action: 'login',
@@ -66,7 +67,6 @@ export const loginAdmin = async (req, res) => {
       
       // Log deactivated account attempt
       try {
-        const { AdminLog } = await import('../models/AdminLog.js');
         await AdminLog.create({
           action: 'login',
           route: logData.route,
@@ -96,7 +96,6 @@ export const loginAdmin = async (req, res) => {
       
       // Log failed login attempt
       try {
-        const { AdminLog } = await import('../models/AdminLog.js');
         await AdminLog.create({
           action: 'login',
           route: logData.route,
@@ -116,48 +115,89 @@ export const loginAdmin = async (req, res) => {
       });
     }
 
-    // Create session token (JWT)
-    console.log('Creating session token for admin:', admin.id);
-    const jwt = (await import('jsonwebtoken')).default;
+    // 3. Create or get Firebase user
+    let firebaseUser;
+    try {
+      firebaseUser = await adminAuth.getUserByEmail(email);
+    } catch (error) {
+      if (error.code === 'auth/user-not-found') {
+        // Create new Firebase user if not exists
+        firebaseUser = await adminAuth.createUser({
+          email,
+          emailVerified: false,
+          password,
+          disabled: false
+        });
+      } else {
+        throw error;
+      }
+    }
+
+    // 4. Set custom claims for role-based access
+    try {
+      await adminAuth.setCustomUserClaims(firebaseUser.uid, {
+        role: admin.role,
+        email: admin.email
+      });
+    } catch (error) {
+      console.error('Error setting custom claims:', error);
+      throw error;
+    }
+    
+    // 5. Generate JWT token with Firebase UID
+    const tokenPayload = { 
+      uid: firebaseUser.uid,  // Using Firebase UID as the primary identifier
+      email: admin.email,
+      role: admin.role
+    };
+    
+    console.log('Token payload:', JSON.stringify(tokenPayload, null, 2));
+    
     const token = jwt.sign(
-      {
-        adminId: admin.id,
-        email: admin.email,
-        role: admin.role
-      },
-      process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '24h' }
+      tokenPayload,
+      process.env.JWT_SECRET || 'your_jwt_secret_key_here',
+      { 
+        expiresIn: '24h',
+        algorithm: 'HS256'
+      }
     );
     
-    console.log('Admin login successful');
-
-    // Log the successful login (only one log entry)
+    console.log('Generated token:', token);
+    
+    // 6. Log the login event
     try {
-      const { AdminLog } = await import('../models/AdminLog.js');
       await AdminLog.create({
+        adminId: firebaseUser.uid,  // Use Firebase UID as adminId
         action: 'login',
         route: '/api/auth/admin/login',
         details: {
           ip: req.ip,
           userAgent: req.get('user-agent'),
-          email: admin.email,
-          status: 'success',
-          timestamp: new Date().toISOString()
+          note: 'Login successful',
+          firebaseUid: firebaseUser.uid
         }
       });
+      console.log('Login event logged successfully');
     } catch (logError) {
-      console.error('Failed to log admin login:', logError);
-      // Don't fail the login if logging fails
+      console.error('Failed to log login event:', logError);
+      // Continue with login even if logging fails
     }
 
-    // Return token and admin data (excluding sensitive info)
-    const adminData = admin.toJSON();
-    delete adminData.password; // Ensure password hash is not sent to client
-    
+    // 7. Prepare user data for response
+    const userData = {
+      id: firebaseUser.uid,
+      email: admin.email,
+      role: admin.role,
+      isActive: admin.isActive,
+      permissions: admin.permissions,
+      token: token
+    };
+
+    console.log('Admin login successful');
+
     res.json({
       success: true,
-      token,
-      admin: adminData
+      ...userData
     });
 
   } catch (error) {
@@ -204,19 +244,68 @@ export const getAdminProfile = async (req, res) => {
 // @route   POST /api/auth/admin/logout
 // @access  Private (Admin)
 export const logoutAdmin = async (req, res) => {
+  console.log('Logout request received');
+  
   try {
-    const token = req.token;
+    // Get token from Authorization header
+    const authHeader = req.headers.authorization;
+    let token;
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+      console.log('Token found in Authorization header');
+    } else if (req.cookies?.token) {
+      token = req.cookies.token;
+      console.log('Token found in cookies');
+    }
     
     if (!token) {
+      console.log('No token provided for logout');
       return res.status(400).json({
         success: false,
         message: 'No authentication token provided'
       });
     }
     
+    // Log the logout event if we have user info
+    if (req.user) {
+      try {
+        const { uid, email, role } = req.user;
+        console.log('Logging out user:', { uid, email, role });
+        
+        const logData = {
+          action: 'logout',
+          route: '/api/auth/admin/logout',
+          details: {
+            ip: req.ip,
+            userAgent: req.get('user-agent'),
+            note: 'Logout successful',
+            userInfo: { uid, email, role }
+          },
+          adminId: uid
+        };
+        
+        await AdminLog.create(logData);
+        console.log('Logout logged successfully');
+        
+      } catch (logError) {
+        console.error('Error logging logout event:', logError);
+        // Don't fail the request if logging fails
+      }
+    }
+    
     // Add the token to the blacklist
     addToBlacklist(token);
     
+    // Clear the cookie if it exists
+    res.clearCookie('token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/'
+    });
+    
+    console.log('Logout successful');
     res.status(200).json({
       success: true,
       message: 'Successfully logged out'

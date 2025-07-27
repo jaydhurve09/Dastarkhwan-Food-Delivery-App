@@ -144,9 +144,16 @@ export const loginAdmin = async (req, res) => {
       throw error;
     }
     
-    // 5. Generate JWT token with Firebase UID
+    // 5. Update the admin record with firebaseUid if not set
+    if (!admin.firebaseUid) {
+      console.log('Setting firebaseUid for admin:', firebaseUser.uid);
+      await Admin.update(admin.id, { firebaseUid: firebaseUser.uid });
+      admin.firebaseUid = firebaseUser.uid;
+    }
+    
+    // 6. Generate JWT token with firebaseUid
     const tokenPayload = { 
-      uid: firebaseUser.uid,  // Using Firebase UID as the primary identifier
+      uid: admin.firebaseUid,  // Always use firebaseUid as uid
       email: admin.email,
       role: admin.role
     };
@@ -164,28 +171,28 @@ export const loginAdmin = async (req, res) => {
     
     console.log('Generated token:', token);
     
-    // 6. Log the login event
+    // 7. Log the login event
     try {
       await AdminLog.create({
-        adminId: firebaseUser.uid,  // Use Firebase UID as adminId
+        adminId: admin.id,
         action: 'login',
         route: '/api/auth/admin/login',
         details: {
           ip: req.ip,
           userAgent: req.get('user-agent'),
           note: 'Login successful',
-          firebaseUid: firebaseUser.uid
+          firebaseUid: admin.firebaseUid
         }
       });
       console.log('Login event logged successfully');
     } catch (logError) {
       console.error('Failed to log login event:', logError);
-      // Continue with login even if logging fails
+      // Don't fail the login if logging fails
     }
 
-    // 7. Prepare user data for response
+    // 8. Prepare user data for response
     const userData = {
-      id: firebaseUser.uid,
+      id: admin.firebaseUid,  // Use firebaseUid as the id in the response
       email: admin.email,
       role: admin.role,
       isActive: admin.isActive,

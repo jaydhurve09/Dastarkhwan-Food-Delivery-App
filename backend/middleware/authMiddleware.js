@@ -34,25 +34,47 @@ export const protect = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret_key_here');
     console.log('[AUTH] Decoded token:', JSON.stringify(decoded, null, 2));
     
-    if (!decoded || (!decoded.uid && !decoded.sub)) {
+    if (!decoded || (!decoded.uid && !decoded.sub && !decoded.id)) {
       console.log('[AUTH] Invalid token payload');
       throw new Error('Invalid token payload');
     }
     
-    // Use either uid (from our JWT) or sub (from Firebase)
-    const uid = decoded.uid || decoded.sub;
-    console.log(`[AUTH] Looking up admin by UID: ${uid}`);
+    // Use either uid (from our JWT), sub (from Firebase), or id
+    const uid = decoded.uid || decoded.sub || decoded.id;
     
-    // Find admin by firebaseUid
-    const adminDocs = await Admin.find({
+    // For logout, we don't need to verify the admin exists in the database
+    // as long as the token is valid
+    if (req.path === '/api/auth/admin/logout' && req.method === 'POST') {
+      console.log('[AUTH] Bypassing admin lookup for logout');
+      req.user = {
+        uid: uid,
+        email: decoded.email,
+        role: decoded.role
+      };
+      return next();
+    }
+    
+    console.log(`[AUTH] Looking up admin by UID/ID: ${uid}`);
+    
+    // Try to find admin by firebaseUid first
+    let adminDocs = await Admin.find({
       where: { firebaseUid: uid },
       limit: 1
     });
     
+    // If not found by firebaseUid, try by id
+    if (adminDocs.length === 0) {
+      console.log(`[AUTH] Admin not found by firebaseUid, trying by ID`);
+      adminDocs = await Admin.find({
+        where: { id: uid },
+        limit: 1
+      });
+    }
+    
     const admin = adminDocs.length > 0 ? adminDocs[0] : null;
     
     if (!admin) {
-      console.log(`[AUTH] No admin found with UID: ${uid}`);
+      console.log(`[AUTH] No admin found with UID/ID: ${uid}`);
       return res.status(401).json({
         success: false,
         message: 'Admin not found'
@@ -61,7 +83,7 @@ export const protect = async (req, res, next) => {
     
     // Attach user to request object
     req.user = {
-      uid: uid,
+      uid: admin.firebaseUid || admin.id, // Use firebaseUid if available, otherwise fall back to id
       email: decoded.email || admin.email,
       role: decoded.role || admin.role
     };

@@ -201,6 +201,45 @@ export class Admin extends BaseModel {
     }
   }
 
+  // Static method to find admin by Firebase UID
+  static async findByFirebaseUid(firebaseUid) {
+    if (!firebaseUid) {
+      console.log('[FIND_BY_FIREBASE_UID] No Firebase UID provided');
+      return null;
+    }
+    
+    console.log(`[FIND_BY_FIREBASE_UID] Looking for admin with Firebase UID: ${firebaseUid}`);
+    
+    try {
+      const collection = this.getCollection();
+      console.log('[FIND_BY_FIREBASE_UID] Collection reference obtained');
+      
+      const query = collection.where('firebaseUid', '==', firebaseUid).limit(1);
+      console.log('[FIND_BY_FIREBASE_UID] Query created, executing...');
+      
+      const snapshot = await query.get();
+      console.log(`[FIND_BY_FIREBASE_UID] Query complete, found ${snapshot.size} documents`);
+
+      if (snapshot.empty) {
+        console.log('[FIND_BY_FIREBASE_UID] No admin found with the provided Firebase UID');
+        return null;
+      }
+
+      // Get the first matching document
+      const doc = snapshot.docs[0];
+      console.log('[FIND_BY_FIREBASE_UID] Found admin document:', doc.id);
+      
+      const adminData = { id: doc.id, ...doc.data() };
+      console.log('[FIND_BY_FIREBASE_UID] Admin data:', JSON.stringify(adminData, null, 2));
+      
+      return new this(adminData);
+      
+    } catch (error) {
+      console.error('[FIND_BY_FIREBASE_UID] Error:', error);
+      throw error;
+    }
+  }
+
   // Static method to find active admins
   static async findActive() {
     return this.find({

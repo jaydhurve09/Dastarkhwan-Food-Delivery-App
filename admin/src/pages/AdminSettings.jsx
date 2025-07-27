@@ -51,6 +51,8 @@ const AdminSettings = () => {
     { time: "2025-07-22 09:10", activity: "Added a sub-admin" },
   ]);
   const [subAdmins, setSubAdmins] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [menuOpen, setMenuOpen] = useState(null); // State for which 3-dot menu is open
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
@@ -73,6 +75,45 @@ const AdminSettings = () => {
     name: 'Admin User',
     role: currentUserRole,
   });
+
+  useEffect(() => {
+    const loadSubAdmins = async () => {
+      try {
+        await fetchSubAdmins();
+      } catch (error) {
+        console.error('Error in useEffect:', error);
+        setError('Failed to load sub-admins. Please try again.');
+        setIsLoading(false);
+      }
+    };
+
+    loadSubAdmins();
+
+    // Cleanup function
+    return () => {
+      // Any cleanup if needed
+    };
+  }, []);
+
+  // Convert boolean permissions to array format for the UI
+  const getPermissionsArray = (permissionsObj) => {
+    if (!permissionsObj) return [];
+    // If it's already an array, return it as is (for create sub-admin)
+    if (Array.isArray(permissionsObj)) return permissionsObj;
+    // Convert boolean permissions object to array of permission keys where value is true
+    return Object.entries(permissionsObj)
+      .filter(([_, value]) => value === true)
+      .map(([key]) => key);
+  };
+
+  // Convert array of permissions back to boolean object for the API
+  const getPermissionsObject = (permissionsArray) => {
+    if (!permissionsArray || !Array.isArray(permissionsArray)) return {};
+    return permissionsArray.reduce((acc, permission) => {
+      acc[permission] = true;
+      return acc;
+    }, {});
+  };
 
   // Handle logout
   const handleLogout = async () => {
@@ -107,33 +148,28 @@ const AdminSettings = () => {
       return;
     }
 
+    setIsLoading(true);
+    
     try {
       // Call the API to create sub-admin
       await authService.createSubAdmin({
         name: newAdmin.name,
         email: newAdmin.email,
         password: newAdmin.password,
-        permissions: newAdmin.permissions
+        permissions: getPermissionsObject(newAdmin.permissions)
       });
 
-      // Create new sub-admin object for local state
-      const newSubAdmin = {
-        name: newAdmin.name,
-        email: newAdmin.email,
-        permissions: [...newAdmin.permissions] // Create a copy of the permissions array
-      };
-
-      // Update local state with the new sub-admin
-      setSubAdmins(prevSubAdmins => [...prevSubAdmins, newSubAdmin]);
-      
       // Reset form
       setNewAdmin({ name: "", email: "", permissions: [], password: "" });
+      
+      // Refresh the sub-admins list
+      await fetchSubAdmins();
       
       // Add to logs
       setLogs(prevLogs => [
         { 
           time: getCurrentTimestamp(), 
-          activity: `Added sub-admin: ${newSubAdmin.name} with permissions: ${newSubAdmin.permissions.map(permission => formatPermissionText(permission)).join(', ')}` 
+          activity: `Added sub-admin: ${newAdmin.name} with permissions: ${newAdmin.permissions.map(permission => formatPermissionText(permission)).join(', ')}` 
         }, 
         ...prevLogs
       ]);
@@ -142,6 +178,8 @@ const AdminSettings = () => {
     } catch (error) {
       console.error('Error creating sub-admin:', error);
       alert(error.message || 'Failed to create sub-admin. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -192,25 +230,31 @@ const AdminSettings = () => {
   };
 
   const handleEditSubAdmin = (admin, index) => {
-    setEditingSubAdmin({ ...admin });
+    // Convert boolean permissions to array for the UI
+    const permissionsArray = getPermissionsArray(admin.permissions);
+    setEditingSubAdmin({ 
+      ...admin, 
+      permissions: permissionsArray 
+    });
     setEditingSubAdminIndex(index);
     setShowEditSubAdminModal(true);
     setMenuOpen(null);
-    setShowEditPassword(false); // Reset password visibility when opening modal
+    setShowEditPassword(false);
   };
 
   const handleSaveEditedSubAdmin = async () => {
-    if (!editingSubAdmin.name || !editingSubAdmin.email || editingSubAdmin.permissions.length === 0) {
+    if (!editingSubAdmin.name || !editingSubAdmin.email || 
+        !editingSubAdmin.permissions || editingSubAdmin.permissions.length === 0) {
       alert("Please fill all fields (except optional new password) and select at least one permission.");
       return;
     }
 
     try {
-      // Prepare the update data (only include password if it was changed)
+      // Prepare the update data with permissions as boolean object
       const updateData = {
         name: editingSubAdmin.name,
         email: editingSubAdmin.email,
-        permissions: editingSubAdmin.permissions
+        permissions: getPermissionsObject(editingSubAdmin.permissions)
       };
       
       // Only include password in the update if it was provided
@@ -219,17 +263,24 @@ const AdminSettings = () => {
       }
 
       // Call the API to update the sub-admin
-      const response = await authService.updateSubAdmin(editingSubAdmin.id || editingSubAdmin._id, updateData);
+      await authService.updateSubAdmin(editingSubAdmin.firebaseUid || editingSubAdmin.id, updateData);
 
-      // Update the sub-admins list with the updated data
+      // Update the local state
       setSubAdmins(prevSubAdmins => {
         const updatedSubAdmins = [...prevSubAdmins];
-        updatedSubAdmins[editingSubAdminIndex] = {
-          ...updatedSubAdmins[editingSubAdminIndex],
-          name: editingSubAdmin.name,
-          email: editingSubAdmin.email,
-          permissions: [...editingSubAdmin.permissions]
-        };
+        if (editingSubAdminIndex !== null && editingSubAdminIndex >= 0) {
+          updatedSubAdmins[editingSubAdminIndex] = {
+            ...editingSubAdmin,
+            // Keep the original permissions format for display
+            permissions: editingSubAdmin.permissions
+          };
+        } else {
+          updatedSubAdmins.push({
+            ...editingSubAdmin,
+            // Keep the original permissions format for display
+            permissions: editingSubAdmin.permissions
+          });
+        }
         return updatedSubAdmins;
       });
 
@@ -260,6 +311,30 @@ const AdminSettings = () => {
     setShowEditSubAdminModal(false);
     setShowEditModalPermissionsDropdown(false);
     setShowEditPassword(false); // Reset password visibility when closing modal
+  };
+
+  // Fetch sub-admins when component mounts
+  const fetchSubAdmins = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      console.log('Fetching sub-admins...');
+      const response = await authService.getSubAdmins();
+      console.log('Fetched sub-admins:', response);
+      
+      // Transform the permissions from {permission: boolean} to [permission1, permission2, ...]
+      const transformedSubAdmins = response.data.map(admin => ({
+        ...admin,
+        permissions: getPermissionsArray(admin.permissions)
+      }));
+      
+      setSubAdmins(transformedSubAdmins);
+    } catch (err) {
+      console.error('Error fetching sub-admins:', err);
+      setError(err.message || 'Failed to load sub-admins');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Inline Styles
@@ -606,8 +681,48 @@ const AdminSettings = () => {
     }
   };
 
+  const renderSubAdminPermissions = (permissions) => {
+    if (!permissions) return 'No permissions';
+    
+    // If it's an array (from create), just join them
+    if (Array.isArray(permissions)) {
+      return permissions.length > 0 
+        ? permissions.map(permission => formatPermissionText(permission)).join(', ')
+        : 'No permissions';
+    }
+    
+    // If it's an object with boolean values
+    const activePermissions = Object.entries(permissions)
+      .filter(([_, value]) => value === true)
+      .map(([key]) => formatPermissionText(key));
+      
+    return activePermissions.length > 0 
+      ? activePermissions.join(', ')
+      : 'No permissions';
+  };
+
   return (
     <div style={{ backgroundColor: "#f8f9fa", color: "#212529", padding: "30px", minHeight: "100vh" }}>
+      {/* Loading state */}
+      {isLoading && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '12px', boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)', width: '400px', maxWidth: '90%' }}>
+            <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px', textAlign: 'center' }}>Loading...</h2>
+          </div>
+        </div>
+      )}
+
+      {/* Error state */}
+      {error && !isLoading && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '12px', boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)', width: '400px', maxWidth: '90%' }}>
+            <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px', textAlign: 'center' }}>Error</h2>
+            <p style={{ fontSize: '18px', color: '#666', marginBottom: '20px' }}>{error}</p>
+            <button style={{ padding: '10px 20px', borderRadius: '6px', border: '1px solid #ccc', backgroundColor: '#f0f0f0', cursor: 'pointer', transition: 'background-color 0.2s' }} onClick={() => window.location.reload()}>Retry</button>
+          </div>
+        </div>
+      )}
+
       <header style={headerStyle}>
         <h1 style={{ fontSize: "26px", fontWeight: "bold" }}>Admin Settings</h1>
         <div style={{ position: 'relative' }} ref={profileDropdownRef}>
@@ -765,86 +880,91 @@ const AdminSettings = () => {
           <div style={{ marginTop: "20px" }}>
             <h3 style={{ fontSize: "16px", fontWeight: "600" }}>Sub-admins</h3>
             <ul style={{ marginTop: "8px", paddingLeft: "0", listStyle: "none" }}>
-              {subAdmins.map((admin, idx) => (
-                <li
-                  key={idx}
-                  style={{
-                    padding: "10px 15px",
-                    marginBottom: "8px",
-                    backgroundColor: "#f1f3f5",
-                    borderRadius: "6px",
-                    position: "relative",
-                  }}
-                >
-                  <span style={{ fontWeight: 500, fontSize: '15px' }}>
-                    {admin.name} ({admin.email}) — <span style={{ color: "#ffc107" }}>{admin.permissions.map(permission => formatPermissionText(permission)).join(', ')}</span>
-                  </span>
-
-                  {/* 3-dot menu */}
-                  <div
-                    id={`three-dot-button-${idx}`}
+              {subAdmins.map((admin, idx) => {
+                return (
+                  <li
+                    key={idx}
                     style={{
-                      position: "absolute",
-                      right: "15px",
-                      top: "12px",
-                      cursor: "pointer",
-                      fontWeight: "bold",
-                      fontSize: "20px",
-                      background: '#fff',
-                      borderRadius: '50%',
-                      width: '28px',
-                      height: '28px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                    }}
-                    onClick={() => {
-                        setMenuOpen(menuOpen === idx ? null : idx);
+                      padding: "10px 15px",
+                      marginBottom: "8px",
+                      backgroundColor: "#f1f3f5",
+                      borderRadius: "6px",
+                      position: "relative",
                     }}
                   >
-                    ⋮
-                  </div>
+                    <span style={{ fontWeight: 500, fontSize: '15px' }}>
+                      {admin.name} ({admin.email}) — <span style={{ color: "#ffc107" }}>
+                        {renderSubAdminPermissions(admin.permissions)}
+                      </span>
+                    </span>
 
-                  {menuOpen === idx && (
+                    {/* 3-dot menu */}
                     <div
-                        id={`three-dot-menu-${idx}`}
-                        style={{
-                            position: "absolute",
-                            top: "40px",
-                            right: "15px",
-                            background: "#fff",
-                            border: "1px solid #ccc",
-                            borderRadius: "6px",
-                            boxShadow: "0 0 6px rgba(0,0,0,0.1)",
-                            zIndex: 1,
-                            display: 'flex',
-                            flexDirection: 'column',
-                        }}
+                      id={`three-dot-button-${idx}`}
+                      style={{
+                        position: "absolute",
+                        right: "15px",
+                        top: "12px",
+                        cursor: "pointer",
+                        fontWeight: "bold",
+                        fontSize: "20px",
+                        background: '#fff',
+                        borderRadius: '50%',
+                        width: '28px',
+                        height: '28px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                      }}
+                      onClick={() => {
+                          setMenuOpen(menuOpen === idx ? null : idx);
+                      }}
                     >
-                      <button
-                        onClick={() => handleEditSubAdmin(admin, idx)}
-                        style={threeDotMenuButtonStyle}
-                        onMouseEnter={(e) => (e.target.style.backgroundColor = threeDotMenuButtonHoverStyle.backgroundColor)}
-                        onMouseLeave={(e) => (e.target.style.backgroundColor = 'none')}
-                      >
-                        <FaEdit /> Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteSubAdmin(idx)}
-                        style={{
-                          ...threeDotMenuButtonStyle,
-                          color: '#dc3545',
-                        }}
-                        onMouseEnter={(e) => (e.target.style.backgroundColor = threeDotMenuButtonHoverStyle.backgroundColor)}
-                        onMouseLeave={(e) => (e.target.style.backgroundColor = 'none')}
-                      >
-                        Delete
-                      </button>
+                      ⋮
                     </div>
-                  )}
-                </li>
-              ))}
+
+                    {menuOpen === idx && (
+                      <div
+                          id={`three-dot-menu-${idx}`}
+                          style={{
+                              position: "absolute",
+                              top: "40px",
+                              right: "15px",
+                              background: "#fff",
+                              border: "1px solid #ccc",
+                              borderRadius: "6px",
+                              boxShadow: "0 0 6px rgba(0,0,0,0.1)",
+                              zIndex: 1,
+                              display: 'flex',
+                              flexDirection: 'column',
+                          }}
+                      >
+                        <button
+                          onClick={() => handleEditSubAdmin(admin, idx)}
+                          style={threeDotMenuButtonStyle}
+                          onMouseEnter={(e) => (e.target.style.backgroundColor = threeDotMenuButtonHoverStyle.backgroundColor)}
+                          onMouseLeave={(e) => (e.target.style.backgroundColor = 'none')}
+                        >
+                          <FaEdit /> Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSubAdmin(idx)}
+                          style={{
+                            ...threeDotMenuButtonStyle,
+                            color: '#dc3545',
+                          }}
+                          onMouseEnter={(e) => (e.target.style.backgroundColor = threeDotMenuButtonHoverStyle.backgroundColor)}
+                          onMouseLeave={(e) => (e.target.style.backgroundColor = 'none')}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}
@@ -858,14 +978,14 @@ const AdminSettings = () => {
             <input
               type="text"
               placeholder="Full Name"
-              value={editingSubAdmin.name}
+              value={editingSubAdmin.name || ''}
               onChange={(e) => setEditingSubAdmin({ ...editingSubAdmin, name: e.target.value })}
               style={modalInputStyle}
             />
             <input
               type="email"
               placeholder="Email"
-              value={editingSubAdmin.email}
+              value={editingSubAdmin.email || ''}
               onChange={(e) => setEditingSubAdmin({ ...editingSubAdmin, email: e.target.value })}
               style={modalInputStyle}
             />
@@ -892,10 +1012,10 @@ const AdminSettings = () => {
                 style={multiSelectDisplayBoxStyle}
                 onClick={() => setShowEditModalPermissionsDropdown(!showEditModalPermissionsDropdown)}
               >
-                {editingSubAdmin.permissions.length === 0 ? (
+                {(!editingSubAdmin.permissions || editingSubAdmin.permissions.length === 0) ? (
                   <span style={multiSelectPlaceholderStyle}>Select Permissions</span>
                 ) : (
-                  editingSubAdmin.permissions.map(permission => (
+                  Array.isArray(editingSubAdmin.permissions) && editingSubAdmin.permissions.map(permission => (
                     <span key={permission} style={multiSelectSelectedItemStyle}>
                       {formatPermissionText(permission)}
                       <FaTimesCircle
@@ -913,20 +1033,25 @@ const AdminSettings = () => {
 
               {showEditModalPermissionsDropdown && (
                 <div style={multiSelectOptionsStyle}>
-                  {permissions.map((permission) => (
-                    <div
-                      key={permission}
-                      style={{
-                        ...multiSelectOptionItemStyle,
-                        ...(editingSubAdmin.permissions.includes(permission) ? multiSelectOptionItemSelectedStyle : {}),
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = multiSelectOptionItemHoverStyle.backgroundColor}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = editingSubAdmin.permissions.includes(permission) ? multiSelectOptionItemSelectedStyle.backgroundColor : '#fff'}
-                      onClick={() => handleEditAdminPermissionToggle(permission)}
-                    >
-                      {getPermissionIcon(permission)} {formatPermissionText(permission)}
-                    </div>
-                  ))}
+                  {permissions.map((permission) => {
+                    const currentPermissions = Array.isArray(editingSubAdmin.permissions) ? editingSubAdmin.permissions : [];
+                    const isSelected = currentPermissions.includes(permission);
+                    
+                    return (
+                      <div
+                        key={permission}
+                        style={{
+                          ...multiSelectOptionItemStyle,
+                          ...(isSelected ? multiSelectOptionItemSelectedStyle : {}),
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = multiSelectOptionItemHoverStyle.backgroundColor}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isSelected ? multiSelectOptionItemSelectedStyle.backgroundColor : '#fff'}
+                        onClick={() => handleEditAdminPermissionToggle(permission)}
+                      >
+                        {getPermissionIcon(permission)} {formatPermissionText(permission)}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

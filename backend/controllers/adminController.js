@@ -479,31 +479,47 @@ const getAdmin = async (req, res) => {
 // @route   PUT /api/admins/:id
 // @access  Private/Admin
 const updateAdmin = async (req, res) => {
+  console.log('[UPDATE_ADMIN] Starting update admin process');
+  
   try {
     const { id } = req.params;
     const updates = req.body;
+    
+    console.log(`[UPDATE_ADMIN] Updating admin with Firebase UID: ${id}`);
+    console.log('[UPDATE_ADMIN] Update data:', JSON.stringify(updates, null, 2));
 
-    // Check if admin exists
-    const existingAdmin = await Admin.findById(id);
+    // Check if admin exists by Firebase UID
+    console.log('[UPDATE_ADMIN] Looking up admin by Firebase UID...');
+    const existingAdmin = await Admin.findByFirebaseUid(id);
+    
     if (!existingAdmin) {
+      console.log(`[UPDATE_ADMIN] Admin not found with Firebase UID: ${id}`);
       return res.status(404).json({
         success: false,
-        message: `Admin not found with id ${id}`
+        message: `Admin not found with Firebase UID ${id}`
       });
     }
+    
+    console.log(`[UPDATE_ADMIN] Found admin:`, {
+      id: existingAdmin.id,
+      email: existingAdmin.email,
+      role: existingAdmin.role
+    });
 
     // Only super_admin can update other admins
     if (req.user.role !== Admin.ROLES.SUPER_ADMIN) {
+      console.log('[UPDATE_ADMIN] Unauthorized: Only super admins can update admin accounts');
       return res.status(403).json({
         success: false,
         message: 'Only super admins can update admin accounts'
       });
     }
 
-    // Prevent updating certain fields
+    // Rest of the function remains the same...
     const restrictedFields = ['createdAt', 'updatedAt'];
     for (const field of restrictedFields) {
       if (field in updates) {
+        console.log(`[UPDATE_ADMIN] Attempted to update restricted field: ${field}`);
         return res.status(400).json({
           success: false,
           message: `Cannot update ${field} field through this endpoint`
@@ -513,16 +529,16 @@ const updateAdmin = async (req, res) => {
 
     // Only super_admin can change roles or permissions
     if (req.user.role !== Admin.ROLES.SUPER_ADMIN) {
-      // Prevent changing roles
       if ('role' in updates) {
+        console.log('[UPDATE_ADMIN] Unauthorized: Attempted to change role without super admin privileges');
         return res.status(403).json({
           success: false,
           message: 'Only super admins can change admin roles'
         });
       }
       
-      // Prevent modifying permissions
       if ('permissions' in updates) {
+        console.log('[UPDATE_ADMIN] Unauthorized: Attempted to change permissions without super admin privileges');
         return res.status(403).json({
           success: false,
           message: 'Only super admins can modify admin permissions'
@@ -530,9 +546,9 @@ const updateAdmin = async (req, res) => {
       }
     }
     
-    // Only super admins can assign super admin role
     if ('role' in updates && updates.role === Admin.ROLES.SUPER_ADMIN && 
         req.user.role !== Admin.ROLES.SUPER_ADMIN) {
+      console.log('[UPDATE_ADMIN] Unauthorized: Attempted to assign super admin role without privileges');
       return res.status(403).json({
         success: false,
         message: 'Only super admins can assign the super admin role'
@@ -541,23 +557,30 @@ const updateAdmin = async (req, res) => {
 
     // Hash new password if provided
     if (updates.password) {
+      console.log('[UPDATE_ADMIN] Hashing new password');
       updates.password = await hashPassword(updates.password);
     }
 
     // Update admin
+    console.log('[UPDATE_ADMIN] Applying updates to admin');
     Object.assign(existingAdmin, updates);
+    
+    console.log('[UPDATE_ADMIN] Validating updated admin data');
     await existingAdmin.validate();
+    
+    console.log('[UPDATE_ADMIN] Saving updated admin to database');
     await existingAdmin.save();
 
     // Update Firebase Auth if email was changed
     if (updates.email) {
       try {
+        console.log('[UPDATE_ADMIN] Updating Firebase Auth user email');
         await admin.auth().updateUser(id, {
           email: updates.email,
           displayName: updates.name || existingAdmin.name
         });
       } catch (authError) {
-        console.error('Error updating Firebase Auth user:', authError);
+        console.error('[UPDATE_ADMIN] Error updating Firebase Auth user:', authError);
         throw new Error('Failed to update admin authentication');
       }
     }
@@ -566,12 +589,13 @@ const updateAdmin = async (req, res) => {
     const adminResponse = existingAdmin.toJSON ? existingAdmin.toJSON() : { ...existingAdmin };
     delete adminResponse.password;
 
+    console.log('[UPDATE_ADMIN] Update completed successfully');
     res.status(200).json({
       success: true,
       data: adminResponse
     });
   } catch (error) {
-    console.error('Error updating admin:', error);
+    console.error('[UPDATE_ADMIN] Error:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Error updating admin'

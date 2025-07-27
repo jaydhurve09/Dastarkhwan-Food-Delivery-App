@@ -103,7 +103,7 @@ const updateSubAdmin = async (id, adminData) => {
   try {
     const token = getToken();
     const response = await axios.put(
-      `${API_URL}/admins/${id}`,
+      `http://localhost:5000/api/admins/${id}`,
       adminData,
       {
         headers: {
@@ -116,7 +116,28 @@ const updateSubAdmin = async (id, adminData) => {
     return response.data;
   } catch (error) {
     console.error('Update sub-admin error:', error.response?.data?.message || error.message);
+    console.error('Full error:', error);
     throw error.response?.data?.message || 'Failed to update sub-admin';
+  }
+};
+
+const getSubAdmins = async () => {
+  try {
+    const token = getToken();
+    const response = await axios.get(
+      'http://localhost:5000/api/admins/subadmins',
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        withCredentials: true
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Get sub-admins error:', error.response?.data?.message || error.message);
+    throw error.response?.data?.message || 'Failed to fetch sub-admins';
   }
 };
 
@@ -127,7 +148,8 @@ export const authService = {
   getAuthToken,
   getToken,
   createSubAdmin,
-  updateSubAdmin
+  updateSubAdmin,
+  getSubAdmins
 };
 
 export {
@@ -137,7 +159,8 @@ export {
   getAuthToken,
   getToken,
   createSubAdmin,
-  updateSubAdmin
+  updateSubAdmin,
+  getSubAdmins
 };
 
 export default {
@@ -147,5 +170,6 @@ export default {
   getAuthToken,
   getToken,
   createSubAdmin,
-  updateSubAdmin
+  updateSubAdmin,
+  getSubAdmins
 };

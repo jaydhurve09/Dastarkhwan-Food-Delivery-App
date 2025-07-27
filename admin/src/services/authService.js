@@ -78,12 +78,56 @@ const getAuthToken = () => {
   return localStorage.getItem('adminToken');
 };
 
+const createSubAdmin = async (adminData) => {
+  try {
+    const token = getToken();
+    const response = await axios.post(
+      `${'http://localhost:5000/api'}/admins/subadmins`,
+      adminData,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        withCredentials: true
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Create sub-admin error:', error.response?.data?.message || error.message);
+    throw error.response?.data?.message || 'Failed to create sub-admin';
+  }
+};
+
+const updateSubAdmin = async (id, adminData) => {
+  try {
+    const token = getToken();
+    const response = await axios.put(
+      `${API_URL}/admins/${id}`,
+      adminData,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        withCredentials: true
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Update sub-admin error:', error.response?.data?.message || error.message);
+    throw error.response?.data?.message || 'Failed to update sub-admin';
+  }
+};
+
 export const authService = {
   login,
   logout,
   getCurrentUser,
   getAuthToken,
-  getToken
+  getToken,
+  createSubAdmin,
+  updateSubAdmin
 };
 
 export {
@@ -91,7 +135,9 @@ export {
   logout,
   getCurrentUser,
   getAuthToken,
-  getToken
+  getToken,
+  createSubAdmin,
+  updateSubAdmin
 };
 
 export default {
@@ -99,5 +145,7 @@ export default {
   logout,
   getCurrentUser,
   getAuthToken,
-  getToken
+  getToken,
+  createSubAdmin,
+  updateSubAdmin
 };

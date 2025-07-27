@@ -4,23 +4,47 @@ import { authService } from '../services/authService';
 // Added FaEye and FaEyeSlash icons
 import { FaUserShield, FaLock, FaClock, FaUserCircle, FaSignOutAlt, FaKey, FaClipboardList, FaTasks, FaFileAlt, FaBell, FaCaretDown, FaTimesCircle, FaEdit, FaEye, FaEyeSlash, FaUserTie } from "react-icons/fa";
 
-const roles = [
-  "Dashboard",
-  "Profile Management",
-  "Restaurant Monitoring",
-  "Delivery Partner Management",
-  "Orders & Delivery",
-  "Payment Commission Report",
-  "Promo Code Management",
-  "CMS Management",
-  "Feedback & Complaints",
-  "Notification"
+const permissions = [
+  'export_data',
+  'manage_admins',
+  'manage_cms',
+  'manage_menus',
+  'manage_notifications',
+  'manage_orders',
+  'manage_payments',
+  'manage_promocodes',
+  'manage_restaurants',
+  'manage_settings',
+  'manage_users',
+  'send_notifications',
+  'view_analytics',
+  'view_cms',
+  'view_menus',
+  'view_orders',
+  'view_payments',
+  'view_promocodes',
+  'view_restaurants',
+  'view_users'
 ];
+
+// Helper function to format permission key to display text
+const formatPermissionText = (permission) => {
+  return permission
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
 const currentUserRole = "Super Admin";
 
 const AdminSettings = () => {
   const [password, setPassword] = useState("");
-  const [newAdmin, setNewAdmin] = useState({ name: "", email: "", roles: [], password: "" });
+  const [newAdmin, setNewAdmin] = useState({ 
+    name: "", 
+    email: "", 
+    permissions: [], 
+    password: "" 
+  });
   const [logs, setLogs] = useState([
     { time: "2025-07-21 10:30", activity: "Logged in" },
     { time: "2025-07-21 11:15", activity: "Changed CMS content" },
@@ -30,13 +54,13 @@ const AdminSettings = () => {
   const [menuOpen, setMenuOpen] = useState(null); // State for which 3-dot menu is open
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
-  const [showAddAdminRolesDropdown, setShowAddAdminRolesDropdown] = useState(false); // Specific for Add Admin form
+  const [showAddAdminPermissionsDropdown, setShowAddAdminPermissionsDropdown] = useState(false); // Specific for Add Admin form
 
   // New states for editing sub-admins
   const [showEditSubAdminModal, setShowEditSubAdminModal] = useState(false);
   const [editingSubAdmin, setEditingSubAdmin] = useState(null); // Stores the admin object being edited
   const [editingSubAdminIndex, setEditingSubAdminIndex] = useState(null); // Stores the index of the admin being edited
-  const [showEditModalRolesDropdown, setShowEditModalRolesDropdown] = useState(false); // Specific for Edit Modal form
+  const [showEditModalPermissionsDropdown, setShowEditModalPermissionsDropdown] = useState(false); // Specific for Edit Modal form
   // New state for password visibility in edit modal
   const [showEditPassword, setShowEditPassword] = useState(false);
 
@@ -77,36 +101,69 @@ const AdminSettings = () => {
     return `${year}-${month}-${day} ${hours}:${minutes}`;
   };
 
-  const handleAddSubAdmin = () => {
-    if (!newAdmin.name || !newAdmin.email || newAdmin.roles.length === 0 || !newAdmin.password) {
-      alert("Please fill all fields and select at least one role.");
+  const handleAddSubAdmin = async () => {
+    if (!newAdmin.name || !newAdmin.email || newAdmin.permissions.length === 0 || !newAdmin.password) {
+      alert("Please fill all fields and select at least one permission.");
       return;
     }
-    setSubAdmins([...subAdmins, newAdmin]);
-    setNewAdmin({ name: "", email: "", roles: [], password: "" });
-    setLogs(prevLogs => [{ time: getCurrentTimestamp(), activity: `Added sub-admin: ${newAdmin.name} with roles: ${newAdmin.roles.join(', ')}` }, ...prevLogs]);
-    alert("Sub-admin added!");
+
+    try {
+      // Call the API to create sub-admin
+      await authService.createSubAdmin({
+        name: newAdmin.name,
+        email: newAdmin.email,
+        password: newAdmin.password,
+        permissions: newAdmin.permissions
+      });
+
+      // Create new sub-admin object for local state
+      const newSubAdmin = {
+        name: newAdmin.name,
+        email: newAdmin.email,
+        permissions: [...newAdmin.permissions] // Create a copy of the permissions array
+      };
+
+      // Update local state with the new sub-admin
+      setSubAdmins(prevSubAdmins => [...prevSubAdmins, newSubAdmin]);
+      
+      // Reset form
+      setNewAdmin({ name: "", email: "", permissions: [], password: "" });
+      
+      // Add to logs
+      setLogs(prevLogs => [
+        { 
+          time: getCurrentTimestamp(), 
+          activity: `Added sub-admin: ${newSubAdmin.name} with permissions: ${newSubAdmin.permissions.map(permission => formatPermissionText(permission)).join(', ')}` 
+        }, 
+        ...prevLogs
+      ]);
+      
+      alert("Sub-admin created successfully!");
+    } catch (error) {
+      console.error('Error creating sub-admin:', error);
+      alert(error.message || 'Failed to create sub-admin. Please try again.');
+    }
   };
 
-  const handleAddAdminRoleToggle = (role) => {
+  const handleAddAdminPermissionToggle = (permission) => {
     setNewAdmin(prevAdmin => {
-      const isSelected = prevAdmin.roles.includes(role);
-      const updatedRoles = isSelected
-        ? prevAdmin.roles.filter(selectedRole => selectedRole !== role)
-        : [...prevAdmin.roles, role];
-      return { ...prevAdmin, roles: updatedRoles };
+      const isSelected = prevAdmin.permissions.includes(permission);
+      const updatedPermissions = isSelected
+        ? prevAdmin.permissions.filter(selectedPermission => selectedPermission !== permission)
+        : [...prevAdmin.permissions, permission];
+      return { ...prevAdmin, permissions: updatedPermissions };
     });
   };
 
-  const handleEditAdminRoleToggle = (role) => {
+  const handleEditAdminPermissionToggle = (permission) => {
     setEditingSubAdmin(prevAdmin => {
       if (!prevAdmin) return null;
 
-      const isSelected = prevAdmin.roles.includes(role);
-      const updatedRoles = isSelected
-        ? prevAdmin.roles.filter(selectedRole => selectedRole !== role)
-        : [...prevAdmin.roles, role];
-      return { ...prevAdmin, roles: updatedRoles };
+      const isSelected = prevAdmin.permissions.includes(permission);
+      const updatedPermissions = isSelected
+        ? prevAdmin.permissions.filter(selectedPermission => selectedPermission !== permission)
+        : [...prevAdmin.permissions, permission];
+      return { ...prevAdmin, permissions: updatedPermissions };
     });
   };
 
@@ -142,29 +199,66 @@ const AdminSettings = () => {
     setShowEditPassword(false); // Reset password visibility when opening modal
   };
 
-  const handleSaveEditedSubAdmin = () => {
-    if (!editingSubAdmin.name || !editingSubAdmin.email || editingSubAdmin.roles.length === 0) {
-      alert("Please fill all fields (except optional new password) and select at least one role.");
+  const handleSaveEditedSubAdmin = async () => {
+    if (!editingSubAdmin.name || !editingSubAdmin.email || editingSubAdmin.permissions.length === 0) {
+      alert("Please fill all fields (except optional new password) and select at least one permission.");
       return;
     }
 
-    const updatedSubAdmins = [...subAdmins];
-    updatedSubAdmins[editingSubAdminIndex] = {
-      ...editingSubAdmin,
-      password: editingSubAdmin.password || subAdmins[editingSubAdminIndex].password
-    };
-    setSubAdmins(updatedSubAdmins);
+    try {
+      // Prepare the update data (only include password if it was changed)
+      const updateData = {
+        name: editingSubAdmin.name,
+        email: editingSubAdmin.email,
+        permissions: editingSubAdmin.permissions
+      };
+      
+      // Only include password in the update if it was provided
+      if (editingSubAdmin.password) {
+        updateData.password = editingSubAdmin.password;
+      }
 
-    setLogs(prevLogs => [{ time: getCurrentTimestamp(), activity: `Edited sub-admin: ${editingSubAdmin.name}` }, ...prevLogs]);
-    alert("Sub-admin updated successfully!");
-    handleCancelEdit();
+      // Call the API to update the sub-admin
+      const response = await authService.updateSubAdmin(editingSubAdmin.id || editingSubAdmin._id, updateData);
+
+      // Update the sub-admins list with the updated data
+      setSubAdmins(prevSubAdmins => {
+        const updatedSubAdmins = [...prevSubAdmins];
+        updatedSubAdmins[editingSubAdminIndex] = {
+          ...updatedSubAdmins[editingSubAdminIndex],
+          name: editingSubAdmin.name,
+          email: editingSubAdmin.email,
+          permissions: [...editingSubAdmin.permissions]
+        };
+        return updatedSubAdmins;
+      });
+
+      // Add to logs
+      setLogs(prevLogs => [
+        { 
+          time: getCurrentTimestamp(), 
+          activity: `Updated sub-admin: ${editingSubAdmin.name} (${editingSubAdmin.email})` 
+        }, 
+        ...prevLogs
+      ]);
+
+      // Close the modal
+      setShowEditSubAdminModal(false);
+      setEditingSubAdmin(null);
+      setEditingSubAdminIndex(null);
+      
+      alert("Sub-admin updated successfully!");
+    } catch (error) {
+      console.error('Error updating sub-admin:', error);
+      alert(error.message || 'Failed to update sub-admin. Please try again.');
+    }
   };
 
   const handleCancelEdit = () => {
     setEditingSubAdmin(null);
     setEditingSubAdminIndex(null);
     setShowEditSubAdminModal(false);
-    setShowEditModalRolesDropdown(false);
+    setShowEditModalPermissionsDropdown(false);
     setShowEditPassword(false); // Reset password visibility when closing modal
   };
 
@@ -486,18 +580,28 @@ const AdminSettings = () => {
     backgroundColor: '#f0f0f0',
   };
 
-  const getRoleIcon = (roleName) => {
-    switch (roleName) {
-      case "Dashboard": return <FaClock />;
-      case "Profile Management": return <FaUserCircle />;
-      case "Restaurant Monitoring": return <FaUserShield />;
-      case "Delivery Partner Management": return <FaUserTie />; 
-      case "Orders & Delivery": return <FaClipboardList />;
-      case "Payment Commission Report": return <FaFileAlt />;
-      case "Promo Code Management": return <FaBell />;
-      case "CMS Management": return <FaFileAlt />;
-      case "Feedback & Complaints": return <FaUserCircle />;
-      case "Notification": return <FaBell />;
+  const getPermissionIcon = (permission) => {
+    switch (permission) {
+      case "export_data": return <FaFileAlt />;
+      case "manage_admins": return <FaUserShield />;
+      case "manage_cms": return <FaFileAlt />;
+      case "manage_menus": return <FaClipboardList />;
+      case "manage_notifications": return <FaBell />;
+      case "manage_orders": return <FaClipboardList />;
+      case "manage_payments": return <FaFileAlt />;
+      case "manage_promocodes": return <FaBell />;
+      case "manage_restaurants": return <FaUserTie />;
+      case "manage_settings": return <FaUserShield />;
+      case "manage_users": return <FaUserCircle />;
+      case "send_notifications": return <FaBell />;
+      case "view_analytics": return <FaFileAlt />;
+      case "view_cms": return <FaFileAlt />;
+      case "view_menus": return <FaClipboardList />;
+      case "view_orders": return <FaClipboardList />;
+      case "view_payments": return <FaFileAlt />;
+      case "view_promocodes": return <FaBell />;
+      case "view_restaurants": return <FaUserTie />;
+      case "view_users": return <FaUserCircle />;
       default: return null;
     }
   };
@@ -609,23 +713,23 @@ const AdminSettings = () => {
             style={inputStyle}
           />
 
-          {/* Custom Multi-select Dropdown for Roles (Add Admin) */}
+          {/* Custom Multi-select Dropdown for Permissions (Add Admin) */}
           <div style={multiSelectWrapperStyle} ref={addAdminMultiSelectRef}>
             <div
               style={multiSelectDisplayBoxStyle}
-              onClick={() => setShowAddAdminRolesDropdown(!showAddAdminRolesDropdown)}
+              onClick={() => setShowAddAdminPermissionsDropdown(!showAddAdminPermissionsDropdown)}
             >
-              {newAdmin.roles.length === 0 ? (
-                <span style={multiSelectPlaceholderStyle}>Select Roles</span>
+              {newAdmin.permissions.length === 0 ? (
+                <span style={multiSelectPlaceholderStyle}>Select Permissions</span>
               ) : (
-                newAdmin.roles.map(role => (
-                  <span key={role} style={multiSelectSelectedItemStyle}>
-                    {role}
+                newAdmin.permissions.map(permission => (
+                  <span key={permission} style={multiSelectSelectedItemStyle}>
+                    {formatPermissionText(permission)}
                     <FaTimesCircle
                       style={removeSelectedItemStyle}
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleAddAdminRoleToggle(role);
+                        handleAddAdminPermissionToggle(permission);
                       }}
                     />
                   </span>
@@ -634,20 +738,20 @@ const AdminSettings = () => {
               <FaCaretDown style={multiSelectDropdownIconStyle} />
             </div>
 
-            {showAddAdminRolesDropdown && (
+            {showAddAdminPermissionsDropdown && (
               <div style={multiSelectOptionsStyle}>
-                {roles.map((role) => (
+                {permissions.map((permission) => (
                   <div
-                    key={role}
+                    key={permission}
                     style={{
                       ...multiSelectOptionItemStyle,
-                      ...(newAdmin.roles.includes(role) ? multiSelectOptionItemSelectedStyle : {}),
+                      ...(newAdmin.permissions.includes(permission) ? multiSelectOptionItemSelectedStyle : {}),
                     }}
                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = multiSelectOptionItemHoverStyle.backgroundColor}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = newAdmin.roles.includes(role) ? multiSelectOptionItemSelectedStyle.backgroundColor : '#fff'}
-                    onClick={() => handleAddAdminRoleToggle(role)}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = newAdmin.permissions.includes(permission) ? multiSelectOptionItemSelectedStyle.backgroundColor : '#fff'}
+                    onClick={() => handleAddAdminPermissionToggle(permission)}
                   >
-                    {getRoleIcon(role)} {role}
+                    {getPermissionIcon(permission)} {formatPermissionText(permission)}
                   </div>
                 ))}
               </div>
@@ -673,7 +777,7 @@ const AdminSettings = () => {
                   }}
                 >
                   <span style={{ fontWeight: 500, fontSize: '15px' }}>
-                    {admin.name} ({admin.email}) — <span style={{ color: "#ffc107" }}>{admin.roles.join(', ')}</span>
+                    {admin.name} ({admin.email}) — <span style={{ color: "#ffc107" }}>{admin.permissions.map(permission => formatPermissionText(permission)).join(', ')}</span>
                   </span>
 
                   {/* 3-dot menu */}
@@ -782,23 +886,23 @@ const AdminSettings = () => {
               </span>
             </div>
 
-            {/* Custom Multi-select Dropdown for Roles (Edit Admin) */}
+            {/* Custom Multi-select Dropdown for Permissions (Edit Admin) */}
             <div style={{ ...multiSelectWrapperStyle, zIndex: 10 }} ref={editAdminMultiSelectRef}>
               <div
                 style={multiSelectDisplayBoxStyle}
-                onClick={() => setShowEditModalRolesDropdown(!showEditModalRolesDropdown)}
+                onClick={() => setShowEditModalPermissionsDropdown(!showEditModalPermissionsDropdown)}
               >
-                {editingSubAdmin.roles.length === 0 ? (
-                  <span style={multiSelectPlaceholderStyle}>Select Roles</span>
+                {editingSubAdmin.permissions.length === 0 ? (
+                  <span style={multiSelectPlaceholderStyle}>Select Permissions</span>
                 ) : (
-                  editingSubAdmin.roles.map(role => (
-                    <span key={role} style={multiSelectSelectedItemStyle}>
-                      {role}
+                  editingSubAdmin.permissions.map(permission => (
+                    <span key={permission} style={multiSelectSelectedItemStyle}>
+                      {formatPermissionText(permission)}
                       <FaTimesCircle
                         style={removeSelectedItemStyle}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleEditAdminRoleToggle(role);
+                          handleEditAdminPermissionToggle(permission);
                         }}
                       />
                     </span>
@@ -807,20 +911,20 @@ const AdminSettings = () => {
                 <FaCaretDown style={multiSelectDropdownIconStyle} />
               </div>
 
-              {showEditModalRolesDropdown && (
+              {showEditModalPermissionsDropdown && (
                 <div style={multiSelectOptionsStyle}>
-                  {roles.map((role) => (
+                  {permissions.map((permission) => (
                     <div
-                      key={role}
+                      key={permission}
                       style={{
                         ...multiSelectOptionItemStyle,
-                        ...(editingSubAdmin.roles.includes(role) ? multiSelectOptionItemSelectedStyle : {}),
+                        ...(editingSubAdmin.permissions.includes(permission) ? multiSelectOptionItemSelectedStyle : {}),
                       }}
                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = multiSelectOptionItemHoverStyle.backgroundColor}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = editingSubAdmin.roles.includes(role) ? multiSelectOptionItemSelectedStyle.backgroundColor : '#fff'}
-                      onClick={() => handleEditAdminRoleToggle(role)}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = editingSubAdmin.permissions.includes(permission) ? multiSelectOptionItemSelectedStyle.backgroundColor : '#fff'}
+                      onClick={() => handleEditAdminPermissionToggle(permission)}
                     >
-                      {getRoleIcon(role)} {role}
+                      {getPermissionIcon(permission)} {formatPermissionText(permission)}
                     </div>
                   ))}
                 </div>

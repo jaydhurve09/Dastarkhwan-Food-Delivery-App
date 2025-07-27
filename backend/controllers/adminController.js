@@ -21,7 +21,7 @@ const createSubAdmin = async (req, res) => {
     console.log('[CONTROLLER] Request body:', JSON.stringify(req.body, null, 2));
     
     // Extract data from request body
-    const { email, password, permissions } = req.body;
+    const { name, email, password, permissions } = req.body;
     
     // Basic validation (should be caught by validation middleware, but just in case)
     if (!email || !password) {
@@ -43,9 +43,9 @@ const createSubAdmin = async (req, res) => {
       });
     }
 
-    // Use the email prefix as the display name
-    const displayName = email.split('@')[0];
-    console.log('[CONTROLLER] Generated display name:', displayName);
+    // Use the provided name or fall back to email prefix
+    const displayName = name || email.split('@')[0];
+    console.log('[CONTROLLER] Using display name:', displayName);
 
     // Validate permissions if provided
     if (permissions && Array.isArray(permissions) && permissions.length > 0) {
@@ -756,11 +756,11 @@ export {
   createAdmin,
   createSubAdmin,
   getAdmins,
-  getSubAdmins,
   getAdmin,
-  updateAdmin,
-  updateSubAdminPermissions,
+  updateAdmin,  
   deleteAdmin,
   getCurrentAdmin,
-  updateCurrentAdmin
+  updateCurrentAdmin,
+  getSubAdmins,
+  updateSubAdminPermissions
 };

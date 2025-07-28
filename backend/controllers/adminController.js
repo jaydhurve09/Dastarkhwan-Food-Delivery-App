@@ -303,10 +303,20 @@ const getSubAdmins = async (req, res) => {
       });
     });
     
-    // Remove sensitive data
+    // Remove sensitive data and transform permissions
     const sanitizedAdmins = subadmins.map(admin => {
       const adminData = { ...admin };
       delete adminData.password;
+      
+      // Convert permissions object to array of permission strings where value is true
+      if (adminData.permissions && typeof adminData.permissions === 'object') {
+        adminData.permissions = Object.entries(adminData.permissions)
+          .filter(([_, value]) => value === true)
+          .map(([key]) => key);
+      } else {
+        adminData.permissions = [];
+      }
+      
       return adminData;
     });
 

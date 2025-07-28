@@ -156,7 +156,7 @@ const AdminSettings = () => {
         name: newAdmin.name,
         email: newAdmin.email,
         password: newAdmin.password,
-        permissions: getPermissionsObject(newAdmin.permissions)
+        permissions: newAdmin.permissions // Send as array directly
       });
 
       // Reset form
@@ -318,9 +318,7 @@ const AdminSettings = () => {
     try {
       setIsLoading(true);
       setError(null);
-      console.log('Fetching sub-admins...');
       const response = await authService.getSubAdmins();
-      console.log('Fetched sub-admins:', response);
       
       // Transform the permissions from {permission: boolean} to [permission1, permission2, ...]
       const transformedSubAdmins = response.data.map(admin => ({

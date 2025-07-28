@@ -47,8 +47,26 @@ try {
 }
 
 // Initialize services
+console.log('🔄 Initializing Firestore...');
 const db = getFirestore(firebaseApp);
+
+// Test the Firestore connection
+const testFirestoreConnection = async () => {
+  try {
+    console.log('🔍 Testing Firestore connection...');
+    const collections = await db.listCollections();
+    console.log('✅ Firestore connected successfully');
+    console.log('📚 Available collections:', collections.map(c => c.id).join(', ') || 'None');
+  } catch (error) {
+    console.error('❌ Firestore connection test failed:', error);
+    throw error;
+  }
+};
+
+testFirestoreConnection().catch(console.error);
+
 const auth = getAuth(firebaseApp);
+console.log('✅ Firebase Auth initialized');
 
 // Export initialized services
 export { firebaseApp as admin, db, auth, auth as adminAuth };

@@ -165,7 +165,15 @@ const UserManagement = () => {
   const [roleFilter, setRoleFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
-  const [usersPerPage] = useState(10); // Number of users to display per page
+  const [usersPerPage] = useState(10);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // State for pagination
+  const [pagination, setPagination] = useState({
+    hasNextPage: false,
+    nextPageStart: null
+  });
 
   // State for custom modals
   const [showInfoModal, setShowInfoModal] = useState(false); // For general info/confirmation
@@ -197,30 +205,104 @@ const UserManagement = () => {
     role: ' Admin',
   });
 
-  // Mock data for demonstration
+  // Fetch users from API
+  const fetchUsers = async (startAfter = null) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      // Get token from localStorage
+      const token = localStorage.getItem('adminToken');
+      
+      if (!token) {
+        throw new Error('Authentication required. Please log in again.');
+      }
+
+      let url = 'http://localhost:5000/api/users?limit=10';
+      if (startAfter) {
+        url += `&startAfter=${encodeURIComponent(JSON.stringify(startAfter))}`;
+      }
+
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`, // Add Bearer prefix
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        let errorMessage = 'Failed to fetch users';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message || errorMessage;
+        } catch (e) {
+          errorMessage = errorText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+      
+      // Map API response to match the expected user structure based on Firestore schema
+      const formattedUsers = data.data.map(user => {
+        // Use either createdAt or created_time, whichever exists
+        const createdAt = user.createdAt || user.created_time;
+        const updatedAt = user.updatedAt || user.updated_time;
+        
+        return {
+          id: user.uid || user.id,
+          fullName: user.name || user.fullName || 'No Name',
+          email: user.email || 'No Email',
+          phoneNumber: user.phoneNo || user.phoneNumber || 'N/A',
+          role: user.role || 'User',
+          status: (user.status || 'active').toLowerCase(),
+          joinedDate: createdAt 
+            ? new Date(createdAt).toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric', 
+                year: 'numeric' 
+              })
+            : 'N/A',
+          lastUpdated: updatedAt
+            ? new Date(updatedAt).toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })
+            : 'N/A'
+        };
+      });
+
+      setUsers(prevUsers => startAfter ? [...prevUsers, ...formattedUsers] : formattedUsers);
+      setPagination({
+        hasNextPage: data.pagination?.hasNextPage || false,
+        nextPageStart: data.pagination?.nextPageStart || null
+      });
+    } catch (err) {
+      console.error('Error fetching users:', err);
+      setError(err.message);
+      setModalMessage(err.message || 'Failed to load users');
+      setShowInfoModal(true);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Initial data fetch
   useEffect(() => {
-    // Filter out 'CRM Manager' role from mock data
-    const mockUsers = [
-      { id: 1, fullName: 'John Smith', email: 'john.smith@gmail.com', username: 'jonny77', role: 'Super Admin', joinedDate: 'March 12, 2023', lastActive: '1 min ago', status: 'Active' },
-      { id: 2, fullName: 'Olivia Bennett', email: 'oliyben69@gmail.com', username: 'oliy659', role: 'User', joinedDate: 'June 27, 2022', lastActive: '1 month ago', status: 'Inactive' },
-      { id: 3, fullName: 'Daniel Warren', email: 'dwarren3@gmail.com', username: 'dwarren3', role: 'Delivery Agent', joinedDate: 'January 8, 2024', lastActive: '4 days ago', status: 'Banned' },
-      { id: 4, fullName: 'Chloe Hayes', email: 'chloelhye@gmail.com', username: 'chloelh', role: 'Sub Admin', joinedDate: 'October 5, 2021', lastActive: '10 days ago', status: 'Pending' },
-      { id: 5, fullName: 'Marcus Reed', email: 'reeds777@gmail.com', username: 'reeds7', role: 'Delivery Agent', joinedDate: 'February 19, 2023', lastActive: '3 min ago', status: 'Active' },
-      { id: 6, fullName: 'Isabelle Clark', email: 'belleclark@gmail.com', username: 'bellecl', role: 'User', joinedDate: 'August 30, 2022', lastActive: '1 week ago', status: 'Active' },
-      { id: 8, fullName: 'Mark Wilburg', email: 'markwill32@gmail.com', username: 'markwill32', role: 'User', joinedDate: 'November 14, 2020', lastActive: '2 mins ago', status: 'Inactive' },
-      { id: 9, fullName: 'Nicholas Agemi', email: 'nicolass009@gmail.com', username: 'nicolass00', role: 'User', joinedDate: 'July 6, 2023', lastActive: '3 hours ago', status: 'Active' },
-      { id: 10, fullName: 'Rosa Nadinn', email: 'naddlin@gmail.com', username: 'naddlin', role: 'Delivery Agent', joinedDate: 'December 31, 2021', lastActive: '4 min ago', status: 'Active' },
-      { id: 11, fullName: 'Noemi Villan', email: 'noemivill99@gmail.com', username: 'noemi', role: 'Sub Admin', joinedDate: 'August 10, 2024', lastActive: '15 mins ago', status: 'Inactive' },
-      { id: 12, fullName: 'Marcus Reed', email: 'reeds777@gmail.com', username: 'reeds7', role: 'User', joinedDate: 'March 12, 2023', lastActive: '1 minute ago', status: 'Banned' },
-      { id: 13, fullName: 'Isabelle Clark', email: 'belleclark@gmail.com', username: 'bellecl', role: 'User', joinedDate: 'June 27, 2022', lastActive: '1 month ago', status: 'Pending' },
-      { id: 14, fullName: 'Lucas Mitchell', email: 'lucamich@gmail.com', username: 'lucamich', role: 'User', joinedDate: 'January 8, 2024', lastActive: '4 days ago', status: 'Active' },
-      { id: 15, fullName: 'Mark Wilburg', email: 'markwill32@gmail.com', username: 'markwill32', role: 'Delivery Agent', joinedDate: 'October 5, 2021', lastActive: '10 days ago', status: 'Active' },
-      { id: 16, fullName: 'Nicholas Agemi', email: 'nicolass009@gmail.com', username: 'nicolass00', role: 'User', joinedDate: 'February 19, 2023', lastActive: '3 mins ago', status: 'Banned' },
-      { id: 17, fullName: 'Sarah Connor', email: 'sarah.c@gmail.com', username: 'sconnor', role: 'Super Admin', joinedDate: 'May 1, 2023', lastActive: '2 days ago', status: 'Active' },
-      { id: 18, fullName: 'David Lee', email: 'david.l@gmail.com', username: 'dlee', role: 'Sub Admin', joinedDate: 'July 15, 2024', lastActive: '1 hour ago', status: 'Active' },
-    ].filter(user => user.role !== 'CRM Manager'); // Explicitly filter out CRM Manager
-    setUsers(mockUsers);
+    fetchUsers();
   }, []);
+
+  // Load more users for infinite scroll
+  const loadMoreUsers = () => {
+    if (pagination.hasNextPage && pagination.nextPageStart) {
+      fetchUsers(pagination.nextPageStart);
+    }
+  };
 
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
@@ -324,20 +406,29 @@ const UserManagement = () => {
 
   // Filtered and paginated users
   const filteredUsers = users.filter(user => {
-    const matchesSearch = user.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.username.toLowerCase().includes(searchTerm.toLowerCase());
-    // Ensure 'CRM Manager' is not considered in role filter
-    const matchesRole = roleFilter === 'All' || user.role === roleFilter;
-    const matchesStatus = statusFilter === 'All' || user.status === statusFilter;
+    if (!user) return false; // Skip if user is undefined
+    
+    const searchTermLower = (searchTerm || '').toLowerCase();
+    const userName = (user.fullName || '').toLowerCase();
+    const userEmail = (user.email || '').toLowerCase();
+    const userPhone = (user.phoneNumber || '').toLowerCase();
+    
+    const matchesSearch = 
+      userName.includes(searchTermLower) || 
+      userEmail.includes(searchTermLower) ||
+      userPhone.includes(searchTermLower);
+      
+    // Ensure status is a string before calling toLowerCase
+    const userStatus = (user.status || 'active').toString().toLowerCase();
+    const matchesRole = roleFilter === 'All' || (user.role || '').toLowerCase() === roleFilter.toLowerCase();
+    const matchesStatus = statusFilter === 'All' || userStatus === statusFilter.toLowerCase();
 
     let matchesTab = true;
     if (activeTab === 'remove') {
-      matchesTab = user.status === 'Inactive' || user.status === 'Banned';
+      matchesTab = userStatus === 'inactive' || userStatus === 'banned';
     } else if (activeTab === 'block') {
-      matchesTab = user.status === 'Banned';
+      matchesTab = userStatus === 'banned';
     }
-    // For 'all' tab, matchesTab remains true
 
     return matchesSearch && matchesRole && matchesStatus && matchesTab;
   });
@@ -944,13 +1035,12 @@ const UserManagement = () => {
         <table style={styles.table}>
           <thead>
             <tr>
-              <th style={styles.tableTh}>Full Name</th>
+              <th style={styles.tableTh}>Name</th>
               <th style={styles.tableTh}>Email</th>
-              <th style={styles.tableTh}>Username</th>
-              <th style={styles.tableTh}>Role</th>
-              <th style={styles.tableTh}>Joined Date</th>
-              <th style={styles.tableTh}>Last Active</th>
+              <th style={styles.tableTh}>Phone</th>
               <th style={styles.tableTh}>Status</th>
+              <th style={styles.tableTh}>Created At</th>
+              <th style={styles.tableTh}>Last Updated</th>
               <th style={styles.tableTh}>Actions</th>
             </tr>
           </thead>
@@ -960,36 +1050,46 @@ const UserManagement = () => {
                 <tr key={user.id}>
                   <td style={styles.tableTd}>
                     <div style={styles.userInfo}>
-                      <img src={`https://i.pravatar.cc/30?img=${user.id}`} alt="User Avatar" style={styles.userAvatar} />
+                      <img 
+                        src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName)}&background=random`} 
+                        alt={user.fullName} 
+                        style={styles.userAvatar} 
+                      />
                       {user.fullName}
                     </div>
                   </td>
-                  <td style={styles.tableTd}>{user.email}</td>
-                  <td style={styles.tableTd}>{user.username}</td>
-                  <td style={styles.tableTd}>{user.role}</td>
-                  <td style={styles.tableTd}>{user.joinedDate}</td>
-                  <td style={styles.tableTd}>{user.lastActive}</td>
+                  <td style={styles.tableTd}>
+                    <a href={`mailto:${user.email}`} style={{ color: '#007bff', textDecoration: 'none' }}>
+                      {user.email}
+                    </a>
+                  </td>
+                  <td style={styles.tableTd}>
+                    {user.phoneNumber && (
+                      <a href={`tel:${user.phoneNumber}`} style={{ color: '#28a745', textDecoration: 'none' }}>
+                        {user.phoneNumber}
+                      </a>
+                    )}
+                  </td>
                   <td style={styles.tableTd}>
                     <span style={getStatusBadgeStyle(user.status)}>
-                      {user.status}
+                      {user.status.charAt(0).toUpperCase() + user.status.slice(1)}
                     </span>
                   </td>
+                  <td style={styles.tableTd}>{user.joinedDate}</td>
+                  <td style={styles.tableTd}>{user.lastUpdated}</td>
                   <td style={{ ...styles.tableTd, ...styles.actionsColumn }}>
                     <button
                       onClick={() => handleResetPasswordClick(user.id)}
                       style={{ ...styles.actionButton, ...styles.editButton }}
                       title="Reset Password"
                     >
-                      {/* React Icon for Change Password */}
                       <FaKey />
                     </button>
-
                     <button
                       onClick={() => handleDeleteUser(user.id)}
                       style={{ ...styles.actionButton, ...styles.deleteButton }}
                       title="Delete User"
                     >
-                      {/* React Icon for Delete */}
                       <FaTrashAlt />
                     </button>
                   </td>
@@ -997,7 +1097,9 @@ const UserManagement = () => {
               ))
             ) : (
               <tr>
-                <td colSpan="8" style={styles.noUsersFound}>No users found matching your criteria.</td>
+                <td colSpan="7" style={styles.noUsersFound}>
+                  {isLoading ? 'Loading users...' : 'No users found matching your criteria.'}
+                </td>
               </tr>
             )}
           </tbody>

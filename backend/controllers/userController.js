@@ -69,35 +69,87 @@ const createUser = async (req, res) => {
 // @route   GET /api/users
 // @access  Private/Admin
 const getUsers = async (req, res) => {
+  console.log('[USER] Starting to fetch users');
+  const startTime = Date.now();
+  
   try {
-    const snapshot = await User.getCollection().get();
+    console.log('[USER] 1. Parsing query parameters...');
+    const { limit = 10, startAfter } = req.query;
+    console.log(`[USER] 2. Query params - limit: ${limit}, startAfter: ${startAfter}`);
     
-    if (snapshot.empty) {
-      return res.status(404).json({
-        success: false,
-        message: 'No users found'
-      });
+    // Build query options - using 'created_time' to match Firestore documents
+    const queryOptions = {
+      orderBy: 'created_time',  
+      limit: parseInt(limit, 10)
+    };
+    console.log('[USER] 3. Base query options:', JSON.stringify(queryOptions));
+    
+    // Only add startAfter if it's provided and not empty
+    if (startAfter && startAfter !== 'undefined') {
+      // If startAfter is a timestamp string, convert it to an object with _seconds
+      if (typeof startAfter === 'string' && !isNaN(Date.parse(startAfter))) {
+        const date = new Date(startAfter);
+        queryOptions.startAfter = {
+          _seconds: Math.floor(date.getTime() / 1000),
+          _nanoseconds: 0
+        };
+        console.log('[USER] 4.1 Converted startAfter string to timestamp object:', queryOptions.startAfter);
+      } else {
+        // If it's already an object or other format, use as is
+        queryOptions.startAfter = startAfter;
+      }
+      console.log('[USER] 4. Added startAfter to query options');
+    } else {
+      console.log('[USER] 4. No startAfter provided, starting from first page');
     }
-
-    const users = [];
-    snapshot.forEach(doc => {
-      users.push({
-        id: doc.id,
-        ...doc.data()
-      });
+    
+    console.log('[USER] 5. About to call User.findPage() with options:', JSON.stringify(queryOptions));
+    
+    // Get users with cursor-based pagination
+    const result = await User.findPage(queryOptions);
+    console.log('[USER] 6. User.findPage() completed successfully');
+    console.log(`[USER] 7. Found ${result.items ? result.items.length : 0} users`);
+    
+    const { items: users, hasNextPage, nextPageStart } = result;
+    
+    // Remove sensitive data from response
+    console.log('[USER] 8. Processing and sanitizing user data...');
+    const sanitizedUsers = users.map(user => {
+      const userObj = user.toJSON ? user.toJSON() : user;
+      const { password, fcmToken, ...safeUserData } = userObj;
+      // Ensure created_time is in a consistent format
+      if (safeUserData.created_time) {
+        safeUserData.created_time = new Date(safeUserData.created_time).toISOString();
+      }
+      return safeUserData;
     });
-
-    res.json({
+    
+    const response = {
       success: true,
-      count: users.length,
-      data: users
-    });
+      count: sanitizedUsers.length,
+      pagination: {
+        hasNextPage,
+        nextPageStart: hasNextPage ? nextPageStart : null
+      },
+      data: sanitizedUsers
+    };
+    
+    const duration = Date.now() - startTime;
+    console.log(`[USER] 9. Successfully processed ${sanitizedUsers.length} users in ${duration}ms`);
+    
+    console.log('[USER] 10. Sending response...');
+    res.status(200).json(response);
+    console.log('[USER] 11. Response sent successfully');
   } catch (error) {
-    console.error('Error getting users:', error);
+    console.error('[USER] ERROR in getUsers:', {
+      message: error.message,
+      stack: error.stack,
+      query: req.query
+    });
     res.status(500).json({
       success: false,
-      message: 'Server error',
-      error: error.message
+      message: 'Error fetching users',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

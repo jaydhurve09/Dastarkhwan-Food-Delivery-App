@@ -89,36 +89,17 @@ export class User extends BaseModel {
     console.log('Searching for email (normalized):', normalizedEmail);
     
     try {
-      // First try exact match (for backward compatibility)
-      let results = await this.find({
-        where: { email: normalizedEmail },
-        limit: 1
-      });
+      const snapshot = await this.getCollection()
+        .where('email', '==', normalizedEmail)
+        .limit(1)
+        .get();
       
-      // If no exact match, try case-insensitive search
-      if (!results.length) {
-        console.log('No exact match, trying case-insensitive search');
-        const snapshot = await this.getCollection()
-          .where('email', '>=', normalizedEmail)
-          .where('email', '<=', normalizedEmail + '\uf8ff')
-          .limit(1)
-          .get();
-          
-        results = snapshot.docs.map(doc => {
-          const data = doc.data();
-          return new this({ id: doc.id, ...data });
-        });
+      if (snapshot.empty) {
+        console.log('No user found with email:', normalizedEmail);
+        return null;
       }
       
-      const user = results[0] || null;
-      console.log('User found:', user ? `Yes (ID: ${user.id})` : 'No');
-      
-      if (user) {
-        console.log('User email in DB:', user.email);
-        console.log('Password exists:', !!user.password);
-      }
-      
-      return user;
+      return this.fromFirestore(snapshot.docs[0]);
     } catch (error) {
       console.error('Error in findByEmail:', error);
       throw error;
@@ -179,6 +160,31 @@ export class User extends BaseModel {
     this.orderCount = (this.orderCount || 0) + 1;
     this.totalSpent = (this.totalSpent || 0) + (amount || 0);
     return this.save();
+  }
+
+  // Test Firestore connection and collection access
+  static async testConnection() {
+    try {
+      console.log('[USER] Testing Firestore connection...');
+      const collection = this.getCollection();
+      console.log('[USER] Collection reference obtained:', collection.path);
+      
+      // Try to get a count of documents (without fetching all documents)
+      const snapshot = await collection.limit(1).get();
+      console.log(`[USER] Successfully connected to collection. Contains documents: ${!snapshot.empty}`);
+      
+      return {
+        success: true,
+        collection: collection.path,
+        hasDocuments: !snapshot.empty
+      };
+    } catch (error) {
+      console.error('[USER] Firestore connection test failed:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
   }
 }
 

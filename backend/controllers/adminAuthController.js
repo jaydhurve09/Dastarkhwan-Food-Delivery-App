@@ -162,9 +162,15 @@ export const loginAdmin = async (req, res) => {
     
     console.log('Token payload:', JSON.stringify(tokenPayload, null, 2));
     
+    // Get JWT secret from environment or use a default (for development only)
+    const jwtSecret = process.env.JWT_SECRET || 'your_secure_jwt_secret_key_here';
+    if (!process.env.JWT_SECRET) {
+      console.warn('WARNING: Using default JWT secret. Set JWT_SECRET in your environment variables for production.');
+    }
+    
     const token = jwt.sign(
       tokenPayload,
-      process.env.JWT_SECRET || 'your_jwt_secret_key_here',
+      jwtSecret,
       { 
         expiresIn: '24h',
         algorithm: 'HS256'

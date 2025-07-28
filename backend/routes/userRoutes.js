@@ -3,6 +3,7 @@ import { body, param, query } from 'express-validator';
 import { createUser, getUsers, getUserById, updateUser, deleteUser } from '../controllers/userController.js';
 import { protect, superAdmin } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validationMiddleware.js';
+import { db } from '../config/firebase.js';
 
 const router = express.Router();
 
@@ -35,6 +36,53 @@ router.use(protect);
 // Only super admin can access these routes
 router.use(superAdmin);
 
+// Test endpoint to verify Firestore access
+router.get('/test-firestore', async (req, res) => {
+  try {
+    console.log('🔍 Testing direct Firestore access...');
+    
+    // List all collections
+    console.log('📚 Listing all collections...');
+    const collections = await db.listCollections();
+    const collectionNames = collections.map(c => c.id);
+    console.log('Available collections:', collectionNames);
+    
+    // Try to get users collection
+    console.log('\n👥 Trying to access users collection...');
+    const usersSnapshot = await db.collection('users').limit(5).get();
+    const users = [];
+    
+    usersSnapshot.forEach(doc => {
+      users.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    console.log(`Found ${users.length} users`);
+    
+    res.status(200).json({
+      success: true,
+      collections: collectionNames,
+      users: users,
+      usersCount: users.length
+    });
+    
+  } catch (error) {
+    console.error('❌ Firestore test error:', {
+      message: error.message,
+      code: error.code,
+      stack: error.stack
+    });
+    
+    res.status(500).json({
+      success: false,
+      message: 'Error testing Firestore',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 // Create user (admin only)
 router.post('/', [
   body('name')
@@ -65,9 +113,10 @@ router.post('/', [
 // Get all users (super admin only)
 router.get('/', [
   query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
-  query('offset').optional().isInt({ min: 0 }).toInt(),
-  validate
-], getUsers);
+  query('startAfter').optional().isString().withMessage('Invalid cursor'),
+], validate([
+  // Add any additional validations here if needed
+]), getUsers);
 
 // Get user by ID (super admin only)
 router.get('/:id', [

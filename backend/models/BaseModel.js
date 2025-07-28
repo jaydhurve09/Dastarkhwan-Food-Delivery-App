@@ -13,9 +13,23 @@ export class BaseModel {
    */
   static getCollection() {
     if (!this.collectionName) {
-      throw new Error('Collection name not defined. Set static collectionName property.');
+      const error = new Error('Collection name not defined. Set static collectionName property.');
+      console.error('❌ [BaseModel] Error getting collection:', error.message);
+      throw error;
     }
-    return db.collection(this.collectionName);
+    
+    console.log(`[${this.name}] Getting collection '${this.collectionName}'`);
+    const collection = db.collection(this.collectionName);
+    
+    // Verify the collection reference
+    if (!collection) {
+      const error = new Error(`Failed to get collection '${this.collectionName}'`);
+      console.error('❌ [BaseModel] Error:', error.message);
+      throw error;
+    }
+    
+    console.log(`[${this.name}] Successfully got collection '${this.collectionName}'`);
+    return collection;
   }
 
   /**
@@ -155,6 +169,138 @@ export class BaseModel {
   static async findOne(query = {}) {
     const results = await this.find({ ...query, limit: 1 });
     return results[0] || null;
+  }
+
+  /**
+   * Find documents with cursor-based pagination
+   * @param {Object} options - Query options
+   * @param {Object} options.where - Where conditions { field: value }
+   * @param {string} options.orderBy - Field to order by (default: 'created_time')
+   * @param {number} options.limit - Maximum number of documents to return (default: 10)
+   * @param {any} options.startAfter - Document snapshot to start after for pagination
+   * @returns {Promise<{items: Array, hasNextPage: boolean, nextPageStart: any}>}
+   */
+  static async findPage({ where = {}, orderBy = 'created_time', limit = 10, startAfter = null } = {}) {
+    const logPrefix = `[${this.name}.findPage]`;
+    console.log(`\n${logPrefix} 1. Starting with options:`, {
+      collection: this.collectionName,
+      where,
+      orderBy,
+      limit,
+      startAfter: startAfter ? `[exists:${!!startAfter}, type:${typeof startAfter}]` : null
+    });
+    
+    try {
+      console.log(`${logPrefix} 2. Getting collection: ${this.collectionName}`);
+      let query = this.getCollection();
+      
+      // Log collection reference for debugging
+      console.log(`${logPrefix} 2.1 Collection ref:`, query ? 'Valid' : 'Invalid');
+
+      // Apply where conditions
+      console.log(`${logPrefix} 3. Applying where conditions:`, Object.keys(where).length ? where : 'None');
+      Object.entries(where).forEach(([field, value]) => {
+        if (value !== undefined && value !== null) {
+          console.log(`${logPrefix}    - Adding where: ${field} == ${JSON.stringify(value)}`);
+          query = query.where(field, '==', value);
+        }
+      });
+
+      // Apply ordering - default to created_time
+      console.log(`${logPrefix} 4. Applying ordering by ${orderBy}`);
+      query = query.orderBy(orderBy);
+
+      // Apply pagination
+      if (startAfter) {
+        console.log(`${logPrefix} 5. Applying startAfter cursor:`, startAfter);
+        // Handle both timestamp objects and raw values
+        const startValue = startAfter._seconds 
+          ? { _seconds: startAfter._seconds, _nanoseconds: startAfter._nanoseconds || 0 }
+          : startAfter;
+        query = query.startAfter(startValue);
+      } else {
+        console.log(`${logPrefix} 5. No startAfter cursor, starting from beginning`);
+      }
+      
+      // Get one extra document to check if there's a next page
+      const effectiveLimit = parseInt(limit, 10) + 1;
+      console.log(`${logPrefix} 6. Setting limit to ${effectiveLimit} (requested: ${limit} + 1 for pagination check)`);
+      query = query.limit(effectiveLimit);
+
+      console.log(`${logPrefix} 7. Executing Firestore query...`);
+      const snapshot = await query.get();
+      console.log(`${logPrefix} 8. Query complete, found ${snapshot.size} documents`);
+      
+      // Log document IDs for debugging
+      if (snapshot.size > 0) {
+        const docIds = snapshot.docs.map(doc => doc.id);
+        console.log(`${logPrefix} 8.1 Found document IDs:`, docIds);
+      }
+      
+      const results = [];
+      snapshot.forEach(doc => {
+        console.log(`${logPrefix} 9.1 Processing document ${doc.id}`);
+        const docData = doc.data();
+        console.log(`${logPrefix} 9.2 Raw document data:`, JSON.stringify(docData, null, 2));
+        
+        // Create a plain object with the document data and ID
+        const docWithId = {
+          id: doc.id,
+          ...docData,
+          // Convert Firestore timestamps to ISO strings for better readability
+          ...(docData.created_time && { 
+            created_time: this.convertTimestamp(docData.created_time) 
+          })
+        };
+        
+        console.log(`${logPrefix} 9.3 Processed document:`, JSON.stringify(docWithId, null, 2));
+        results.push(docWithId);
+      });
+      
+      console.log(`${logPrefix} 10. Mapped ${results.length} documents to model instances`);
+
+      // Check if there are more documents
+      const hasNextPage = results.length > limit;
+      // Remove the extra document we fetched to check for next page
+      const items = hasNextPage ? results.slice(0, -1) : results;
+      
+      // Get the last document's orderBy field for the next page cursor
+      const nextPageStart = hasNextPage ? results[limit - 1][orderBy] : null;
+      
+      console.log(`${logPrefix} 11. Pagination info:`, {
+        hasNextPage,
+        nextPageStart: nextPageStart ? `[exists:${!!nextPageStart}, type:${typeof nextPageStart}]` : null,
+        itemsCount: items.length
+      });
+
+      return {
+        items,
+        hasNextPage,
+        nextPageStart,
+        lastVisible: hasNextPage ? snapshot.docs[limit - 1] : null
+      };
+    } catch (error) {
+      console.error(`\n${logPrefix} ERROR:`, {
+        message: error.message,
+        stack: error.stack,
+        options: { where, orderBy, limit, startAfter }
+      });
+      throw error;
+    }
+  }
+  
+  // Helper method to convert Firestore timestamps
+  static convertTimestamp(timestamp) {
+    if (!timestamp) return null;
+    // If it's already a Firestore timestamp
+    if (timestamp.toDate) {
+      return timestamp.toDate().toISOString();
+    }
+    // If it's a timestamp object with _seconds
+    if (timestamp._seconds) {
+      return new Date(timestamp._seconds * 1000).toISOString();
+    }
+    return timestamp;
   }
 }
 

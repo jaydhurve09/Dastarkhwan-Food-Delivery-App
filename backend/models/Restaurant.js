@@ -1,7 +1,7 @@
 import { BaseModel } from './BaseModel.js';
 
 export class Restaurant extends BaseModel {
-  static collectionName = 'restaurants';
+  static collectionName = 'restaurant';
 
   // Days of the week for timing
   static DAYS = {

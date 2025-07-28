@@ -13,8 +13,13 @@ export const protect = async (req, res, next) => {
   // Check for token in Authorization header first
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.split(' ')[1];
-    console.log('[AUTH] Token found in Authorization header');
+    console.log('[AUTH] Token found in Authorization header (with Bearer prefix)');
   } 
+  // Handle case where token is sent without 'Bearer' prefix
+  else if (authHeader) {
+    token = authHeader;
+    console.log('[AUTH] Token found in Authorization header (without Bearer prefix)');
+  }
   // Then check cookies
   else if (req.cookies?.token) {
     token = req.cookies.token;
@@ -31,7 +36,19 @@ export const protect = async (req, res, next) => {
 
   try {
     console.log('[AUTH] Verifying JWT token');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret_key_here');
+    
+    // Ensure JWT_SECRET is set
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      console.error('[AUTH] JWT_SECRET is not set in environment variables');
+      return res.status(500).json({
+        success: false,
+        message: 'Server configuration error'
+      });
+    }
+    
+    // Verify token with the same secret used for signing
+    const decoded = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] });
     console.log('[AUTH] Decoded token:', JSON.stringify(decoded, null, 2));
     
     if (!decoded || (!decoded.uid && !decoded.sub && !decoded.id)) {

@@ -9,11 +9,12 @@ export default function ResetPassword() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [isValidToken, setIsValidToken] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const navigate = useNavigate();
   const { token } = useParams();
 
   useEffect(() => {
-    // Check if token exists in the URL
     if (!token) {
       setIsValidToken(false);
       setError('Invalid or missing reset token.');
@@ -46,7 +47,6 @@ export default function ResetPassword() {
       await authService.resetPassword(token, password, passwordConfirm);
       setMessage('Password reset successful! Redirecting to login...');
       
-      // Redirect to login after 3 seconds
       setTimeout(() => {
         navigate('/login');
       }, 3000);
@@ -232,29 +232,44 @@ export default function ResetPassword() {
       color: '#8B4513',
       textDecoration: 'none',
       fontSize: '0.875rem',
-      transition: 'opacity 0.2s ease',
-      '&:hover': {
-        opacity: 0.8
-      }
+      transition: 'opacity 0.2s ease'
     }
   };
 
   if (!isValidToken) {
     return (
       <div style={styles.container}>
-        <div style={styles.card}>
-          <h1 style={styles.title}>Invalid Reset Link</h1>
-          <p style={styles.error}>{error}</p>
-          <a 
-            href="/forgot-password" 
-            onClick={(e) => {
-              e.preventDefault();
-              navigate('/forgot-password');
-            }}
-            style={styles.backLink}
-          >
-            Request a new reset link
-          </a>
+        <div style={styles.overlay}></div>
+        <div style={styles.pattern}></div>
+        
+        <div style={styles.loginContainer}>
+          <div style={styles.loginCard}>
+            <div style={styles.header}>
+              <div style={styles.iconContainer}>
+                <svg style={styles.shieldIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                </svg>
+              </div>
+              <h1 style={styles.title}>Invalid Token</h1>
+              <p style={styles.subtitle}>The password reset link is invalid or has expired.</p>
+            </div>
+            
+            <div style={styles.error}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              {error}
+            </div>
+            
+            <a 
+              href="/forgot-password" 
+              style={styles.backLink}
+            >
+              ← Request a new password reset link
+            </a>
+          </div>
         </div>
       </div>
     );
@@ -262,55 +277,119 @@ export default function ResetPassword() {
 
   return (
     <div style={styles.container}>
-      <div style={styles.card}>
-        <h1 style={styles.title}>Reset Your Password</h1>
-        {message && <p style={styles.message}>{message}</p>}
-        {error && <p style={styles.error}>{error}</p>}
-        
-        {!message && (
+      <div style={styles.overlay}></div>
+      <div style={styles.pattern}></div>
+      
+      <div style={styles.loginContainer}>
+        <div style={styles.loginCard}>
+          <div style={styles.header}>
+            <div style={styles.iconContainer}>
+              <svg style={styles.shieldIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+              </svg>
+            </div>
+            <h1 style={styles.title}>Reset Password</h1>
+            <p style={styles.subtitle}>Enter your new password below</p>
+          </div>
+
+          {message && (
+            <div style={styles.message}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+              </svg>
+              {message}
+            </div>
+          )}
+          
+          {error && (
+            <div style={styles.error}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} style={styles.form}>
-            <div style={styles.inputGroup}>
+            <div style={styles.formGroup}>
               <label htmlFor="password" style={styles.label}>New Password</label>
-              <input
-                id="password"
-                type="password"
-                placeholder="Enter your new password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={styles.input}
-                required
-                minLength="8"
-              />
+              <div style={styles.inputContainer}>
+                <svg style={styles.inputIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                </svg>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  id="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  style={{...styles.input, ...styles.passwordInput}}
+                  placeholder="Enter new password"
+                />
+                <button 
+                  type="button" 
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={styles.passwordToggle}
+                >
+                  <svg style={styles.eyeIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {showPassword ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.88 9.88l4.242 4.242M9.88 9.88l-1.5-1.5m-2.12-2.12l-1.5-1.5m12.728 5.656l-1.5-1.5M15.536 8.464l-1.5-1.5m-12.99 9.9l1.5 1.5M21 12c0 1.6-.472 3.092-1.29 4.342"></path>
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    )}
+                  </svg>
+                </button>
+              </div>
             </div>
             
-            <div style={styles.inputGroup}>
+            <div style={styles.formGroup}>
               <label htmlFor="passwordConfirm" style={styles.label}>Confirm New Password</label>
-              <input
-                id="passwordConfirm"
-                type="password"
-                placeholder="Confirm your new password"
-                value={passwordConfirm}
-                onChange={(e) => setPasswordConfirm(e.target.value)}
-                style={styles.input}
-                required
-                minLength="8"
-              />
+              <div style={styles.inputContainer}>
+                <svg style={styles.inputIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  id="passwordConfirm"
+                  value={passwordConfirm}
+                  onChange={(e) => setPasswordConfirm(e.target.value)}
+                  style={{...styles.input, ...styles.passwordInput}}
+                  placeholder="Confirm new password"
+                />
+                <button 
+                  type="button" 
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={styles.passwordToggle}
+                >
+                  <svg style={styles.eyeIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {showConfirmPassword ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.88 9.88l4.242 4.242M9.88 9.88l-1.5-1.5m-2.12-2.12l-1.5-1.5m12.728 5.656l-1.5-1.5M15.536 8.464l-1.5-1.5m-12.99 9.9l1.5 1.5M21 12c0 1.6-.472 3.092-1.29 4.342"></path>
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    )}
+                  </svg>
+                </button>
+              </div>
             </div>
             
-            <button
-              type="submit"
+            <button 
+              type="submit" 
+              style={styles.button}
               disabled={isLoading}
-              style={{
-                ...styles.button,
-                ...(isLoading ? styles.buttonDisabled : {}),
-              }}
-              onMouseOver={(e) => !isLoading && (e.currentTarget.style.backgroundColor = styles.buttonHover.backgroundColor)}
-              onMouseOut={(e) => !isLoading && (e.currentTarget.style.backgroundColor = styles.button.backgroundColor)}
             >
               {isLoading ? 'Resetting...' : 'Reset Password'}
             </button>
           </form>
-        )}
+          
+          <a 
+            href="/login" 
+            style={styles.backLink}
+          >
+            ← Back to Login
+          </a>
+        </div>
       </div>
     </div>
   );

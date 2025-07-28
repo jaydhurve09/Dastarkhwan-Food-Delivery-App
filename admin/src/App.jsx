@@ -13,6 +13,8 @@ import Notification from './pages/Notification';
 import FeedbackAndComplaints from './pages/FeedbackAndComplaints';
 import DeliveryPartnerManagement from './pages/DeliveryPartnerManagement';
 import AdminLogin from './pages/AdminLogin';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
@@ -23,6 +25,11 @@ function App() {
         <Routes>
           {/* Public Routes */}
           <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password/:token" element={<ResetPassword />} />
+          
+          {/* Redirect old login route to new one */}
+          <Route path="/admin/login" element={<Navigate to="/admin/login" replace />} />
           
           {/* Protected Routes - Requires Authentication */}
           <Route element={<ProtectedRoute />}>

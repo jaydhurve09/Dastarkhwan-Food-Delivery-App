@@ -4,6 +4,8 @@ import { AdminLog } from '../models/AdminLog.js';
 import { adminAuth } from '../config/firebase.js';
 import { addToBlacklist } from '../utils/tokenBlacklist.js';
 import jwt from 'jsonwebtoken';
+import { sendPasswordResetEmail } from '../utils/emailService.js';
+import crypto from 'crypto';
 
 // @desc    Authenticate admin & get token
 // @route   POST /api/auth/admin/login
@@ -324,6 +326,166 @@ export const logoutAdmin = async (req, res) => {
       success: false,
       message: 'Error during logout',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// @desc    Forgot password - Send reset token to admin's email
+// @route   POST /api/auth/admin/forgot-password
+// @access  Public
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide an email address'
+      });
+    }
+
+    // 1) Generate the random reset token
+    const resetToken = await Admin.createPasswordResetToken(email);
+    
+    if (!resetToken) {
+      // Don't reveal if email exists or not for security
+      return res.status(200).json({
+        success: true,
+        message: 'If an account with that email exists, a password reset link has been sent.'
+      });
+    }
+
+    // 2) Send it to admin's email
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetURL = `${frontendUrl}/reset-password/${resetToken}`;
+    
+    try {
+      await sendPasswordResetEmail(email, resetToken, resetURL);
+      
+      // Log the password reset request
+      await AdminLog.create({
+        action: 'password_reset_request',
+        route: '/api/auth/admin/forgot-password',
+        admin: email,
+        details: {
+          ip: req.ip,
+          userAgent: req.get('user-agent'),
+          status: 'success',
+          message: 'Password reset email sent'
+        }
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'If an account with that email exists, a password reset link has been sent.'
+      });
+    } catch (err) {
+      // If email sending fails, clear the reset token
+      await Admin.updateOne(
+        { email },
+        {
+          passwordResetToken: undefined,
+          passwordResetExpires: undefined
+        }
+      );
+
+      // Log the error
+      await AdminLog.create({
+        action: 'password_reset_request',
+        route: '/api/auth/admin/forgot-password',
+        admin: email,
+        details: {
+          ip: req.ip,
+          userAgent: req.get('user-agent'),
+          status: 'error',
+          error: 'Error sending email',
+          message: err.message
+        }
+      });
+
+      return res.status(500).json({
+        success: false,
+        message: 'There was an error sending the email. Please try again later.'
+      });
+    }
+  } catch (error) {
+    console.error('Error in forgotPassword:', error);
+    res.status(500).json({
+      success: false,
+      message: 'An error occurred while processing your request.'
+    });
+  }
+};
+
+// @desc    Reset password
+// @route   PATCH /api/auth/admin/reset-password/:token
+// @access  Public
+export const resetPassword = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { password, passwordConfirm } = req.body;
+
+    // 1) Validate input
+    if (!password || !passwordConfirm) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide both password and password confirmation'
+      });
+    }
+
+    if (password !== passwordConfirm) {
+      return res.status(400).json({
+        success: false,
+        message: 'Passwords do not match'
+      });
+    }
+
+    // 2) Get admin based on the token and update password
+    try {
+      const admin = await Admin.resetPassword(token, password);
+      
+      // 3) Log the password reset
+      await AdminLog.create({
+        action: 'password_reset',
+        route: '/api/auth/admin/reset-password',
+        admin: admin.email,
+        details: {
+          ip: req.ip,
+          userAgent: req.get('user-agent'),
+          status: 'success',
+          message: 'Password reset successful'
+        }
+      });
+
+      // 4) Send response
+      res.status(200).json({
+        success: true,
+        message: 'Password reset successful. You can now log in with your new password.'
+      });
+    } catch (error) {
+      // Log the failed attempt
+      await AdminLog.create({
+        action: 'password_reset',
+        route: '/api/auth/admin/reset-password',
+        details: {
+          ip: req.ip,
+          userAgent: req.get('user-agent'),
+          status: 'error',
+          error: error.message,
+          message: 'Failed to reset password'
+        }
+      });
+
+      return res.status(400).json({
+        success: false,
+        message: error.message || 'Invalid or expired token.'
+      });
+    }
+  } catch (error) {
+    console.error('Error in resetPassword:', error);
+    res.status(500).json({
+      success: false,
+      message: 'An error occurred while processing your request.'
     });
   }
 };

@@ -130,7 +130,6 @@ export default function AdminLogin() {
     },
     label: {
       fontSize: '0.875rem',
-      fontWeight: '500',
       color: '#8B4513',
       marginBottom: '0.5rem'
     },
@@ -218,6 +217,16 @@ export default function AdminLogin() {
     footerText: {
       fontSize: '0.75rem',
       color: 'rgba(139, 69, 19, 0.6)'
+    },
+    forgotPassword: {
+      fontSize: '0.75rem',
+      color: '#8B4513',
+      textDecoration: 'none',
+      cursor: 'pointer',
+      textAlign: 'right',
+      marginTop: '0.25rem',
+      display: 'inline-block',
+      transition: 'opacity 0.2s ease'
     }
   };
 
@@ -225,7 +234,7 @@ export default function AdminLogin() {
     <div style={styles.container}>
       <div style={styles.overlay}></div>
       <div style={styles.pattern}></div>
-      {/* Header */}
+      
       <div style={styles.loginContainer}>
         <div style={styles.loginCard}>
           {/* Header */}
@@ -242,7 +251,7 @@ export default function AdminLogin() {
           {/* Error Message */}
           {error && (
             <div style={{
-              backgroundColor: '#FEE2E2',
+              backgroundColor: 'rgba(220, 38, 38, 0.1)',
               color: '#B91C1C',
               padding: '0.75rem',
               borderRadius: '0.5rem',
@@ -285,7 +294,21 @@ export default function AdminLogin() {
 
             {/* Password Field */}
             <div style={styles.formGroup}>
-              <label htmlFor="password" style={styles.label}>Password</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label htmlFor="password" style={styles.label}>Password</label>
+                <a 
+                  href="/forgot-password" 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    navigate('/forgot-password');
+                  }}
+                  style={styles.forgotPassword}
+                  onMouseOver={(e) => e.currentTarget.style.opacity = '0.8'}
+                  onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
+                >
+                  Forgot Password?
+                </a>
+              </div>
               <div style={styles.inputContainer}>
                 <svg style={styles.inputIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
@@ -304,8 +327,8 @@ export default function AdminLogin() {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   style={styles.passwordToggle}
-                  onMouseEnter={(e) => e.target.style.opacity = '0.8'}
-                  onMouseLeave={(e) => e.target.style.opacity = '1'}
+                  onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+                  onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                 >
                   {showPassword ? (
                     <svg style={styles.eyeIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">

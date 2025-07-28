@@ -11,7 +11,7 @@ export class Admin extends BaseModel {
   };
 
   // Hash password before saving
-  static async beforeCreate(data) {
+  static async beforeCreate(data) { 
     if (data.password) {
       const bcrypt = await import('bcrypt');
       const saltRounds = 10;
@@ -87,6 +87,30 @@ export class Admin extends BaseModel {
       this.PERMISSIONS.VIEW_CMS,
       this.PERMISSIONS.SEND_NOTIFICATIONS
     ]
+  };
+
+  // Define schema
+  static schema = {
+    email: { type: 'string', required: true, unique: true },
+    password: { type: 'string', required: true, select: false },
+    name: { type: 'string', required: true },
+    role: { 
+      type: 'string', 
+      enum: Object.values(this.ROLES),
+      default: this.ROLES.SUB_ADMIN 
+    },
+    permissions: { 
+      type: 'array', 
+      items: { type: 'string', enum: Object.values(this.PERMISSIONS) },
+      default: [] 
+    },
+    isActive: { type: 'boolean', default: true },
+    lastLogin: { type: 'date' },
+    passwordChangedAt: { type: 'date' },
+    passwordResetToken: { type: 'string', select: false },
+    passwordResetExpires: { type: 'date', select: false },
+    firebaseUid: { type: 'string', select: false },
+    ...(super.schema || {})
   };
 
   constructor(data = {}) {
@@ -298,6 +322,72 @@ export class Admin extends BaseModel {
     delete data.password;
     delete data.firebaseUid;
     return data;
+  }
+
+  // Generate and save password reset token
+  static async createPasswordResetToken(email) {
+    // Find admin by email
+    const admin = await this.findOne({ where: { email } });
+    if (!admin) {
+      return null;
+    }
+
+    // Generate random reset token
+    const crypto = await import('crypto');
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    
+    // Hash the token
+    const passwordResetToken = crypto
+      .createHash('sha256')
+      .update(resetToken)
+      .digest('hex');
+    
+    const passwordResetExpires = Date.now() + 60 * 60 * 1000; // 1 hour
+
+    // Update admin with reset token and expiry
+    admin.passwordResetToken = passwordResetToken;
+    admin.passwordResetExpires = new Date(passwordResetExpires);
+    
+    // Save the updated admin
+    await admin.save();
+
+    return resetToken;
+  }
+
+  // Reset password using token
+  static async resetPassword(token, newPassword) {
+    if (!token || !newPassword) {
+      throw new Error('Token and new password are required');
+    }
+
+    // Hash the token to match with stored token
+    const crypto = await import('crypto');
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(token)
+      .digest('hex');
+
+    // Find admin with this token and check if it's not expired
+    const admin = await this.findOne({
+      passwordResetToken: hashedToken,
+      passwordResetExpires: { $gt: Date.now() }
+    });
+
+    if (!admin) {
+      throw new Error('Token is invalid or has expired');
+    }
+
+    // Update password and clear reset token fields
+    const bcrypt = await import('bcrypt');
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+    admin.password = hashedPassword;
+    admin.passwordResetToken = undefined;
+    admin.passwordResetExpires = undefined;
+    
+    await admin.save();
+    return admin;
   }
 }
 

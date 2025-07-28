@@ -141,15 +141,54 @@ const getSubAdmins = async () => {
   }
 };
 
+// Request password reset
+const requestPasswordReset = async (email) => {
+  try {
+    const response = await axios.post(
+      `${API_URL}/admin/forgot-password`,
+      { email },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Password reset request error:', error.response?.data?.message || error.message);
+    throw error.response?.data?.message || 'Failed to process password reset request.';
+  }
+};
+
+// Reset password with token
+const resetPassword = async (token, password, passwordConfirm) => {
+  try {
+    const response = await axios.patch(
+      `${API_URL}/admin/reset-password/${token}`,
+      { password, passwordConfirm },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Password reset error:', error.response?.data?.message || error.message);
+    throw error.response?.data?.message || 'Failed to reset password. The link may have expired.';
+  }
+};
+
 export const authService = {
   login,
   logout,
   getCurrentUser,
-  getAuthToken,
   getToken,
   createSubAdmin,
   updateSubAdmin,
-  getSubAdmins
+  getSubAdmins,
+  requestPasswordReset,
+  resetPassword
 };
 
 export {

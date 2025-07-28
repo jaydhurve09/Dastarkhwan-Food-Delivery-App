@@ -10,6 +10,7 @@ import authRoutes from './routes/authRoutes.js';
 import userAuthRoutes from './routes/userAuthRoutes.js';
 import adminAuthRoutes from './routes/adminAuthRoutes.js';
 import menuItemRoutes from './routes/menuItemRoutes.js';
+import testRoutes from './routes/testRoutes.js';
 import { db, auth } from './config/firebase.js'; // Import Firebase services
 
 // Get current file path
@@ -32,6 +33,7 @@ app.use('/api/auth', userAuthRoutes);
 app.use('/api/auth/admin', adminAuthRoutes);
 app.use('/api/menu-items', menuItemRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/test', testRoutes);
 
 // Simple request logging middleware
 app.use((req, res, next) => {

@@ -107,7 +107,7 @@ export default function Sidebar() {
               <span>Feedback & Complaints</span>
             </NavLink>
           </li>
-          <li>
+          {/* <li>
             <NavLink 
               to="/admin/cms" 
               className={({ isActive }) => isActive ? 'active' : ''}
@@ -115,7 +115,7 @@ export default function Sidebar() {
               <FaFileAlt />
               <span>CMS Management</span>
             </NavLink>
-          </li>
+          </li> */}
           <li>
             <NavLink 
               to="/admin/notifications" 

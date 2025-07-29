@@ -47,7 +47,7 @@ function App() {
                 <Route path="/payment" element={<PaymentReport />} />
                 <Route path="/promo" element={<PromoCode />} />
                 <Route path="/restaurants" element={<RestaurantMonitoring />} />
-                <Route path="/admin/cms" element={<CMSManagement />} />
+                {/* <Route path="/admin/cms" element={<CMSManagement />} /> */}
                 <Route path="/admin/settings" element={<AdminSettings />} />
                 <Route path="/admin/feedback" element={<FeedbackAndComplaints />} />
                 <Route path="/admin/notifications" element={<Notification />} />

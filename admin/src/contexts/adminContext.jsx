@@ -17,7 +17,6 @@ const fetchOrders = async () => {
       }
       const data = await response.json();
       setOrders(data);
-      console.log('Orders fetched successfully:', data);
     } catch (error) {
       console.error('Error fetching orders:', error);
     }
@@ -30,7 +29,6 @@ const fetchOrders = async () => {
       }
       const data = await response.json();
       setDeliveryPartners(data);
-      console.log('Delivery partners fetched successfully:', data);
     } catch (error) {
       console.error('Error fetching delivery partners:', error);
     }

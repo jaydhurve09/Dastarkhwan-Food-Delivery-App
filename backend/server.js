@@ -13,6 +13,7 @@ import menuItemRoutes from './routes/menuItemRoutes.js';
 import testRoutes from './routes/testRoutes.js';
 import orderRoutes from './routes/orderRoutes.js'; // Import order routes
 import { db, auth } from './config/firebase.js'; // Import Firebase services
+import deliveryPartnerRoutes from './routes/deliveryPartnerRoutes.js'; // Import delivery partner routes
 
 // Get current file path
 const __filename = fileURLToPath(import.meta.url);
@@ -36,7 +37,7 @@ app.use('/api/menu-items', menuItemRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/test', testRoutes);
-
+app.use('/api/delivery-partners', deliveryPartnerRoutes);
 // Simple request logging middleware
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);

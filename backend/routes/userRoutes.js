@@ -7,14 +7,15 @@ import {
   updateUser, 
   deleteUser, 
   updateUserStatus,
-  getUserCounts 
+  getUserCounts ,
+  getAllUsers
 } from '../controllers/userController.js';
 import { protect, superAdmin } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validationMiddleware.js';
 import { db } from '../config/firebase.js';
 
 const router = express.Router();
-
+router.get('/all', getAllUsers);
 // Validation middleware
 const validateUser = [
   body('name')

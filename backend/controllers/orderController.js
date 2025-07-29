@@ -10,4 +10,13 @@ const getAllOrders = async (req, res) => {
     res.status(500).json({ message: 'Error fetching orders', error });
   }
 };
-export { getAllOrders };
+ const updateAgent = async (req, res) => {
+  const { orderId, agentId } = req.body;
+  try {
+    await db.collection('orders').doc(orderId).update({ deliveryPartnerId: agentId });
+    res.status(200).json({ message: 'Delivery agent updated successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating delivery agent', error });
+  }
+};
+export { getAllOrders, updateAgent };

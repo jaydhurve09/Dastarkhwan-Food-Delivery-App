@@ -199,14 +199,17 @@ const UserManagement = () => {
   // State for profile dropdown visibility
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
 
+  // State for selected role
+  const [selectedRole, setSelectedRole] = useState('all');
+
   // Mock logged-in user data
-  const [loggedInUser, setLoggedInUser] = useState({
+  const loggedInUser = {
     name: 'John Smith',
-    role: ' Admin',
-  });
+    role: 'Admin',
+  };
 
   // Fetch users from API
-  const fetchUsers = async (startAfter = null) => {
+  const fetchUsers = async (startAfter = null, roleFilter = selectedRole) => {
     setIsLoading(true);
     setError(null);
     try {
@@ -217,14 +220,25 @@ const UserManagement = () => {
         throw new Error('Authentication required. Please log in again.');
       }
 
-      let url = 'http://localhost:5000/api/users?limit=10';
+      let url = `http://localhost:5000/api/users?limit=10`;
+      
+      // For 'user' role, we need to explicitly exclude delivery partners
+      if (roleFilter === 'user') {
+        url += `&role=user`;  // This tells the backend to return only non-delivery partner users
+      } 
+      // For delivery agents
+      else if (roleFilter === 'delivery_agent') {
+        url += `&role=delivery_agent`;
+      }
+      // For admin or all, no specific role filter needed
+      
       if (startAfter) {
-        url += `&startAfter=${encodeURIComponent(JSON.stringify(startAfter))}`;
+        url += `&startAfter=${encodeURIComponent(startAfter)}`;
       }
 
       const response = await fetch(url, {
         headers: {
-          'Authorization': `Bearer ${token}`, // Add Bearer prefix
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         credentials: 'include'
@@ -245,37 +259,38 @@ const UserManagement = () => {
 
       const data = await response.json();
       
-      // Map API response to match the expected user structure based on Firestore schema
+      // Map API response to match the expected user structure
       const formattedUsers = data.data.map(user => {
-        // Use either createdAt or created_time, whichever exists
-        const createdAt = user.createdAt || user.created_time;
-        const updatedAt = user.updatedAt || user.updated_time;
+        // Skip delivery partners when user role is selected (should be handled by backend, but just in case)
+        if (roleFilter === 'user' && user.role === 'delivery_agent') {
+          return null;
+        }
         
+        const displayName = user.name || user.fullName || 'No Name';
+        const userRole = user.role === 'delivery_agent' ? 'Delivery Agent' : 
+                        user.role === 'admin' ? 'Admin' : 'User';
+                        
         return {
           id: user.uid || user.id,
-          fullName: user.name || user.fullName || 'No Name',
+          fullName: displayName,
           email: user.email || 'No Email',
-          phoneNumber: user.phoneNo || user.phoneNumber || 'N/A',
-          role: user.role || 'User',
-          status: (user.status || 'active').toLowerCase(),
-          joinedDate: createdAt 
-            ? new Date(createdAt).toLocaleDateString('en-US', { 
+          phoneNumber: user.phone || user.phoneNumber || 'N/A',
+          role: userRole,
+          status: (user.status || user.accountStatus || 'active').toLowerCase(),
+          joinedDate: user.created_time 
+            ? new Date(user.created_time).toLocaleDateString('en-US', { 
                 month: 'short', 
                 day: 'numeric', 
                 year: 'numeric' 
               })
             : 'N/A',
-          lastUpdated: updatedAt
-            ? new Date(updatedAt).toLocaleString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              })
-            : 'N/A'
+          // Only include delivery partner specific fields if it's a delivery agent
+          ...(user.role === 'delivery_agent' && {
+            vehicle: user.vehicle,
+            documentsCount: user.documentsCount || 0
+          })
         };
-      });
+      }).filter(Boolean); // Remove any null entries (filtered out delivery partners)
 
       setUsers(prevUsers => startAfter ? [...prevUsers, ...formattedUsers] : formattedUsers);
       setPagination({
@@ -292,6 +307,12 @@ const UserManagement = () => {
     }
   };
 
+  // Handle role filter change
+  const handleRoleFilterChange = (role) => {
+    setSelectedRole(role);
+    fetchUsers(null, role); // Reset pagination when changing filters
+  };
+
   // Initial data fetch
   useEffect(() => {
     fetchUsers();
@@ -306,11 +327,6 @@ const UserManagement = () => {
 
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
-    setCurrentPage(1);
-  };
-
-  const handleRoleFilterChange = (e) => {
-    setRoleFilter(e.target.value);
     setCurrentPage(1);
   };
 
@@ -425,9 +441,9 @@ const UserManagement = () => {
 
     let matchesTab = true;
     if (activeTab === 'remove') {
-      matchesTab = userStatus === 'inactive' || userStatus === 'banned';
+      matchesTab = userStatus === 'inactive' || userStatus === 'blocked';
     } else if (activeTab === 'block') {
-      matchesTab = userStatus === 'banned';
+      matchesTab = userStatus === 'blocked';
     }
 
     return matchesSearch && matchesRole && matchesStatus && matchesTab;
@@ -704,9 +720,10 @@ const UserManagement = () => {
       backgroundColor: '#e0f2f7',
       color: '#17a2b8',
     },
-    statusBanned: {
-      backgroundColor: '#f8d7da',
-      color: '#dc3545',
+    statusBlocked: {
+      backgroundColor: '#FEE2E2',
+      color: '#DC2626',
+      borderColor: '#FCA5A5',
     },
     actionsColumn: {
       whiteSpace: 'nowrap', // Prevent buttons from wrapping
@@ -910,8 +927,8 @@ const UserManagement = () => {
         return { ...styles.statusBadge, ...styles.statusInactive };
       case 'pending':
         return { ...styles.statusBadge, ...styles.statusPending };
-      case 'banned':
-        return { ...styles.statusBadge, ...styles.statusBanned };
+      case 'blocked':
+        return { ...styles.statusBadge, ...styles.statusBlocked };
       default:
         return styles.statusBadge;
     }
@@ -971,12 +988,11 @@ const UserManagement = () => {
           <div style={styles.filterGroup}>
             {/* React Icon for Role Filter */}
             <FaUserTag style={styles.filterGroupIcon} />
-            <select value={roleFilter} onChange={handleRoleFilterChange} style={styles.filterSelectInput}>
-              <option value="All">Role</option>
-              <option value="Super Admin">Super Admin</option>
-              <option value="Sub Admin">Sub Admin</option>
-              <option value="Delivery Agent">Delivery Agent</option>
-              <option value="User">User</option>
+            <select value={selectedRole} onChange={(e) => handleRoleFilterChange(e.target.value)} style={styles.filterSelectInput}>
+              <option value="all">All Roles</option>
+              <option value="user">Users</option>
+              <option value="delivery_agent">Delivery Agents</option>
+              <option value="admin">Admins</option>
             </select>
           </div>
           <div style={styles.filterGroup}>
@@ -987,7 +1003,7 @@ const UserManagement = () => {
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
               <option value="Pending">Pending</option>
-              <option value="Banned">Banned</option>
+              <option value="Blocked">Blocked</option>
             </select>
           </div>
           {/* Removed Export Button */}
@@ -1022,7 +1038,7 @@ const UserManagement = () => {
           onClick={() => {
             setActiveTab('block');
             setCurrentPage(1); // Reset pagination on tab change
-            setModalMessage("This tab shows 'Banned' users. Functionality to block users will be implemented here.");
+            setModalMessage("This tab shows 'Blocked' users. Functionality to block users will be implemented here.");
             setModalAction(null);
             setShowInfoModal(true);
           }}

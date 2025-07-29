@@ -1,6 +1,13 @@
 import express from 'express';
 import { body, param, query } from 'express-validator';
-import { createUser, getUsers, getUserById, updateUser, deleteUser } from '../controllers/userController.js';
+import { 
+  createUser, 
+  getUsers, 
+  getUserById, 
+  updateUser, 
+  deleteUser, 
+  updateUserStatus 
+} from '../controllers/userController.js';
 import { protect, superAdmin } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validationMiddleware.js';
 import { db } from '../config/firebase.js';
@@ -28,6 +35,15 @@ const validateUser = [
   body('password')
     .notEmpty().withMessage('Password is required')
     .isLength({ min: 6 }).withMessage('Password must be at least 6 characters long')
+];
+
+// Status update validation
+const validateStatusUpdate = [
+  param('id').isString().withMessage('Invalid user ID'),
+  body('status')
+    .isIn(['active', 'inactive', 'banned'])
+    .withMessage('Status must be one of: active, inactive, or banned'),
+  validate
 ];
 
 // Protected routes
@@ -123,6 +139,9 @@ router.get('/:id', [
   param('id').isString().withMessage('Invalid user ID'),
   validate
 ], getUserById);
+
+// Update user status (super admin only)
+router.patch('/:id/status', validateStatusUpdate, updateUserStatus);
 
 // Update user (super admin only)
 router.put('/:id', [

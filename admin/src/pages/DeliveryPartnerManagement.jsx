@@ -1,4 +1,7 @@
 import React, { useState, useMemo } from "react";
+import { useContext } from "react";
+import { AdminContext } from "../contexts/adminContext";
+
 
 const initialPendingApprovals = [
   { id: 1, name: "Rahul Singh", mobile: "9876543210", vehicle: "Honda Goldwing", vehicleNo: "DL5SAF0001", documents: ["Aadhar.pdf", "DL.pdf"], appliedDate: "2025-07-20" },
@@ -201,8 +204,9 @@ const styles = {
 };
 
 export default function DeliveryPartnerManagement() {
+  const { deliveryPartners } = useContext(AdminContext);
   const [pendingApprovals, setPendingApprovals] = useState(initialPendingApprovals);
-  const [partners, setPartners] = useState(initialPartners);
+  const [partners, setPartners] = useState(deliveryPartners);
   const [showPending, setShowPending] = useState(false);
   const [pendingDetail, setPendingDetail] = useState(null);
   const [partnerDetail, setPartnerDetail] = useState(null);
@@ -215,6 +219,8 @@ export default function DeliveryPartnerManagement() {
     confirmPassword: ""
   });
   const [passwordError, setPasswordError] = useState("");
+
+  console.log(deliveryPartners , "deliveryPartners");
 
   // Filter to search delivery partners by name
   const filteredPartners = useMemo(() => {
@@ -403,19 +409,19 @@ export default function DeliveryPartnerManagement() {
             </tr>
           </thead>
           <tbody>
-            {filteredPartners.length === 0 ? (
+            {deliveryPartners.length === 0 ? (
               <tr>
                 <td colSpan={7} style={{ textAlign: "center", padding: 20 }}>No delivery partners found.</td>
               </tr>
-            ) : filteredPartners.map(p => (
+            ) : deliveryPartners.map(p => (
               <tr key={p.id}>
                 <td style={styles.td}>{p.name}</td>
-                <td style={styles.td}>{p.mobile}</td>
-                <td style={styles.td}>{p.vehicle} | {p.vehicleNo}</td>
+                <td style={styles.td}>{p.phone}</td>
+                <td style={styles.td}>{p.vehicle.type} | {p.vehicle.number}</td>
                 <td style={styles.td}>
                   {p.online ? <span style={styles.online}>● Online</span> : <span style={styles.offline}>● Offline</span>}
                 </td>
-                <td style={styles.td}>{p.deliveries}</td>
+                <td style={styles.td}>{p.totalDeliveries}</td>
                 <td style={styles.td}>{p.rating} ★</td>
                 <td style={{ ...styles.td, minWidth: 250 }}>
                   <div style={styles.actionRow}>

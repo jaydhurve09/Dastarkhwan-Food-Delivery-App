@@ -9,6 +9,7 @@ const adminProvider = ({ children }) => {
   const url = "http://localhost:5000/api"; // Adjust the URL as needed
   const [deliveryPartners, setDeliveryPartners] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [users, setUsers] = useState([]);
 const fetchOrders = async () => {
     try {
       const response = await fetch(`${url}/orders`);
@@ -17,7 +18,7 @@ const fetchOrders = async () => {
       }
       const data = await response.json();
       setOrders(data);
-      console.log('Orders fetched successfully:', data);
+      
     } catch (error) {
       console.error('Error fetching orders:', error);
     }
@@ -30,21 +31,38 @@ const fetchOrders = async () => {
       }
       const data = await response.json();
       setDeliveryPartners(data);
-      console.log('Delivery partners fetched successfully:', data);
+      
     } catch (error) {
       console.error('Error fetching delivery partners:', error);
     }
   };
   // Fetch orders when the provider mounts
+  const fetchUsers = async () => {
+    try {
+
+      const response = await fetch(`${url}/users/all`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch users');
+      }
+      const data = await response.json();
+      setUsers(data);
+      
+
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    }
+  };
   React.useEffect(() => {
     fetchOrders();
     fetchDeliveryPartners();
+    fetchUsers();
   }, []);
 
 
   const value = {
     orders,
-    deliveryPartners
+    deliveryPartners,
+    users,
   };
 
   return (

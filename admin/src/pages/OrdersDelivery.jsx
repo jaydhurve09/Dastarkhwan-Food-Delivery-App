@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo,useContext } from 'react';
 import { FaSearch, FaEye, FaMotorcycle, FaMapMarkerAlt, FaEdit, FaTimes, FaUserCircle, FaSignOutAlt } from 'react-icons/fa';
 
 // --- Mock Data (Self-Contained) ---
@@ -14,18 +14,33 @@ const mockOrders = [
 const mockDeliveryAgents = ['Albus', 'Melvin', 'Tom', 'Cross', 'Alas', 'Zane', 'Duke'];
 
 // --- Helper Components (Self-Contained) ---
-
+import { AdminContext } from '../contexts/adminContext.jsx'; // Import the AdminContext
 const OrderDetailsModal = ({ order, onClose, onAssign, onCancel, onUpdate, onTrack }) => {
-    const [isEditing, setIsEditing] = useState(false);
-    const [editedItems, setEditedItems] = useState(order.items.join(', '));
 
-    const canModify = order.status !== 'Delivered' && order.status !== 'Cancelled';
+    const { deliveryPartners, users } = useContext(AdminContext); // Only get deliveryPartners if needed
+    const [isEditing, setIsEditing] = useState(false);
+    const [editedItems, setEditedItems] = useState(() =>
+        order && Array.isArray(order.items) ? [...order.items] : []
+    );
+
+    const canModify = order && order.status !== 'Delivered' && order.status !== 'Cancelled';
 
     const handleUpdate = () => {
-        onUpdate(order.id, editedItems.split(',').map(i => i.trim()));
+        onUpdate(order.id, editedItems); // Send back the modified array of item objects
         setIsEditing(false);
     };
-    
+
+    const handleItemChange = (index, field, value) => {
+        const updated = [...editedItems];
+        updated[index][field] = value;
+        setEditedItems(updated);
+    };
+
+    // Move isDeliveryAgentAssigned above deliveryAgentName
+    const isDeliveryAgentAssigned = order && order.deliveryPartnerId && deliveryPartners.some(dp => dp.id === order.deliveryPartnerId);
+    //store the name of the delivery agent
+    const deliveryAgentName = isDeliveryAgentAssigned ? deliveryPartners.find(dp => dp.id === order.deliveryPartnerId)?.name : '';
+const userName = users.find(user => user.id === order.userId)?.name || 'Unknown User';
     const styles = {
         modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1001 },
         modalContent: { backgroundColor: 'white', padding: '2rem', borderRadius: '8px', width: '500px', boxShadow: '0 5px 15px rgba(0,0,0,0.3)' },
@@ -35,21 +50,46 @@ const OrderDetailsModal = ({ order, onClose, onAssign, onCancel, onUpdate, onTra
         button: { padding: '0.6rem 1rem', borderRadius: '6px', border: 'none', cursor: 'pointer', color: 'white' },
     };
 
+    if (!order) return null;
     return (
         <div style={styles.modalOverlay} onClick={onClose}>
             <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
-                <h2 style={styles.modalHeader}>Order Details: {order.id}</h2>
-                <div style={styles.detailRow}><strong>Customer:</strong> {order.customerName}</div>
+                <h2 style={styles.modalHeader}>Order No: {order.orderNumber}</h2>
+                <div style={styles.detailRow}><strong>Customer:</strong> {userName}</div>
                 <div style={styles.detailRow}><strong>Status:</strong> {order.status}</div>
-                <div style={styles.detailRow}><strong>Delivery Agent:</strong> {order.deliveryAgent || 'Not Assigned'}</div>
+                <div style={styles.detailRow}><strong>Delivery Agent:</strong> {deliveryAgentName || 'Not Assigned'}</div>
                 <div style={styles.detailRow}>
                     <strong>Items:</strong>
-                    {isEditing ? (
-                        <input type="text" value={editedItems} onChange={(e) => setEditedItems(e.target.value)} style={{width: '100%', padding: '0.5rem'}}/>
-                    ) : (
-                        <ul>{order.items.map((item, i) => <li key={i}>{item}</li>)}</ul>
-                    )}
-                </div>
+            {isEditing ? (
+                Array.isArray(editedItems) && editedItems.map((item, index) => (
+                    <div key={index} style={{ marginBottom: '1rem' }}>
+                        <input
+                            type="text"
+                            value={item.name}
+                            placeholder="Name"
+                            onChange={(e) => handleItemChange(index, 'name', e.target.value)}
+                            style={{ width: '30%', marginRight: '0.5rem' }}
+                        />
+                        <input
+                            type="number"
+                            value={item.quantity}
+                            placeholder="Qty"
+                            onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value))}
+                            style={{ width: '20%', marginRight: '0.5rem' }}
+                        />
+                        <input
+                            type="text"
+                            value={item.specialInstructions || ''}
+                            placeholder="Special Instructions"
+                            onChange={(e) => handleItemChange(index, 'specialInstructions', e.target.value)}
+                            style={{ width: '25%' }}
+                        />
+                    </div>
+                ))
+            ) : (
+                <ul>{Array.isArray(order.items) ? order.items.map((item, i) => <li key={i}>{typeof item === 'string' ? item : item.name || JSON.stringify(item)}</li>) : null}</ul>
+            )}
+        </div>
 
                 <div style={styles.actions}>
                     <div>
@@ -73,27 +113,78 @@ const OrderDetailsModal = ({ order, onClose, onAssign, onCancel, onUpdate, onTra
     );
 };
 
-const AssignAgentModal = ({ onClose, onSave, currentAgent }) => {
-    const [selectedAgent, setSelectedAgent] = useState(currentAgent || mockDeliveryAgents[0]);
-    
-    return (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1002 }}>
-            <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '8px' }}>
-                <h3 style={{marginTop: 0}}>Assign Delivery Agent</h3>
-                <select value={selectedAgent} onChange={e => setSelectedAgent(e.target.value)} style={{width: '100%', padding: '0.8rem', fontSize: '1rem'}}>
-                    {mockDeliveryAgents.map(agent => <option key={agent} value={agent}>{agent}</option>)}
-                </select>
-                <div style={{marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem'}}>
-                    <button onClick={onClose} style={{padding: '0.5rem 1rem', border: '1px solid #ccc'}}>Cancel</button>
-                    <button onClick={() => onSave(selectedAgent)} style={{padding: '0.5rem 1rem', border: 'none', color: 'white', backgroundColor: '#2563eb'}}>Confirm</button>
-                </div>
-            </div>
-        </div>
-    );
+const AssignAgentModal = ({ onClose, onSave, currentAgent, orderId }) => {
+    const { deliveryPartners } = useContext(AdminContext); // Get delivery partners
+    // Initialize selectedAgentId to current agent's ID or first delivery partner's ID
+    const initialAgentId = currentAgent
+        ? (deliveryPartners.find(dp => dp.name === currentAgent)?.id || '')
+        : (deliveryPartners.length > 0 ? deliveryPartners[0].id : '');
+    const [selectedAgentId, setSelectedAgentId] = useState(initialAgentId);
+
+return (
+  <div style={{
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1002
+  }}>
+    <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '8px' }}>
+      <h3 style={{ marginTop: 0 }}>Assign Delivery Agent</h3>
+
+      <select
+        value={selectedAgentId}
+        onChange={e => setSelectedAgentId(e.target.value)}
+        style={{ width: '100%', padding: '0.8rem', fontSize: '1rem' }}
+      >
+        {deliveryPartners.map(agent => (
+          <option key={agent.id} value={agent.id}>{agent.name}</option>
+        ))}
+      </select>
+
+      <div style={{
+        marginTop: '1.5rem',
+        display: 'flex',
+        justifyContent: 'flex-end',
+        gap: '1rem'
+      }}>
+        <button
+          onClick={onClose}
+          style={{ padding: '0.5rem 1rem', border: '1px solid #ccc' }}
+        >
+          Cancel
+        </button>
+
+        <button
+          onClick={() => {
+            console.log(`Assigned agent ID: ${selectedAgentId}`);
+            onSave({ selectedAgentId, orderId }); // Pass only the agent ID
+
+          }}  // ✅ Pass only the agent ID
+          style={{
+            padding: '0.5rem 1rem',
+            border: 'none',
+            color: 'white',
+            backgroundColor: '#2563eb'
+          }}
+        >
+          Confirm
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
 };
 
 
-const TrackingModal = ({ order, onClose }) => {
+const TrackingModal = ({ orders, onClose }) => {
+
     const mapPlaceholderStyle = {
         width: '100%',
         height: '250px',
@@ -113,20 +204,20 @@ const TrackingModal = ({ order, onClose }) => {
     return (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1002 }}>
             <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '8px', textAlign: 'center', maxWidth: '500px', width: '90%' }}>
-                <h3 style={{marginTop: 0}}>Tracking Order {order.id}</h3>
-                <p>Delivery Agent: <strong>{order.deliveryAgent}</strong></p>
-                {order.status === 'Out for Delivery' && order.agentLocation ? (
+                <h3 style={{marginTop: 0}}>Tracking Order {orders.id}</h3>
+                <p>Delivery Agent: <strong>{orders.deliveryAgent}</strong></p>
+                {orders.status === 'Out for Delivery' && orders.agentLocation ? (
                     <>
                         <div style={mapPlaceholderStyle}>
                             <FaMapMarkerAlt size={40} color="#3b82f6" />
                             <span>Live Map Placeholder</span>
-                            <span>(Agent Location: Lat: {order.agentLocation.lat}, Lng: {order.agentLocation.lng})</span>
+                            <span>(Agent Location: Lat: {orders.agentLocation.lat}, Lng: {orders.agentLocation.lng})</span>
                             <p style={{fontSize: '0.9rem', color: '#888', marginTop: '0.5rem'}}>
                                 In a real app, this would be an interactive map (e.g., Google Maps API)
-                                showing the live location of {order.deliveryAgent}.
+                                showing the live location of {orders.deliveryAgent}.
                             </p>
                         </div>
-                        <p style={{marginTop: '1rem'}}>Current Location: Lat: {order.agentLocation.lat}, Lng: {order.agentLocation.lng}</p>
+                        <p style={{marginTop: '1rem'}}>Current Location: Lat: {orders.agentLocation.lat}, Lng: {orders.agentLocation.lng}</p>
                     </>
                 ) : (
                     <p>Tracking information not available for this order status.</p>
@@ -139,8 +230,9 @@ const TrackingModal = ({ order, onClose }) => {
 
 // --- Main Component ---
 export default function OrdersDelivery() {
+    const { orders, deliveryPartners , users } = useContext(AdminContext); // Use context to access orders
     const [activeTab, setActiveTab] = useState('Orders'); // 'Orders' or 'Delivery'
-    const [orders, setOrders] = useState(mockOrders);
+    
     const [statusFilter, setStatusFilter] = useState('All'); // All, Delivered, Cancelled
     const [selectedOrder, setSelectedOrder] = useState(null); // For modals
     const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -194,11 +286,39 @@ export default function OrdersDelivery() {
         setSelectedOrder(null);
     };
     
-    const handleAssignAgent = (agent) => {
-        setOrders(prev => prev.map(o => o.id === selectedOrder.id ? {...o, deliveryAgent: agent, status: 'Assigned'} : o));
+    const handleAssignAgent = (agentId,orderId) => {
+        // Find the agent object by ID
+        console.log(agentId);
+        const agentObj = deliveryPartners.find(dp => dp.id === agentId);
+        
+        const agentName = agentObj ? agentObj.name : '';
+        setOrders(prev => prev.map(o =>
+            o.id === selectedOrder.id
+                ? { ...o, deliveryAgent: agentName, deliveryPartnerId: agentId, status: 'Assigned' }
+                : o
+        ));
         setIsAssignModalOpen(false);
         setSelectedOrder(null);
     };
+ function convertFirestoreTimestampToIST(timestamp) {
+  if (!timestamp || typeof timestamp._seconds !== 'number') return '';
+
+  const utcDate = new Date(timestamp._seconds * 1000 + Math.floor(timestamp._nanoseconds / 1e6));
+
+        // Add 5.5 hours for IST
+        const istOffsetMs = 5.5 * 60 * 60 * 1000;
+        const istDate = new Date(utcDate.getTime() + istOffsetMs);
+
+        const day = String(istDate.getDate()).padStart(2, '0');
+        const month = String(istDate.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
+        const year = istDate.getFullYear();
+
+        return `${day}/${month}/${year}`;
+    }
+
+  
+
+
 
     // --- Inline Styles ---
     const styles = {
@@ -279,12 +399,20 @@ export default function OrdersDelivery() {
             <div style={{ ...styles.tableRow, ...styles.tableHeader }}>
                 <span>Order ID</span><span>Customer Name</span><span>Date</span><span>Status</span><span>Payment Status</span><span>Actions</span>
             </div>
-            {filteredData.map(order => (
-                <div style={styles.tableRow} key={order.id}>
-                    <span>{order.id}</span><span>{order.customerName}</span><span>{order.date}</span><span>{order.status}</span><span>{order.paymentStatus}</span>
-                    <span><button style={styles.actionButton} onClick={() => setSelectedOrder(order)}><FaEye /></button></span>
-                </div>
-            ))}
+            {filteredData.map(order => {
+                const istCreatedAt = convertFirestoreTimestampToIST(order.createdAt);
+                const userName = users.find(user => user.id === order.userId)?.name || 'Unknown User'; // Get user name from users context
+                return (
+                    <div style={styles.tableRow} key={order.id}>
+                        <span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{order.orderNumber}</span>
+                        <span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',paddingLeft:'8px'}}>{userName}</span>
+                        <span>{istCreatedAt ? istCreatedAt.toLocaleString('en-IN') : 'N/A'}</span>
+                        <span>{order.status}</span>
+                        <span>{order.paymentStatus}</span>
+                        <span><button style={styles.actionButton} onClick={() => setSelectedOrder(order)}><FaEye /></button></span>
+                    </div>
+                );
+            })}
         </>
     );
 
@@ -293,12 +421,19 @@ export default function OrdersDelivery() {
             <div style={{ ...styles.tableRow, ...styles.tableHeader }}>
                 <span>Order ID</span><span>Delivery Agent</span><span>Date</span><span>Status</span><span>Actions</span>
             </div>
-            {filteredData.map(order => (
-                <div style={styles.tableRow} key={order.id}>
-                    <span>{order.id}</span><span>{order.deliveryAgent}</span><span>{order.date}</span><span>{order.status}</span>
-                    <span><button style={styles.actionButton} onClick={() => setSelectedOrder(order)}><FaEye /></button></span>
-                </div>
-            ))}
+            {filteredData.map(order => {
+                const istCreatedAt = convertFirestoreTimestampToIST(order.createdAt);
+                return (
+                    <div style={styles.tableRow} key={order.id}>
+                     <span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{order.orderNumber}</span>
+                        <span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',paddingLeft:'8px'}}>{userName}</span>
+                        <span>{istCreatedAt ? istCreatedAt.toLocaleString('en-IN') : 'N/A'}</span>
+                        <span>{order.status}</span>
+                        <span>{order.paymentStatus}</span>
+                        <span><button style={styles.actionButton} onClick={() => setSelectedOrder(order)}><FaEye /></button></span>
+                    </div>
+                );
+            })}
         </>
     );
 
@@ -353,6 +488,7 @@ export default function OrdersDelivery() {
             {selectedOrder && (
                 <OrderDetailsModal 
                     order={selectedOrder} 
+                
                     onClose={() => setSelectedOrder(null)} 
                     onAssign={() => setIsAssignModalOpen(true)}
                     onCancel={handleCancelOrder}
@@ -363,7 +499,8 @@ export default function OrdersDelivery() {
 
             {isAssignModalOpen && selectedOrder && (
                 <AssignAgentModal
-                    currentAgent={selectedOrder.deliveryAgent}
+                    currentAgent={selectedOrder.deliveryPartnerId}
+                    orderId={selectedOrder.id}
                     onClose={() => setIsAssignModalOpen(false)}
                     onSave={handleAssignAgent}
                 />

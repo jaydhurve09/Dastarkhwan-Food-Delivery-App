@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect,useContext } from "react";
 import {
   FaShoppingCart, FaRupeeSign, FaUsers, FaMotorcycle, FaStar,
   FaBoxOpen, FaUtensils, FaSearch, FaUserCheck, FaUserShield
@@ -13,7 +13,7 @@ import DatePicker from "react-datepicker";
 import { motion } from "framer-motion";
 import "react-datepicker/dist/react-datepicker.css";
 import "leaflet/dist/leaflet.css";
-
+import { AdminContext } from "../contexts/adminContext";
 // ---- Delivery Map Data Nagpur ----
 const deliveryData = [
   {
@@ -60,16 +60,6 @@ function isArrived(loc, dest) {
 }
 
 // ---- Card Data ----
-const kpis = [
-  { label: "Total Orders", value: 1243, icon: <FaShoppingCart size={28} color="#22c55e" />, bg: "#e7f9f2" },
-  { label: "This Month Sales", value: "₹8,700", icon: <FaRupeeSign size={24} color="#38bdf8" />, bg: "#e0f2fe" },
-  { label: "Today Sales", value: "₹1,360", icon: <FaRupeeSign size={24} color="#818cf8" />, bg: "#e0e7ff" },
-  { label: "Total Users", value: "-", icon: <FaUsers size={28} color="#f59e42" />, bg: "#fff3e6", id: 'totalUsers' },
-  { label: "Total Delivery Partners", value: "-", icon: <FaMotorcycle size={28} color="#a855f7" />, bg: "#f4e7fa", id: 'totalDeliveryPartners' },
-  { label: "Ongoing Orders", value: 37, icon: <FaBoxOpen size={27} color="#0ea5e9" />, bg: "#e0f2fe" },
-  { label: "Avg Restaurant Rating", value: "4.3", icon: <FaStar size={26} color="#fde047" />, bg: "#fffbe8" },
-  { label: "Avg Delivery Rating", value: "4.6", icon: <FaStar size={26} color="#f59e42" />, bg: "#fff7ed" },
-];
 
 // ---- Status and Rating Data ----
 const orderStatusData = [
@@ -131,9 +121,21 @@ function formatDate(date) {
 }
 
 export default function Dashboard() {
+  const { orders, deliveryPartners, users } = useContext(AdminContext);
+  const kpis = [
+  { label: "Total Orders", value: orders.length, icon: <FaShoppingCart size={28} color="#22c55e" />, bg: "#e7f9f2" },
+  { label: "This Month Sales", value: "₹8,700", icon: <FaRupeeSign size={24} color="#38bdf8" />, bg: "#e0f2fe" },
+  { label: "Today Sales", value: "₹1,360", icon: <FaRupeeSign size={24} color="#818cf8" />, bg: "#e0e7ff" },
+  { label: "Total Users", value: users.length, icon: <FaUsers size={28} color="#f59e42" />, bg: "#fff3e6", id: 'totalUsers' },
+  { label: "Total Delivery Partners", value: deliveryPartners.length, icon: <FaMotorcycle size={28} color="#a855f7" />, bg: "#f4e7fa", id: 'totalDeliveryPartners' },
+  { label: "Ongoing Orders", value: 37, icon: <FaBoxOpen size={27} color="#0ea5e9" />, bg: "#e0f2fe" },
+  { label: "Avg Restaurant Rating", value: "4.3", icon: <FaStar size={26} color="#fde047" />, bg: "#fffbe8" },
+  { label: "Avg Delivery Rating", value: "4.6", icon: <FaStar size={26} color="#f59e42" />, bg: "#fff7ed" },
+];
+
   // Search
   const [search, setSearch] = useState("");
-
+ 
   // State for user counts
   const [userCounts, setUserCounts] = useState({
     totalUsers: 0,

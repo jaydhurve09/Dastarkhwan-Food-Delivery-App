@@ -16,53 +16,49 @@ import AdminLogin from './pages/AdminLogin';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import ProtectedRoute from './components/ProtectedRoute';
+import AdminProvider from './contexts/adminContext';
 import './App.css';
 
 function App() {
   return (
     <Router>
-      <div className="app-container">
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/admin/login" element={<AdminLogin />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password/:token" element={<ResetPassword />} />
-          
-          {/* Redirect old login route to new one */}
-          <Route path="/admin/login" element={<Navigate to="/admin/login" replace />} />
-          
-          {/* Protected Routes - Requires Authentication */}
-          <Route element={<ProtectedRoute />}>
-            <Route element={
-              <>
-                <Sidebar />
-                <div className="main-content">
-                  <Outlet />
-                </div>
-              </>
-            }>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/users" element={<UserManagement />} />
-              <Route path="/orders" element={<OrdersDelivery />} />
-              <Route path="/payment" element={<PaymentReport />} />
-              <Route path="/promo" element={<PromoCode />} />
-              <Route path="/restaurants" element={<RestaurantMonitoring />} />
-              <Route path="/admin/cms" element={<CMSManagement />} />
-              <Route path="/admin/settings" element={<AdminSettings />} />
-              <Route path="/admin/feedback" element={<FeedbackAndComplaints />} />
-              <Route path="/admin/notifications" element={<Notification />} />
-              <Route path="/delivery-partners" element={<DeliveryPartnerManagement />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
+      <AdminProvider>
+        <div className="app-container">
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password/:token" element={<ResetPassword />} />
+            
+            {/* Protected Routes - Requires Authentication */}
+            <Route element={<ProtectedRoute />}>
+              <Route element={
+                <>
+                  <Sidebar />
+                  <div className="main-content">
+                    <Outlet />
+                  </div>
+                </>
+              }>
+                
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/users" element={<UserManagement />} />
+                <Route path="/orders" element={<OrdersDelivery />} />
+                <Route path="/payment" element={<PaymentReport />} />
+                <Route path="/promo" element={<PromoCode />} />
+                <Route path="/restaurants" element={<RestaurantMonitoring />} />
+                <Route path="/admin/cms" element={<CMSManagement />} />
+                <Route path="/admin/settings" element={<AdminSettings />} />
+                <Route path="/admin/feedback" element={<FeedbackAndComplaints />} />
+                <Route path="/admin/notifications" element={<Notification />} />
+                <Route path="/delivery-partners" element={<DeliveryPartnerManagement />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+                
+              </Route>
             </Route>
-          </Route>
-          
-          {/* Redirect root to login if not authenticated */}
-          <Route 
-            path="/" 
-            element={<Navigate to="/admin/login" replace />} 
-          />
-        </Routes>
-      </div>
+          </Routes>
+        </div>
+      </AdminProvider>
     </Router>
   );
 }

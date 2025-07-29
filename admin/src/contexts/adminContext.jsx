@@ -1,23 +1,38 @@
 //create context for order management
 import React, { createContext, useState } from 'react';
 
+
 export const OrderContext = createContext();
 
-export const OrderProvider = ({ children }) => {
+const adminProvider = ({ children }) => {
+  const url = "http://localhost:5000/api"; // Adjust the URL as needed
   const [orders, setOrders] = useState([]);
-
-  const addOrder = (order) => {
-    setOrders([...orders, order]);
+const fetchOrders = async () => {
+    try {
+      const response = await fetch(`${url}/orders`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch orders');
+      }
+      const data = await response.json();
+      setOrders(data);
+      console.log('Orders fetched successfully:', data);
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+    }
   };
+  // Fetch orders when the provider mounts
+  React.useEffect(() => {
+    fetchOrders();
+  }, []);
 
-  const removeOrder = (orderId) => {
-    setOrders(orders.filter((order) => order.id !== orderId));
+
+  const value = {
+    orders
   };
-
   return (
-    <OrderContext.Provider value={{ orders, addOrder, removeOrder }}>
+    <OrderContext.Provider value={value}>
       {children}
     </OrderContext.Provider>
   );
 };
-export default OrderProvider;
+export default adminProvider;

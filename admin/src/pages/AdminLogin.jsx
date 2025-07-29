@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authService } from '../services/authService';
+import { authService } from '../services/authService'; // Assuming this path is correct
 
 export default function AdminLogin() {
   const [formData, setFormData] = useState({
@@ -34,6 +34,7 @@ export default function AdminLogin() {
     setError('');
 
     try {
+      // Call the login service (assuming authService.login is defined and works)
       await authService.login(formData.email, formData.password);
       // Redirect to dashboard on successful login
       navigate('/');
@@ -46,15 +47,17 @@ export default function AdminLogin() {
 
   const styles = {
     container: {
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif',
+      fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif',
       minHeight: '100vh',
       width: '100%',
+      // Using a responsive gradient background
       background: 'linear-gradient(135deg, #7f1d1d 0%, #991b1b 35%, #92400e 100%)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '1rem',
-      position: 'relative'
+      padding: '1rem', // Responsive padding around the card
+      position: 'relative',
+      boxSizing: 'border-box', // Ensures padding is included in the element's total width and height
     },
     overlay: {
       position: 'absolute',
@@ -77,18 +80,20 @@ export default function AdminLogin() {
       zIndex: 1
     },
     loginContainer: {
-      width: '100%',
-      maxWidth: '400px',
+      width: '100%', // Takes full width of its parent
+      maxWidth: '400px', // Limits the maximum width for larger screens
+      minWidth: '280px', // Ensures it doesn't become too narrow on very small screens
       position: 'relative',
-      zIndex: 10
+      zIndex: 10,
+      margin: '0 auto', // Centers the container horizontally when its width is less than 100%
     },
     loginCard: {
-      backgroundColor: '#F5F5DC',
+      backgroundColor: '#F5F5DC', // A light, earthy tone
       border: '1px solid rgba(139, 69, 19, 0.2)',
-      borderRadius: '1rem',
-      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-      padding: '2rem',
-      backdropFilter: 'blur(16px)'
+      borderRadius: '1rem', // Rounded corners for a softer look
+      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', // Subtle shadow
+      padding: '2rem', // Internal padding for content
+      backdropFilter: 'blur(16px)', // Frosted glass effect
     },
     header: {
       textAlign: 'center',
@@ -147,18 +152,19 @@ export default function AdminLogin() {
       pointerEvents: 'none'
     },
     input: {
-      width: '100%',
-      padding: '0.75rem 1rem 0.75rem 2.5rem',
+      width: '100%', // Input takes full width of its parent container
+      padding: '0.75rem 1rem 0.75rem 2.5rem', // Left padding for icon
       backgroundColor: '#FFFFFF',
       border: '1px solid rgba(139, 69, 19, 0.3)',
       borderRadius: '0.5rem',
       color: '#8B4513',
       fontSize: '1rem',
       transition: 'all 0.2s ease',
-      outline: 'none'
+      outline: 'none',
+      boxSizing: 'border-box', // Ensure padding doesn't increase total width
     },
     passwordInput: {
-      paddingRight: '3rem'
+      paddingRight: '3rem' // Right padding for toggle button
     },
     passwordToggle: {
       position: 'absolute',
@@ -188,7 +194,10 @@ export default function AdminLogin() {
       fontSize: '1rem',
       cursor: 'pointer',
       transition: 'all 0.2s ease',
-      boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+      boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+      display: 'flex', // For centering spinner and text
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     demoCredentials: {
       marginTop: '1.5rem',
@@ -227,11 +236,25 @@ export default function AdminLogin() {
       marginTop: '0.25rem',
       display: 'inline-block',
       transition: 'opacity 0.2s ease'
-    }
+    },
+    // Keyframe for spinner animation
+    '@keyframes spin': {
+      '0%': { transform: 'rotate(0deg)' },
+      '100%': { transform: 'rotate(360deg)' },
+    },
   };
 
   return (
     <div style={styles.container}>
+      {/* Global style for spin animation */}
+      <style>
+        {`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}
+      </style>
       <div style={styles.overlay}></div>
       <div style={styles.pattern}></div>
       
@@ -358,7 +381,7 @@ export default function AdminLogin() {
                 <>
                   <svg style={{ width: '1.25rem', height: '1.25rem', marginRight: '0.5rem', animation: 'spin 1s linear infinite' }} viewBox="0 0 24 24">
                     <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="4" strokeDasharray="42" strokeDashoffset="16" strokeLinecap="round">
-                      <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite" />
+                      {/* Animation is handled by the @keyframes rule */}
                     </circle>
                   </svg>
                   Signing In...

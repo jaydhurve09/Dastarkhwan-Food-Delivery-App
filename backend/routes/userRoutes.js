@@ -6,7 +6,8 @@ import {
   getUserById, 
   updateUser, 
   deleteUser, 
-  updateUserStatus 
+  updateUserStatus,
+  getUserCounts 
 } from '../controllers/userController.js';
 import { protect, superAdmin } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validationMiddleware.js';
@@ -98,6 +99,9 @@ router.get('/test-firestore', async (req, res) => {
     });
   }
 });
+
+// Add the new route for getting user counts
+router.get('/counts', superAdmin, getUserCounts);
 
 // Create user (admin only)
 router.post('/', [

@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   FaShoppingCart, FaRupeeSign, FaUsers, FaMotorcycle, FaStar,
-  FaBoxOpen, FaUtensils, FaSearch
+  FaBoxOpen, FaUtensils, FaSearch, FaUserCheck, FaUserShield
 } from "react-icons/fa";
 import {
   PieChart, Pie, Cell, Legend, LineChart, Line, XAxis, YAxis, Tooltip,
@@ -13,7 +13,7 @@ import DatePicker from "react-datepicker";
 import { motion } from "framer-motion";
 import "react-datepicker/dist/react-datepicker.css";
 import "leaflet/dist/leaflet.css";
-//dasd
+
 // ---- Delivery Map Data Nagpur ----
 const deliveryData = [
   {
@@ -64,8 +64,8 @@ const kpis = [
   { label: "Total Orders", value: 1243, icon: <FaShoppingCart size={28} color="#22c55e" />, bg: "#e7f9f2" },
   { label: "This Month Sales", value: "₹8,700", icon: <FaRupeeSign size={24} color="#38bdf8" />, bg: "#e0f2fe" },
   { label: "Today Sales", value: "₹1,360", icon: <FaRupeeSign size={24} color="#818cf8" />, bg: "#e0e7ff" },
-  { label: "Active Users", value: 573, icon: <FaUsers size={28} color="#f59e42" />, bg: "#fff3e6" },
-  { label: "Active Delivery Partners", value: 18, icon: <FaMotorcycle size={28} color="#a855f7" />, bg: "#f4e7fa" },
+  { label: "Total Users", value: "-", icon: <FaUsers size={28} color="#f59e42" />, bg: "#fff3e6", id: 'totalUsers' },
+  { label: "Total Delivery Partners", value: "-", icon: <FaMotorcycle size={28} color="#a855f7" />, bg: "#f4e7fa", id: 'totalDeliveryPartners' },
   { label: "Ongoing Orders", value: 37, icon: <FaBoxOpen size={27} color="#0ea5e9" />, bg: "#e0f2fe" },
   { label: "Avg Restaurant Rating", value: "4.3", icon: <FaStar size={26} color="#fde047" />, bg: "#fffbe8" },
   { label: "Avg Delivery Rating", value: "4.6", icon: <FaStar size={26} color="#f59e42" />, bg: "#fff7ed" },
@@ -133,6 +133,55 @@ function formatDate(date) {
 export default function Dashboard() {
   // Search
   const [search, setSearch] = useState("");
+
+  // State for user counts
+  const [userCounts, setUserCounts] = useState({
+    totalUsers: 0,
+    totalDeliveryPartners: 0,
+    loading: true
+  });
+
+  // Fetch user counts on component mount
+  useEffect(() => {
+    const fetchUserCounts = async () => {
+      try {
+        const token = localStorage.getItem('adminToken');
+        if (!token) return;
+
+        const response = await fetch('http://localhost:5000/api/users/counts', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setUserCounts({
+            totalUsers: data.data.totalUsers || 0,
+            totalDeliveryPartners: data.data.totalDeliveryPartners || 0,
+            loading: false
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching user counts:', error);
+        setUserCounts(prev => ({ ...prev, loading: false }));
+      }
+    };
+
+    fetchUserCounts();
+  }, []);
+
+  // Update KPIs with real data
+  const updatedKpis = kpis.map(kpi => {
+    if (kpi.id === 'totalUsers') {
+      return { ...kpi, value: userCounts.loading ? '...' : userCounts.totalUsers };
+    }
+    if (kpi.id === 'totalDeliveryPartners') {
+      return { ...kpi, value: userCounts.loading ? '...' : userCounts.totalDeliveryPartners };
+    }
+    return kpi;
+  });
 
   // Dishes
   const [dishRange, setDishRange] = useState("Today");
@@ -205,7 +254,7 @@ export default function Dashboard() {
         display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 32,
         justifyContent: "space-between"
       }}>
-        {kpis.map((kpi, i) => (
+        {updatedKpis.map((kpi, i) => (
           <motion.div
             key={i}
             initial={{ opacity: 0, y: 25 }}
@@ -468,7 +517,7 @@ export default function Dashboard() {
           style={{ height: 280, width: "100%", borderRadius: 8 }}
         >
           <TileLayer
-            attribution='© OpenStreetMap'
+            attribution='&copy; OpenStreetMap'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           {deliveryData.map(d => (

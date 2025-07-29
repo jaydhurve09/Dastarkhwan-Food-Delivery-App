@@ -484,11 +484,42 @@ const updateUserStatus = async (req, res) => {
   }
 };
 
+// @desc    Get user and delivery partner counts
+// @route   GET /api/users/counts
+// @access  Private/Admin
+const getUserCounts = async (req, res) => {
+  try {
+    // Get users count (all users in the users collection)
+    const usersSnapshot = await db.collection('users').count().get();
+    const totalUsers = usersSnapshot.data().count || 0;
+    
+    // Get delivery partners count (all documents in deliveryPartners collection)
+    const partnersSnapshot = await db.collection('deliveryPartners').count().get();
+    const totalDeliveryPartners = partnersSnapshot.data().count || 0;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalUsers,
+        totalDeliveryPartners
+      }
+    });
+  } catch (error) {
+    console.error('Error getting user counts:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error getting user counts',
+      error: error.message
+    });
+  }
+};
+
 export {
   createUser,
   getUsers,
   getUserById,
   updateUser,
   deleteUser,
-  updateUserStatus
+  updateUserStatus,
+  getUserCounts
 };

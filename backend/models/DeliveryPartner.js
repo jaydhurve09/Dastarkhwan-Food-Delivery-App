@@ -29,6 +29,8 @@ export class DeliveryPartner extends BaseModel {
     this.phone = data.phone || ''; // Required, unique
     this.password = data.password || ''; // Required
     this.profileImage = data.profileImage || '';
+    //declare orders array
+    this.orders = data.orders || []; // Array of order IDs associated with the delivery partner
     
     this.address = data.address || {
       street: '',
@@ -86,6 +88,7 @@ export class DeliveryPartner extends BaseModel {
       phone: this.phone,
       password: this.password,
       profileImage: this.profileImage,
+      orders: this.orders,
       address: this.address,
       documents: this.documents,
       vehicle: this.vehicle,

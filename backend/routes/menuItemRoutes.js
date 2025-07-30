@@ -1,70 +1,119 @@
 import express from 'express';
 import { body, param, query } from 'express-validator';
 import { 
-  createMenuItem, 
-  getMenuItems, 
-  getMenuItem, 
-  updateMenuItem, 
-  deleteMenuItem 
+  createMenuItem,
+  getMenuItems,
+  getMenuItem,
+  updateMenuItem,
+  deleteMenuItem,
+  getItemsByCategory,
+  getItemsBySubCategory,
+  getItemsByTag
 } from '../controllers/menuItemController.js';
 import { protect, admin } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validationMiddleware.js';
+import { upload } from '../config/fileUpload.js';
 
 const router = express.Router();
 
 // Validation rules
 const menuItemValidation = [
-  body('name', 'Name is required').not().isEmpty().trim(),
-  body('price', 'Price is required and must be a positive number').isFloat({ min: 0 }),
-  body('categories', 'Categories must be an array').optional().isArray(),
-  body('isVeg', 'isVeg must be a boolean').optional().isBoolean(),
-  body('isAvailable', 'isAvailable must be a boolean').optional().isBoolean(),
-  body('preparationTime', 'Preparation time must be a positive number').optional().isInt({ min: 0 })
+  body('name')
+    .trim()
+    .notEmpty().withMessage('Item name is required')
+    .isLength({ max: 100 }).withMessage('Item name cannot exceed 100 characters'),
+    
+  body('category')
+    .notEmpty().withMessage('Category is required'),
+    
+  body('subCategory')
+    .optional(),
+    
+  body('price')
+    .isFloat({ min: 0 }).withMessage('Price must be a positive number'),
+    
+  body('tags')
+    .optional()
+    .custom((value) => {
+      try {
+        const tags = typeof value === 'string' ? JSON.parse(value) : value;
+        return Array.isArray(tags) && tags.every(tag => typeof tag === 'string');
+      } catch (e) {
+        return false;
+      }
+    })
+    .withMessage('Tags must be an array of strings'),
+    
+  body('description')
+    .optional()
+    .isLength({ max: 500 }).withMessage('Description cannot exceed 500 characters')
 ];
 
-// Routes
-router
-  .route('/')
-  .get(
-    [
-      query('restaurantId', 'Invalid restaurant ID').optional().isMongoId(),
-      query('category', 'Invalid category').optional().isString().trim(),
-      query('search', 'Invalid search query').optional().isString().trim()
-    ],
-    validate,
-    getMenuItems
-  )
-  .post(
-    protect,
-    admin,
-    menuItemValidation,
-    validate,
-    createMenuItem
-  );
+// Public routes
+router.get('/', 
+  validate([
+    query('category').optional(),
+    query('subCategory').optional(),
+    query('tag').optional(),
+    query('search').optional()
+  ]),
+  getMenuItems
+);
 
-router
-  .route('/:id')
-  .get(
-    [param('id', 'Invalid menu item ID').isMongoId()],
-    validate,
-    getMenuItem
-  )
-  .put(
-    protect,
-    admin,
-    [
-      param('id', 'Invalid menu item ID').isMongoId(),
-      ...menuItemValidation
-    ],
-    validate,
-    updateMenuItem
-  )
-  .delete(
-    protect,
-    admin,
-    [param('id', 'Invalid menu item ID').isMongoId()],
-    validate,
-    deleteMenuItem
-  );
+router.get('/category/:categoryId',
+  validate([
+    param('categoryId').notEmpty().withMessage('Category ID is required')
+  ]),
+  getItemsByCategory
+);
+
+router.get('/subcategory/:subcategoryId',
+  validate([
+    param('subcategoryId').notEmpty().withMessage('Subcategory ID is required')
+  ]),
+  getItemsBySubCategory
+);
+
+router.get('/tag/:tag',
+  validate([
+    param('tag').notEmpty().withMessage('Tag is required')
+  ]),
+  getItemsByTag
+);
+
+router.get('/:id', 
+  validate([
+    param('id').notEmpty().withMessage('Menu item ID is required')
+  ]),
+  getMenuItem
+);
+
+// Protected admin routes
+router.use(protect);
+router.use(admin);
+
+// Create menu item with file upload
+router.post('/', 
+  upload.single('image'),
+  validate(menuItemValidation),
+  createMenuItem
+);
+
+// Update menu item with optional file upload
+router.put('/:id', 
+  upload.single('image'),
+  validate([
+    param('id').notEmpty().withMessage('Menu item ID is required'),
+    ...menuItemValidation
+  ]),
+  updateMenuItem
+);
+
+router.delete('/:id', 
+  validate([
+    param('id').notEmpty().withMessage('Menu item ID is required')
+  ]),
+  deleteMenuItem
+);
 
 export default router;

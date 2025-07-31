@@ -52,7 +52,7 @@ export class DeliveryPartner extends BaseModel {
     this.vehicle = data.vehicle || {
       type: '',
       number: '',
-      model: '',
+      name: '',
       color: ''
     };
     

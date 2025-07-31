@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useContext } from "react";
 import { AdminContext } from "../contexts/adminContext";
+import {updateDeliveryPartner, blockDeliveryPartner } from "../services/deliveryPatnerService";
 
 
 const initialPendingApprovals = [
@@ -204,7 +205,7 @@ const styles = {
 };
 
 export default function DeliveryPartnerManagement() {
-  const { deliveryPartners ,orders} = useContext(AdminContext);
+  const {fetchOrders,fetchDeliveryPartners ,deliveryPartners ,orders} = useContext(AdminContext);
   const [pendingApprovals, setPendingApprovals] = useState(initialPendingApprovals);
   const [partners, setPartners] = useState(deliveryPartners);
   const [showPending, setShowPending] = useState(false);
@@ -228,6 +229,8 @@ export default function DeliveryPartnerManagement() {
     if (!s) return partners;
     return partners.filter(p => p.name.toLowerCase().includes(s));
   }, [searchTerm, partners]);
+
+
 
   // Approve pending partner & move to partners list
   function approvePending(id) {
@@ -261,9 +264,10 @@ export default function DeliveryPartnerManagement() {
   }
 
   // Block/Unblock toggle
-  function toggleBlockPartner(id) {
-    setPartners(ps => ps.map(p => p.id === id ? { ...p, blocked: !p.blocked } : p));
-    setPartnerDetail(null);
+const toggleBlockPartner = async (id) => {
+
+    await blockDeliveryPartner(id);
+    await fetchDeliveryPartners();
   }
 
   // Reset password action
@@ -307,7 +311,7 @@ export default function DeliveryPartnerManagement() {
     setEditForm({
       name: partner.name,
       phone: partner.phone, // <-- use phone, not mobile
-      vehicle: partner.vehicle.model,
+      vehicle: partner.vehicle.name,
       vehicleNo: partner.vehicle.number
     });
   }
@@ -324,9 +328,9 @@ export default function DeliveryPartnerManagement() {
   }
 
   // Save edited info
-  function saveEditChanges() {
-    setPartners(ps => ps.map(p => p.id === editPartner.id ? { ...p, ...editForm } : p));
-    alert("Partner info updated!");
+  const saveEditChanges = async (id) => {
+   await updateDeliveryPartner(id , editForm);
+   await fetchDeliveryPartners();
     closeEditModal();
     setPartnerDetail(null);
   }
@@ -427,8 +431,8 @@ export default function DeliveryPartnerManagement() {
                   <div style={styles.actionRow}>
                     <button style={{...styles.btn, ...styles.btnView}} onClick={() => setPartnerDetail(p)}>View Profile</button>
                     <button style={{...styles.btn, ...styles.btnEdit}} onClick={() => openEditModal(p)}>Edit Info</button>
-                    <button style={{...styles.btn, ...p.blocked ? styles.btnUnblock : styles.btnBlock}} onClick={() => toggleBlockPartner(p.id)}>
-                      {p.blocked ? "Unblock" : "Block"}
+                    <button style={{...styles.btn, ...p.isActive ? styles.btnBlock : styles.btnUnblock}} onClick={() => toggleBlockPartner(p.id)}>
+                      {p.isActive? "Block" : "Unblock"}
                     </button>
                     <button style={{...styles.btn, ...styles.btnReset}} onClick={() => handleResetPasswordClick(p)}>Reset Password</button>
                   </div>
@@ -474,7 +478,7 @@ export default function DeliveryPartnerManagement() {
             <button style={styles.closeBtn} onClick={() => setPartnerDetail(null)} aria-label="Close modal">&times;</button>
             <h2 id="partnerDetailTitle" style={styles.modalHeader}>{partnerDetail.name}</h2>
             <p><b>Mobile:</b> {partnerDetail.phone}</p>
-            <p><b>Vehicle Info:</b> {partnerDetail.vehicle.number} | {partnerDetail.vehicle.model}</p>
+            <p><b>Vehicle Info:</b> {partnerDetail.vehicle.number} | {partnerDetail.vehicle.name}</p>
             <p><b>Status:</b> {partnerDetail.online ? <span style={styles.online}>Online</span> : <span style={styles.offline}>Offline</span>}</p>
             <p><b>Total Deliveries:</b> {partnerDetail.totalDeliveries}</p>
             <p><b>Rating:</b> {partnerDetail.rating} ★</p>
@@ -539,7 +543,7 @@ export default function DeliveryPartnerManagement() {
             <form onSubmit={e => {
               e.preventDefault();
               console.log(editForm, "editForm");
-              saveEditChanges();
+              saveEditChanges(editPartner.id);
             }}>
               <label>
                 Name:

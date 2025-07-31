@@ -42,6 +42,29 @@ export class BaseModel {
   }
 
   /**
+   * Find a document by ID and delete it
+   * @param {string} id - The document ID to delete
+   * @returns {Promise<boolean>} - True if document was deleted, false otherwise
+   */
+  static async findByIdAndDelete(id) {
+    try {
+      if (!id) {
+        throw new Error('Document ID is required');
+      }
+      
+      console.log(`[${this.name}] Deleting document with ID:`, id);
+      const docRef = this.getCollection().doc(id);
+      await docRef.delete();
+      
+      console.log(`[${this.name}] Successfully deleted document with ID:`, id);
+      return true;
+    } catch (error) {
+      console.error(`[${this.name}] Error deleting document:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Create a model instance from Firestore document
    */
   static fromFirestore(snapshot) {

@@ -140,7 +140,7 @@ router.delete('/:id', isAuthenticated, isAdmin, async (req, res) => {
       });
     }
     
-    await PromoCode.delete(req.params.id);
+    await PromoCode.findByIdAndDelete(req.params.id);
     
     res.status(200).json({
       success: true,

@@ -182,19 +182,43 @@ const PromoCode = () => {
       e.preventDefault();
       
       try {
+        // Convert string values to numbers
+        const discountValue = parseFloat(formData.discountValue);
+        const minOrderValue = parseFloat(formData.minOrderValue) || 0;
+        
+        // Validate discount value
+        if (isNaN(discountValue) || discountValue <= 0) {
+          toast.error('Discount value must be greater than 0');
+          return;
+        }
+        
+        // Additional validation for percentage discount
+        if (formData.discountType === 'percentage' && discountValue > 100) {
+          toast.error('Discount percentage cannot exceed 100%');
+          return;
+        }
+
+        // Validate dates
+        const startDate = new Date(formData.startDate);
+        const endDate = formData.endDate ? new Date(formData.endDate) : null;
+        
+        if (endDate && endDate <= startDate) {
+          toast.error('End date must be after start date');
+          return;
+        }
+        
+        // Prepare promo data
         const promoData = {
-          code: formData.code,
-          description: formData.description,
-          discountType: formData.discountType,
-          discountValue: parseFloat(formData.discountValue),
-          minOrderValue: parseFloat(formData.minOrderValue) || 0,
-          maxDiscount: formData.maxDiscount ? parseFloat(formData.maxDiscount) : null,
-          startDate: formData.startDate,
-          endDate: formData.endDate || null,
-          usageLimit: formData.usageLimit ? parseInt(formData.usageLimit, 10) : null,
-          isActive: formData.isActive
+          ...formData,
+          discountValue,
+          minOrderValue,
+          startDate: startDate.toISOString(),
+          endDate: endDate ? endDate.toISOString() : null,
+          usageLimit: formData.usageLimit ? parseInt(formData.usageLimit) : null,
+          isActive: formData.isActive ?? true
         };
-  
+        
+        // Save or update promo
         if (selectedPromo) {
           const updatedPromo = await updatePromoCode(selectedPromo.id, promoData);
           setPromoCodes(promoCodes.map(p => 
@@ -206,7 +230,7 @@ const PromoCode = () => {
           setPromoCodes([...promoCodes, newPromo]);
           toast.success('Promo code created successfully');
         }
-  
+        
         setIsModalOpen(false);
       } catch (error) {
         console.error('Error saving promo code:', error);
@@ -254,8 +278,96 @@ const PromoCode = () => {
                   required
                 >
                   <option value="percentage">Percentage</option>
-                  <option value="fixed">Fixed Amount</option>
+                  <option value="fixed_amount">Fixed Amount</option>
                 </select>
+              </div>
+              
+              {/* Add Discount Value Field */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  {formData.discountType === 'percentage' ? 'Discount Percentage *' : 'Discount Amount *'}
+                </label>
+                <div className="relative rounded-md shadow-sm">
+                  <input
+                    type="number"
+                    name="discountValue"
+                    value={formData.discountValue}
+                    onChange={handleChange}
+                    min="0"
+                    step={formData.discountType === 'percentage' ? '0.01' : '1'}
+                    max={formData.discountType === 'percentage' ? '100' : ''}
+                    className={`block w-full pl-3 pr-12 py-2 border ${
+                      formData.discountValue <= 0 || 
+                      (formData.discountType === 'percentage' && formData.discountValue > 100)
+                        ? 'border-red-300 focus:ring-red-500 focus:border-red-500' 
+                        : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+                    } rounded-md`}
+                    placeholder={formData.discountType === 'percentage' ? '0.00' : '0'}
+                    required
+                  />
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                    <span className="text-gray-500 sm:text-sm">
+                      {formData.discountType === 'percentage' ? '%' : '₹'}
+                    </span>
+                  </div>
+                </div>
+                {formData.discountValue <= 0 && (
+                  <p className="mt-1 text-sm text-red-600">Discount value must be greater than 0</p>
+                )}
+                {formData.discountType === 'percentage' && formData.discountValue > 100 && (
+                  <p className="mt-1 text-sm text-red-600">Discount percentage cannot exceed 100%</p>
+                )}
+              </div>
+
+              {/* Add Min Order Value */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Minimum Order Value</label>
+                <div className="relative rounded-md shadow-sm">
+                  <input
+                    type="number"
+                    name="minOrderValue"
+                    value={formData.minOrderValue}
+                    onChange={handleChange}
+                    min="0"
+                    step="0.01"
+                    className="block w-full pl-3 pr-12 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="0.00"
+                  />
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                    <span className="text-gray-500 sm:text-sm">₹</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Add Start Date */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Start Date *</label>
+                <input
+                  type="date"
+                  name="startDate"
+                  value={formData.startDate}
+                  min={new Date().toISOString().split('T')[0]}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  required
+                />
+              </div>
+
+              {/* Add End Date */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">End Date *</label>
+                <input
+                  type="date"
+                  name="endDate"
+                  value={formData.endDate || ''}
+                  min={formData.startDate || new Date().toISOString().split('T')[0]}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  required
+                />
+                {formData.endDate && new Date(formData.endDate) <= new Date(formData.startDate) && (
+                  <p className="mt-1 text-sm text-red-600">End date must be after start date</p>
+                )}
               </div>
             </div>
             
@@ -327,7 +439,7 @@ const PromoCode = () => {
                 >
                   <option value="All">All Types</option>
                   <option value="percentage">Percentage</option>
-                  <option value="fixed">Fixed Amount</option>
+                  <option value="fixed_amount">Fixed Amount</option>
                 </select>
               </div>
               <button

@@ -41,15 +41,25 @@ export const getActivePromoCodes = async () => {
 // Create a new promo code
 export const createPromoCode = async (promoData) => {
   try {
+    const token = localStorage.getItem('adminToken');
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+    
     const response = await axios.post(`${API_URL}/promo-codes`, promoData, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
-      }
+      },
+      withCredentials: true
     });
     return response.data.data;
   } catch (error) {
     console.error('Error creating promo code:', error);
+    if (error.response?.status === 401) {
+      // Handle unauthorized access
+      throw new Error('Your session has expired. Please log in again.');
+    }
     throw error.response?.data?.message || 'Failed to create promo code';
   }
 };
@@ -57,15 +67,24 @@ export const createPromoCode = async (promoData) => {
 // Update a promo code
 export const updatePromoCode = async (id, promoData) => {
   try {
+    const token = localStorage.getItem('adminToken');
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+    
     const response = await axios.put(`${API_URL}/promo-codes/${id}`, promoData, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
-      }
+      },
+      withCredentials: true
     });
     return response.data.data;
   } catch (error) {
     console.error('Error updating promo code:', error);
+    if (error.response?.status === 401) {
+      throw new Error('Your session has expired. Please log in again.');
+    }
     throw error.response?.data?.message || 'Failed to update promo code';
   }
 };
@@ -73,14 +92,24 @@ export const updatePromoCode = async (id, promoData) => {
 // Delete a promo code
 export const deletePromoCode = async (id) => {
   try {
+    const token = localStorage.getItem('adminToken');
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+    
     const response = await axios.delete(`${API_URL}/promo-codes/${id}`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      withCredentials: true
     });
     return response.data;
   } catch (error) {
     console.error('Error deleting promo code:', error);
+    if (error.response?.status === 401) {
+      throw new Error('Your session has expired. Please log in again.');
+    }
     throw error.response?.data?.message || 'Failed to delete promo code';
   }
 };
@@ -88,13 +117,30 @@ export const deletePromoCode = async (id) => {
 // Validate a promo code
 export const validatePromoCode = async (code, userId, orderTotal, items = [], isNewUser = false) => {
   try {
+    const token = localStorage.getItem('adminToken');
+    const headers = {};
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
     const response = await axios.post(
       `${API_URL}/promo-codes/validate`,
-      { code, userId, orderTotal, items, isNewUser }
+      { code, userId, orderTotal, items, isNewUser },
+      { 
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        withCredentials: true 
+      }
     );
     return response.data;
   } catch (error) {
     console.error('Error validating promo code:', error);
+    if (error.response?.status === 401) {
+      throw new Error('Your session has expired. Please log in again.');
+    }
     throw error.response?.data?.message || 'Failed to validate promo code';
   }
 };

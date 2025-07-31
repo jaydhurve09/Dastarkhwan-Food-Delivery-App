@@ -63,6 +63,8 @@ const fetchOrders = async () => {
     orders,
     deliveryPartners,
     users,
+    fetchOrders,
+    fetchDeliveryPartners,
   };
 
   return (

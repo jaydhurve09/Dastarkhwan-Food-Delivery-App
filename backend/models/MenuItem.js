@@ -3,172 +3,92 @@ import { BaseModel } from './BaseModel.js';
 export class MenuItem extends BaseModel {
   static collectionName = 'menuItems';
 
-  // Define category enums as static property for reuse
-  static CATEGORIES = {
-    // Course-Based
-    COURSE: ['appetizer', 'starter', 'main_course', 'dessert', 'beverage', 'side_dish', 'accompaniment'],
-    // Meal Context
-    MEAL: ['breakfast', 'lunch', 'dinner', 'snacks', 'brunch', 'late_night'],
-    // Cuisines
-    CUISINE: [
-      'north_indian', 'south_indian', 'chinese', 'mughlai', 'continental', 'italian',
-      'mexican', 'pan_asian', 'street_food', 'seafood', 'punjabi', 'gujarati',
-      'maharashtrian', 'rajasthani', 'bengali', 'tandoori'
-    ],
-    // Dietary
-    DIETARY: ['veg', 'non_veg', 'eggetarian', 'jain', 'gluten_free', 'keto', 'low_calorie', 'healthy'],
-    // Promo & Business
-    PROMO: [
-      'bestseller', 'recommended', 'combo', 'value_meal', 'family_pack', 'new_arrival',
-      'limited_time_offer', 'special_offer', 'budget_friendly', 'editor_pick'
-    ],
-    // Seasonal & Occasion
-    SEASONAL: [
-      'summer_special', 'winter_special', 'monsoon_special', 'festival_special',
-      'navratri_special', 'eid_special', 'diwali_combo'
-    ],
-    // UX Focused
-    UX: ['quick_bites', '30_min_delivery', 'premium', 'home_style', 'signature_dish', 'chef_special']
-  };
-
   constructor(data = {}) {
     super();
-    this.restaurantId = data.restaurantId || null; // Reference to Restaurant document
     this.name = data.name || ''; // Required
-    this.description = data.description || '';
-    this.categories = data.categories || [];
-    this.price = data.price || 0; // Required
-    this.discountedPrice = data.discountedPrice || null;
-    this.image = data.image || '';
-    this.isVeg = data.isVeg !== undefined ? data.isVeg : true;
-    this.isAvailable = data.isAvailable !== undefined ? data.isAvailable : true;
-    this.preparationTime = data.preparationTime || null; // in minutes
-    this.ingredients = data.ingredients || [];
-    this.tags = data.tags || [];
-    this.nutritionalInfo = data.nutritionalInfo || {
-      calories: null,
-      protein: null,
-      carbs: null,
-      fat: null
-    };
-    this.rating = data.rating || 0;
-    this.totalRatings = data.totalRatings || 0;
-    this.isPopular = data.isPopular || false;
-    this.isRecommended = data.isRecommended || false;
-    this.addOns = data.addOns || [];
+    this.image = data.image || ''; // Optional
+    this.category = data.category || ''; // Reference to menuCategories collection
+    this.subCategory = data.subCategory || ''; // Reference to subcategory in menuCategories
+    this.price = data.price || 0; // Price in smallest currency unit (e.g., cents)
+    this.tags = data.tags || []; // Array of tags like ["Recommended for You", "Most Loved"]
+    this.description = data.description || ''; // Item description
+    this.createdAt = data.createdAt || new Date();
+    this.updatedAt = data.updatedAt || new Date();
   }
 
   // Convert to Firestore document format
   toFirestore() {
     return {
-      restaurantId: this.restaurantId,
       name: this.name,
-      description: this.description,
-      categories: this.categories,
+      ...(this.image && { image: this.image }), // Only include if exists
+      category: this.category, // Reference to menuCategories collection
+      subCategory: this.subCategory, // Reference to subcategory
       price: this.price,
-      discountedPrice: this.discountedPrice,
-      image: this.image,
-      isVeg: this.isVeg,
-      isAvailable: this.isAvailable,
-      preparationTime: this.preparationTime,
-      ingredients: this.ingredients,
       tags: this.tags,
-      nutritionalInfo: this.nutritionalInfo,
-      rating: this.rating,
-      totalRatings: this.totalRatings,
-      isPopular: this.isPopular,
-      isRecommended: this.isRecommended,
-      addOns: this.addOns,
+      description: this.description,
+      createdAt: this.createdAt,
       updatedAt: new Date()
     };
   }
 
-  // Validation method
+  // Validate menu item data
   validate() {
-    if (!this.restaurantId) throw new Error('Restaurant ID is required');
-    if (!this.name) throw new Error('Item name is required');
-    if (this.price === undefined || this.price < 0) {
-      throw new Error('Valid price is required');
+    if (!this.name || this.name.trim() === '') {
+      throw new Error('Item name is required');
     }
-    
-    // Validate categories against allowed values
-    const allCategories = Object.values(MenuItem.CATEGORIES).flat();
-    const invalidCategories = this.categories.filter(cat => !allCategories.includes(cat));
-    if (invalidCategories.length > 0) {
-      throw new Error(`Invalid categories: ${invalidCategories.join(', ')}`);
+
+    if (this.name.length > 100) {
+      throw new Error('Item name cannot exceed 100 characters');
     }
-    
+
+    if (!this.category) {
+      throw new Error('Category is required');
+    }
+
+    if (this.price < 0) {
+      throw new Error('Price cannot be negative');
+    }
+
+    if (this.description && this.description.length > 500) {
+      throw new Error('Description cannot exceed 500 characters');
+    }
+
+    // Validate tags if provided
+    if (this.tags && !Array.isArray(this.tags)) {
+      throw new Error('Tags must be an array');
+    }
+
     return true;
   }
 
-  // Static method to find menu items by restaurant
-  static async findByRestaurant(restaurantId, options = {}) {
-    const { 
-      category = null, 
-      isVeg = null,
-      isAvailable = true,
-      limit = 50,
-      offset = 0
-    } = options;
-
-    const query = { 
-      where: { 
-        restaurantId,
-        isAvailable 
-      }
-    };
-
-    if (isVeg !== null) {
-      query.where.isVeg = isVeg;
-    }
-
-    if (category) {
-      query.where.categories = category;
-    }
-
-    if (limit) {
-      query.limit = parseInt(limit);
-    }
-
-    if (offset) {
-      query.offset = parseInt(offset);
-    }
-
-    return this.find(query);
+  // Static method to find items by category
+  static async findByCategory(categoryId) {
+    return this.find({ category: categoryId });
   }
 
-  // Method to update rating
-  async updateRating(newRating) {
-    if (newRating < 0 || newRating > 5) {
-      throw new Error('Rating must be between 0 and 5');
-    }
-
-    const currentTotal = this.rating * this.totalRatings;
-    this.totalRatings += 1;
-    this.rating = (currentTotal + newRating) / this.totalRatings;
-    
-    return this.save();
+  // Static method to find items by subcategory
+  static async findBySubCategory(subCategoryId) {
+    return this.find({ subCategory: subCategoryId });
   }
 
-  // Method to toggle availability
-  async toggleAvailability() {
-    this.isAvailable = !this.isAvailable;
-    return this.save();
+  // Static method to find items by tag
+  static async findByTag(tag) {
+    return this.find({ tags: tag });
   }
 
-  // Method to add an add-on
-  async addAddOn(addOn) {
-    if (!addOn.name || addOn.price === undefined) {
-      throw new Error('Add-on must have a name and price');
+  // Method to add a tag
+  addTag(tag) {
+    if (!this.tags.includes(tag)) {
+      this.tags.push(tag);
     }
-    this.addOns.push({
-      name: addOn.name,
-      price: addOn.price,
-      isAvailable: addOn.isAvailable !== false
-    });
-    return this.save();
+    return this;
+  }
+
+  // Method to remove a tag
+  removeTag(tag) {
+    this.tags = this.tags.filter(t => t !== tag);
+    return this;
   }
 }
 
-// Export a singleton instance
 export default new MenuItem();

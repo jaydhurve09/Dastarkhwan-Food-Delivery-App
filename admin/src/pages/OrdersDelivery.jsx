@@ -1,6 +1,7 @@
 import React, { useState, useMemo,useContext } from 'react';
 import { FaSearch, FaEye, FaMotorcycle, FaMapMarkerAlt, FaEdit, FaTimes, FaUserCircle, FaSignOutAlt } from 'react-icons/fa';
-
+import axios from 'axios';
+import { updateOrderAgent,updateOrderStatus } from '../services/orderService'; // Adjust the import path as necessary
 // --- Mock Data (Self-Contained) ---
 const mockOrders = [
     { id: '#12345', customerName: 'John', date: '22/06/2025', status: 'Delivered', paymentStatus: 'Paid', items: ['Pizza', 'Coke'], deliveryAgent: 'Albus' },
@@ -184,7 +185,8 @@ return (
 
 
 const TrackingModal = ({ orders, onClose }) => {
-
+ console.log(orders);
+ const { deliveryPartners } = useContext(AdminContext); // Get delivery partners
     const mapPlaceholderStyle = {
         width: '100%',
         height: '250px',
@@ -200,12 +202,15 @@ const TrackingModal = ({ orders, onClose }) => {
         flexDirection: 'column',
         gap: '0.5rem',
     };
+        const isDeliveryAgentAssigned = orders && orders.deliveryPartnerId && deliveryPartners.some(dp => dp.id === orders.deliveryPartnerId);
 
+    const deliveryAgentName = isDeliveryAgentAssigned ? deliveryPartners.find(dp => dp.id === orders.deliveryPartnerId)?.name : '';
+// Fallback if deliveryAgent is null
     return (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1002 }}>
             <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '8px', textAlign: 'center', maxWidth: '500px', width: '90%' }}>
                 <h3 style={{marginTop: 0}}>Tracking Order {orders.id}</h3>
-                <p>Delivery Agent: <strong>{orders.deliveryAgent}</strong></p>
+                <p>Delivery Agent: <strong>{deliveryAgentName}</strong></p>
                 {orders.status === 'Out for Delivery' && orders.agentLocation ? (
                     <>
                         <div style={mapPlaceholderStyle}>
@@ -230,7 +235,7 @@ const TrackingModal = ({ orders, onClose }) => {
 
 // --- Main Component ---
 export default function OrdersDelivery() {
-    const { orders, deliveryPartners , users } = useContext(AdminContext); // Use context to access orders
+    const { orders, deliveryPartners , users, fetchOrders, fetchDeliveryPartners, fetchUsers } = useContext(AdminContext); // Use context to access orders
     const [activeTab, setActiveTab] = useState('Orders'); // 'Orders' or 'Delivery'
     
     const [statusFilter, setStatusFilter] = useState('All'); // All, Delivered, Cancelled
@@ -259,7 +264,7 @@ export default function OrdersDelivery() {
     const filteredData = useMemo(() => {
         let data = activeTab === 'Orders'
             ? orders
-            : orders.filter(o => o.deliveryAgent && o.status !== 'Cancelled');
+            : orders.filter(o => o.deliveryPartnerId && o.status !== 'Cancelled');
 
         if (statusFilter !== 'All') {
             data = data.filter(o => o.status === statusFilter);
@@ -281,26 +286,22 @@ export default function OrdersDelivery() {
         setOrders(prev => prev.map(o => o.id === orderId ? { ...o, items: newItems } : o));
     };
     
-    const handleCancelOrder = (orderId) => {
-        setOrders(prev => prev.map(o => o.id === orderId ? {...o, status: 'Cancelled'} : o));
-        setSelectedOrder(null);
+    const handleCancelOrder = async (orderId) => {
+        await updateOrderStatus(orderId, 'Cancelled');
+        //reload orders to reflect the change
+      await fetchOrders();
     };
-    
-    const handleAssignAgent = (agentId,orderId) => {
-        // Find the agent object by ID
-        console.log(agentId);
-        const agentObj = deliveryPartners.find(dp => dp.id === agentId);
-        
-        const agentName = agentObj ? agentObj.name : '';
-        setOrders(prev => prev.map(o =>
-            o.id === selectedOrder.id
-                ? { ...o, deliveryAgent: agentName, deliveryPartnerId: agentId, status: 'Assigned' }
-                : o
-        ));
-        setIsAssignModalOpen(false);
-        setSelectedOrder(null);
-    };
- function convertFirestoreTimestampToIST(timestamp) {
+
+    const handleAssignAgent = async (agentId) => {
+       // console.log(agentId.selectedAgentId,"this is agent id",agentId.orderId,"this is order <id</id>");
+       await updateOrderAgent(agentId.orderId, agentId.selectedAgentId);
+     await fetchOrders();
+     await fetchDeliveryPartners();
+    setIsAssignModalOpen(false);
+    setSelectedOrder(null);
+};
+
+function convertFirestoreTimestampToIST(timestamp) {
   if (!timestamp || typeof timestamp._seconds !== 'number') return '';
 
   const utcDate = new Date(timestamp._seconds * 1000 + Math.floor(timestamp._nanoseconds / 1e6));
@@ -417,19 +418,24 @@ export default function OrdersDelivery() {
     );
 
     const DeliveryTab = () => (
+        console.log(filteredData),
         <>
+
             <div style={{ ...styles.tableRow, ...styles.tableHeader }}>
                 <span>Order ID</span><span>Delivery Agent</span><span>Date</span><span>Status</span><span>Actions</span>
             </div>
             {filteredData.map(order => {
+                console.log(order,"this is order");
                 const istCreatedAt = convertFirestoreTimestampToIST(order.createdAt);
+                const isDeliveryAgentAssigned = order.deliveryPartnerId && deliveryPartners.some(dp => dp.id === order.deliveryPartnerId);
+                const deliveryAgentName = isDeliveryAgentAssigned ? deliveryPartners.find(dp => dp.id === order.deliveryPartnerId)?.name : '';
                 return (
                     <div style={styles.tableRow} key={order.id}>
                      <span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{order.orderNumber}</span>
-                        <span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',paddingLeft:'8px'}}>{userName}</span>
+                        <span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',paddingLeft:'8px'}}>{deliveryAgentName}</span>
                         <span>{istCreatedAt ? istCreatedAt.toLocaleString('en-IN') : 'N/A'}</span>
                         <span>{order.status}</span>
-                        <span>{order.paymentStatus}</span>
+                        
                         <span><button style={styles.actionButton} onClick={() => setSelectedOrder(order)}><FaEye /></button></span>
                     </div>
                 );
@@ -506,9 +512,10 @@ export default function OrdersDelivery() {
                 />
             )}
             
-            {isTrackingModalOpen && selectedOrder && (
+            {
+            isTrackingModalOpen && selectedOrder && (
                 <TrackingModal
-                    order={selectedOrder}
+                    orders={selectedOrder}
                     onClose={() => setIsTrackingModalOpen(false)}
                 />
             )}

@@ -1,4 +1,4 @@
-import order from '../models/order.js'; // Import the order model
+import order from '../models/Order.js'; // Import the order model
 import delivryPartner from '../models/deliveryPartner.js'; // Import the delivery partner model
 import {admin ,db} from '../config/firebase.js'; // Import Firebase services
 
@@ -75,7 +75,14 @@ const updateStatus = async (req, res) => {
     return res.status(400).json({ message: 'Order ID and status are required' });
   }
   try {
-    await db.collection('orders').doc(orderId).update({ status });
+    
+    if(status=='Delivered'|| status=='Cancelled'|| status=='Assigned'|| status=='Out for Delivery') {
+      await db.collection('orders').doc(orderId).update({ status });
+      }else {
+      await db.collection('orders').doc(orderId).update({ prepareStatus: status });
+    }
+   
+    
     res.status(200).json({ message: 'Order status updated successfully' });
   } catch (error) {
     console.error('Error updating order status:', error);

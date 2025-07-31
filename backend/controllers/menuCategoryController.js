@@ -58,14 +58,14 @@ const updateCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { name, description, isActive } = req.body;
-    
-    // Get existing category
+
+    // Get the existing category first
     const existingCategory = await MenuCategory.findById(id);
     if (!existingCategory) {
-      return next(new ErrorResponse('Category not found', 404));
+      return next(new ErrorResponse(`Category not found with id of ${id}`, 404));
     }
 
-    // Handle file upload if exists
+    // Handle file upload if there's a new file
     const oldImagePath = existingCategory.image ? 
       path.join(process.cwd(), existingCategory.image.replace(process.env.BASE_URL || 'http://localhost:5000', '')) : 
       null;
@@ -76,13 +76,23 @@ const updateCategory = async (req, res, next) => {
       name: name || existingCategory.name,
       description: description !== undefined ? description : existingCategory.description,
       isActive: isActive !== undefined ? isActive !== 'false' : existingCategory.isActive,
-      ...(imagePath && { image: `${process.env.BASE_URL || 'http://localhost:5000'}/${imagePath.replace(/\\/g, '/')}` })
+      updatedAt: new Date()
     };
 
-    const updatedCategory = await MenuCategory.findByIdAndUpdate(id, updateData, {
-      new: true,
-      runValidators: true
+    // Add image path if there's a new image
+    if (imagePath) {
+      updateData.image = `${process.env.BASE_URL || 'http://localhost:5000'}/${imagePath.replace(/\\/g, '/')}`;
+    }
+
+    // Update the category using Firestore
+    const categoryToUpdate = new MenuCategory({
+      ...existingCategory,
+      ...updateData
     });
+    categoryToUpdate.id = id; // Set the ID for the existing document
+    
+    // Save the updated category
+    const updatedCategory = await categoryToUpdate.save();
 
     res.status(200).json({
       success: true,
@@ -90,7 +100,7 @@ const updateCategory = async (req, res, next) => {
     });
   } catch (error) {
     // Clean up uploaded file if there was an error
-    if (req.file && req.file.path) {
+    if (req.file?.path) {
       try {
         fs.unlinkSync(req.file.path);
       } catch (err) {
@@ -162,7 +172,8 @@ const deleteCategory = async (req, res, next) => {
       }
     }
     
-    await category.remove();
+    // Delete the category document
+    await category.delete();
     
     res.status(200).json({
       success: true,

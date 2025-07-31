@@ -264,7 +264,7 @@ export default function OrdersDelivery() {
     const filteredData = useMemo(() => {
         let data = activeTab === 'Orders'
             ? orders
-            : orders.filter(o => o.deliveryAgent && o.status !== 'Cancelled');
+            : orders.filter(o => o.deliveryPartnerId && o.status !== 'Cancelled');
 
         if (statusFilter !== 'All') {
             data = data.filter(o => o.status === statusFilter);
@@ -418,19 +418,24 @@ function convertFirestoreTimestampToIST(timestamp) {
     );
 
     const DeliveryTab = () => (
+        console.log(filteredData),
         <>
+
             <div style={{ ...styles.tableRow, ...styles.tableHeader }}>
                 <span>Order ID</span><span>Delivery Agent</span><span>Date</span><span>Status</span><span>Actions</span>
             </div>
             {filteredData.map(order => {
+                console.log(order,"this is order");
                 const istCreatedAt = convertFirestoreTimestampToIST(order.createdAt);
+                const isDeliveryAgentAssigned = order.deliveryPartnerId && deliveryPartners.some(dp => dp.id === order.deliveryPartnerId);
+                const deliveryAgentName = isDeliveryAgentAssigned ? deliveryPartners.find(dp => dp.id === order.deliveryPartnerId)?.name : '';
                 return (
                     <div style={styles.tableRow} key={order.id}>
                      <span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{order.orderNumber}</span>
-                        <span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',paddingLeft:'8px'}}>{userName}</span>
+                        <span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',paddingLeft:'8px'}}>{deliveryAgentName}</span>
                         <span>{istCreatedAt ? istCreatedAt.toLocaleString('en-IN') : 'N/A'}</span>
                         <span>{order.status}</span>
-                        <span>{order.paymentStatus}</span>
+                        
                         <span><button style={styles.actionButton} onClick={() => setSelectedOrder(order)}><FaEye /></button></span>
                     </div>
                 );

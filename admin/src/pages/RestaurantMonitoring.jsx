@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState,useEffect, useContext } from 'react';
 import { FaStar, FaEdit, FaTrash, FaPlus, FaUpload } from 'react-icons/fa';
+import { AdminContext } from '../contexts/adminContext';
+import { updateOrderAgent,updateOrderStatus } from '../services/orderService';
 
 // --- MOCK DATA ---
 const initialMenuItems = [
@@ -135,8 +137,9 @@ const Modal = ({ children, isOpen, onClose }) => {
 
 
 const RestaurantMonitoring = () => {
+  const {deliveryPartners,orders,users,fetchOrders} = useContext(AdminContext);
   const [menuItems, setMenuItems] = useState(initialMenuItems);
-  const [orders, setOrders] = useState(initialOrders);
+ // const [orders, setOrders] = useState(initialOrders);
   const [reviews] = useState(initialReviews);
   const [operatingHours, setOperatingHours] = useState(initialHours);
   const [isOnline, setIsOnline] = useState(true);
@@ -223,8 +226,9 @@ const RestaurantMonitoring = () => {
     setCurrentSubDishes(currentSubDishes.filter((_, i) => i !== index));
   };
 
-  const handleUpdateOrderStatus = (orderId, newStatus) => {
-    setOrders(orders.map(order => order.id === orderId ? { ...order, status: newStatus } : order));
+  const handleUpdateOrderStatus =  async (orderId, newStatus) => {
+    await updateOrderStatus(orderId, newStatus);
+    await fetchOrders(); // Assuming fetchOrders is defined to refresh the orders list
   };
 
   const handleDeleteCategory = (categoryToDelete) => {
@@ -559,28 +563,28 @@ const RestaurantMonitoring = () => {
             <tbody>
               {orders.map(order => (
                 <tr key={order.id}>
-                  <td style={styles.td} data-label="Order ID">{order.id}</td>
-                  <td style={styles.td} data-label="Cart Price">₹{order.cartPrice.toFixed(2)}</td>
+                  <td style={styles.td} data-label="Order ID">{order.orderNumber}</td>
+                  <td style={styles.td} data-label="Cart Price">₹{order.orderTotal}</td>
                   <td style={styles.td} data-label="Dishes Ordered">
                     <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                      {order.dishes.map(d => <li key={d.name}>{d.name} (x{d.qty})</li>)}
+                      {order.items.map(d => <li key={d.name}>{d.name} (x{d.quantity})</li>)}
                     </ul>
                   </td>
-                  <td style={styles.td} data-label="User Location">{order.location}</td>
+                  <td style={styles.td} data-label="User Location">{order.deliveryAddress.street}, {order.deliveryAddress.city}, {order.deliveryAddress.state}, {order.deliveryAddress.pincode}</td>
                   <td style={styles.td} data-label="Actions" className="action-cell-container">
-                    {order.status === 'Pending' && (
+                    {order.prepareStatus === 'Pending' && (
                       <div style={{ display: 'flex', gap: '10px' }}>
                         <button style={{ ...styles.button, backgroundColor: '#2ecc71', color: 'white' }} onClick={() => handleUpdateOrderStatus(order.id, 'Preparing')}>Accept</button>
                         <button style={{ ...styles.button, ...styles.deleteButton }} onClick={() => handleUpdateOrderStatus(order.id, 'Rejected')}>Reject</button>
                       </div>
                     )}
-                    {order.status === 'Rejected' && (
+                    {order.prepareStatus === 'Rejected' && (
                       <span style={{ color: '#e74c3c', fontWeight: 'bold' }}>Rejected</span>
                     )}
-                    {(order.status === 'Preparing' || order.status === 'Ready for Dispatch') && (
+                    {(order.prepareStatus === 'Preparing' || order.prepareStatus === 'Ready for Dispatch') && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <select
-                          value={order.status}
+                          value={order.prepareStatus}
                           onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
                           style={{
                             ...styles.input,

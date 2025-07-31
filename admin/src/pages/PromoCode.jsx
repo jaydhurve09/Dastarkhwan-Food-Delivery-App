@@ -12,7 +12,7 @@ import {
   FaCheckCircle,
   FaClock
 } from 'react-icons/fa';
-import { toast } from 'react-toastify';
+
 import { 
   getPromoCodes, 
   createPromoCode, 
@@ -69,7 +69,7 @@ const PromoCode = () => {
       } catch (err) {
         console.error('Failed to fetch promocodes:', err);
         setError('Failed to load promo codes. Please try again later.');
-        toast.error('Failed to load promo codes');
+      
       } finally {
         setLoading(false);
       }
@@ -170,10 +170,10 @@ const PromoCode = () => {
       try {
         await deletePromoCode(id);
         setPromoCodes(promoCodes.filter(promo => promo.id !== id));
-        toast.success('Promo code deleted successfully');
+        
       } catch (error) {
         console.error('Error deleting promo code:', error);
-        toast.error(error.message || 'Failed to delete promo code');
+        
       }
     }
   };
@@ -188,13 +188,13 @@ const PromoCode = () => {
         
         // Validate discount value
         if (isNaN(discountValue) || discountValue <= 0) {
-          toast.error('Discount value must be greater than 0');
+       
           return;
         }
         
         // Additional validation for percentage discount
         if (formData.discountType === 'percentage' && discountValue > 100) {
-          toast.error('Discount percentage cannot exceed 100%');
+         
           return;
         }
 
@@ -203,7 +203,7 @@ const PromoCode = () => {
         const endDate = formData.endDate ? new Date(formData.endDate) : null;
         
         if (endDate && endDate <= startDate) {
-          toast.error('End date must be after start date');
+          
           return;
         }
         
@@ -224,17 +224,17 @@ const PromoCode = () => {
           setPromoCodes(promoCodes.map(p => 
             p.id === selectedPromo.id ? { ...p, ...updatedPromo } : p
           ));
-          toast.success('Promo code updated successfully');
+         
         } else {
           const newPromo = await createPromoCode(promoData);
           setPromoCodes([...promoCodes, newPromo]);
-          toast.success('Promo code created successfully');
+          
         }
         
         setIsModalOpen(false);
       } catch (error) {
         console.error('Error saving promo code:', error);
-        toast.error(error.message || 'Failed to save promo code');
+     
       }
     };
   
@@ -257,20 +257,25 @@ const PromoCode = () => {
           </div>
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Code Field */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Code *</label>
+                <label className="block text-sm font-medium text-gray-700" htmlFor="promo-code">Code *</label>
                 <input
-                  type="text"
+                  id="promo-code"
                   name="code"
+                  type="text"
                   value={formData.code}
                   onChange={handleChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   required
                 />
               </div>
+
+              {/* Discount Type */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Discount Type *</label>
+                <label className="block text-sm font-medium text-gray-700" htmlFor="discount-type">Discount Type *</label>
                 <select
+                  id="discount-type"
                   name="discountType"
                   value={formData.discountType}
                   onChange={handleChange}
@@ -281,14 +286,20 @@ const PromoCode = () => {
                   <option value="fixed_amount">Fixed Amount</option>
                 </select>
               </div>
-              
-              {/* Add Discount Value Field */}
+
+              {/* Discount Value */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
+                <label className="block text-sm font-medium text-gray-700" htmlFor="discount-value">
                   {formData.discountType === 'percentage' ? 'Discount Percentage *' : 'Discount Amount *'}
                 </label>
                 <div className="relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <span className="text-gray-500 sm:text-sm">
+                      {formData.discountType === 'percentage' ? '%' : '₹'}
+                    </span>
+                  </div>
                   <input
+                    id="discount-value"
                     type="number"
                     name="discountValue"
                     value={formData.discountValue}
@@ -296,41 +307,26 @@ const PromoCode = () => {
                     min="0"
                     step={formData.discountType === 'percentage' ? '0.01' : '1'}
                     max={formData.discountType === 'percentage' ? '100' : ''}
-                    className={`block w-full pl-3 pr-12 py-2 border ${
-                      formData.discountValue <= 0 || 
-                      (formData.discountType === 'percentage' && formData.discountValue > 100)
-                        ? 'border-red-300 focus:ring-red-500 focus:border-red-500' 
-                        : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
-                    } rounded-md`}
+                    className="block w-full pl-8 pr-12 py-2.5 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all duration-200"
                     placeholder={formData.discountType === 'percentage' ? '0.00' : '0'}
                     required
                   />
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500 sm:text-sm">
-                      {formData.discountType === 'percentage' ? '%' : '₹'}
-                    </span>
-                  </div>
                 </div>
-                {formData.discountValue <= 0 && (
-                  <p className="mt-1 text-sm text-red-600">Discount value must be greater than 0</p>
-                )}
-                {formData.discountType === 'percentage' && formData.discountValue > 100 && (
-                  <p className="mt-1 text-sm text-red-600">Discount percentage cannot exceed 100%</p>
-                )}
               </div>
 
-              {/* Add Min Order Value */}
+              {/* Min Order Value */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Minimum Order Value</label>
+                <label className="block text-sm font-medium text-gray-700" htmlFor="min-order">Minimum Order Value</label>
                 <div className="relative rounded-md shadow-sm">
                   <input
+                    id="min-order"
                     type="number"
                     name="minOrderValue"
                     value={formData.minOrderValue}
                     onChange={handleChange}
                     min="0"
                     step="0.01"
-                    className="block w-full pl-3 pr-12 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    className="block w-full pl-3 pr-12 py-2.5 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all duration-200"
                     placeholder="0.00"
                   />
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
@@ -339,36 +335,101 @@ const PromoCode = () => {
                 </div>
               </div>
 
-              {/* Add Start Date */}
+              {/* Start Date */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Start Date *</label>
+                <label className="block text-sm font-medium text-gray-700" htmlFor="start-date">Start Date *</label>
+                <div className="relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <input
+                    id="start-date"
+                    type="date"
+                    name="startDate"
+                    value={formData.startDate}
+                    min={new Date().toISOString().split('T')[0]}
+                    onChange={handleChange}
+                    className="block w-full pl-10 pr-3 py-2.5 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all duration-200"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* End Date */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700" htmlFor="end-date">End Date *</label>
+                <div className="relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <input
+                    id="end-date"
+                    type="date"
+                    name="endDate"
+                    value={formData.endDate || ''}
+                    min={formData.startDate || new Date().toISOString().split('T')[0]}
+                    onChange={handleChange}
+                    className="block w-full pl-10 pr-3 py-2.5 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all duration-200"
+                    required
+                  />
+                </div>
+                {formData.endDate && new Date(formData.endDate) <= new Date(formData.startDate) && (
+                  <p className="mt-1 text-sm text-red-600 flex items-center">
+                    <svg className="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    End date must be after start date
+                  </p>
+                )}
+              </div>
+
+              {/* Usage Limit */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700" htmlFor="usage-limit">Usage Limit</label>
                 <input
-                  type="date"
-                  name="startDate"
-                  value={formData.startDate}
-                  min={new Date().toISOString().split('T')[0]}
+                  id="usage-limit"
+                  type="number"
+                  name="usageLimit"
+                  value={formData.usageLimit}
                   onChange={handleChange}
+                  min="1"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  required
+                  placeholder="Leave empty for unlimited usage"
                 />
               </div>
 
-              {/* Add End Date */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">End Date *</label>
+              {/* Active Status */}
+              <div className="space-y-2 flex items-center">
                 <input
-                  type="date"
-                  name="endDate"
-                  value={formData.endDate || ''}
-                  min={formData.startDate || new Date().toISOString().split('T')[0]}
+                  id="is-active"
+                  type="checkbox"
+                  name="isActive"
+                  checked={formData.isActive}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  required
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                 />
-                {formData.endDate && new Date(formData.endDate) <= new Date(formData.startDate) && (
-                  <p className="mt-1 text-sm text-red-600">End date must be after start date</p>
-                )}
+                <label htmlFor="is-active" className="ml-2 block text-sm text-gray-700">
+                  Active
+                </label>
               </div>
+            </div>
+
+            {/* Description */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700" htmlFor="description">Description</label>
+              <textarea
+                id="description"
+                name="description"
+                value={formData.description}
+                onChange={handleChange}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                placeholder="Enter promo code description (optional)"
+              />
             </div>
             
             {/* Add more form fields here */}

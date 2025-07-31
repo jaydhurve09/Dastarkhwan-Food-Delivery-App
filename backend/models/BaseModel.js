@@ -178,6 +178,42 @@ export class BaseModel {
   }
 
   /**
+   * Update a document by ID
+   * @param {string} id - Document ID to update
+   * @param {Object} data - Data to update
+   * @returns {Promise<Object>} - Updated document
+   */
+  static async update(id, data) {
+    if (!id) {
+      throw new Error('Document ID is required for update');
+    }
+    
+    try {
+      const docRef = this.getCollection().doc(id);
+      
+      // Don't allow updating the ID
+      if (data.id) {
+        delete data.id;
+      }
+      
+      // Add/update timestamps
+      const updateData = {
+        ...data,
+        updatedAt: FieldValue.serverTimestamp()
+      };
+      
+      await docRef.update(updateData);
+      
+      // Fetch and return the updated document
+      const updatedDoc = await docRef.get();
+      return this.fromFirestore(updatedDoc);
+    } catch (error) {
+      console.error(`[${this.name}] Error updating document:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Find a document by ID
    */
   static async findById(id) {

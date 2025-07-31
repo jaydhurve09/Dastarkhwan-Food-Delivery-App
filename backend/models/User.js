@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs';
 
 export class User extends BaseModel {
   static collectionName = 'users';
+  
+  // BaseModel's getCollection will be used
 
   constructor(data = {}) {
     super();
@@ -10,6 +12,7 @@ export class User extends BaseModel {
     this.email = data.email || ''; // Required, unique
     this.phone = data.phone || ''; // Required, unique
     this.password = data.password || ''; // Required
+    this.role = data.role || 'user'; // 'user', 'admin', etc.
     this.address = data.address || {
       street: '',
       city: '',
@@ -50,6 +53,7 @@ export class User extends BaseModel {
       email: this.email.toLowerCase(),
       phone: this.phone,
       password: this.password,
+      role: this.role,
       address: this.address,
       isActive: this.isActive,
       fcmToken: this.fcmToken,
@@ -79,6 +83,7 @@ export class User extends BaseModel {
   }
 
   // Static method to find user by email (case-insensitive)
+
   static async findByEmail(email) {
     if (!email) {
       console.log('No email provided to findByEmail');
@@ -188,4 +193,9 @@ export class User extends BaseModel {
   }
 }
 
-export default new User();
+// Export the class itself for static method access
+export default User;
+
+// Also export an instance for backward compatibility
+const userInstance = new User();
+export { userInstance as UserInstance };

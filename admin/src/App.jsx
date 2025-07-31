@@ -1,5 +1,7 @@
 // App.jsx
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import UserManagement from './pages/UserManagement';
@@ -21,45 +23,48 @@ import './App.css';
 
 function App() {
   return (
-    <Router>
-      <AdminProvider>
-        <div className="app-container">
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/admin/login" element={<AdminLogin />} />
-            <Route path="/forgot-password" element={<ForgotPassword />} />
-            <Route path="/reset-password/:token" element={<ResetPassword />} />
-            
-            {/* Protected Routes - Requires Authentication */}
-            <Route element={<ProtectedRoute />}>
-              <Route element={
-                <>
-                  <Sidebar />
-                  <div className="main-content">
-                    <Outlet />
-                  </div>
-                </>
-              }>
-                
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/users" element={<UserManagement />} />
-                <Route path="/orders" element={<OrdersDelivery />} />
-                <Route path="/payment" element={<PaymentReport />} />
-                <Route path="/promo" element={<PromoCode />} />
-                <Route path="/restaurants" element={<RestaurantMonitoring />} />
-                {/* <Route path="/admin/cms" element={<CMSManagement />} /> */}
-                <Route path="/admin/settings" element={<AdminSettings />} />
-                <Route path="/admin/feedback" element={<FeedbackAndComplaints />} />
-                <Route path="/admin/notifications" element={<Notification />} />
-                <Route path="/delivery-partners" element={<DeliveryPartnerManagement />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-                
+    <>
+      <Router>
+        <AdminProvider>
+          <div className="app-container">
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/admin/login" element={<AdminLogin />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password/:token" element={<ResetPassword />} />
+              
+              {/* Protected Routes - Requires Authentication */}
+              <Route element={<ProtectedRoute />}>
+                <Route element={
+                  <>
+                    <Sidebar />
+                    <div className="main-content">
+                      <Outlet />
+                    </div>
+                  </>
+                }>
+                  
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/users" element={<UserManagement />} />
+                  <Route path="/orders" element={<OrdersDelivery />} />
+                  <Route path="/payment" element={<PaymentReport />} />
+                  <Route path="/promo" element={<PromoCode />} />
+                  <Route path="/restaurants" element={<RestaurantMonitoring />} />
+                  {/* <Route path="/admin/cms" element={<CMSManagement />} /> */}
+                  <Route path="/admin/settings" element={<AdminSettings />} />
+                  <Route path="/admin/feedback" element={<FeedbackAndComplaints />} />
+                  <Route path="/admin/notifications" element={<Notification />} />
+                  <Route path="/delivery-partners" element={<DeliveryPartnerManagement />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                  
+                </Route>
               </Route>
-            </Route>
-          </Routes>
-        </div>
-      </AdminProvider>
-    </Router>
+            </Routes>
+          </div>
+        </AdminProvider>
+      </Router>
+      <ToastContainer position="top-right" autoClose={5000} hideProgressBar={false} newestOnTop closeOnClick rtl={false} pauseOnFocusLoss draggable pauseOnHover />
+    </>
   );
 }
 

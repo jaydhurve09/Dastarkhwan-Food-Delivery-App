@@ -81,6 +81,7 @@ export class Order extends BaseModel {
     // Status
     this.status = data.status || Order.STATUS.PENDING;
     this.paymentStatus = data.paymentStatus || Order.PAYMENT_STATUS.PENDING;
+    this.prepareStatus = data.prepareStatus || 'Pending'; // Custom status for preparation
     
     // Payment info
     this.paymentMethod = data.paymentMethod || '';
@@ -121,6 +122,7 @@ export class Order extends BaseModel {
       estimatedDeliveryTime: this.estimatedDeliveryTime,
       actualDeliveryTime: this.actualDeliveryTime,
       status: this.status,
+      prepareStatus: this.prepareStatus,
       paymentStatus: this.paymentStatus,
       paymentMethod: this.paymentMethod,
       paymentId: this.paymentId,

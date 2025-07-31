@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { FaStar, FaEdit, FaTrash, FaPlus, FaUpload } from 'react-icons/fa';
 import axios from 'axios';
+import { AdminContext } from '../contexts/adminContext';
+
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -168,6 +170,9 @@ const RestaurantMonitoring = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Add state to track active section
+  const [activeSection, setActiveSection] = useState('menu'); // 'menu' or 'categories'
+
   // Fetch categories on component mount
   useEffect(() => {
     fetchCategories();
@@ -304,29 +309,28 @@ const RestaurantMonitoring = () => {
   };
 
   // Delete category
-  const handleDeleteCategory = async (category) => {
-    if (!window.confirm(`Are you sure you want to delete the category "${category.name}"? This action cannot be undone.`)) {
-      return;
-    }
-    
-    try {
-      setIsLoading(true);
-      setError('');
-      const token = localStorage.getItem('adminToken');
-      await axios.delete(`${API_BASE_URL}/menu-categories/${category.id}`, {
-        headers: { 
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      setCategories(categories.filter(cat => cat.id !== category.id));
-      setSuccess('Category deleted successfully!');
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      console.error('Error deleting category:', err);
-      setError(err.response?.data?.message || 'Failed to delete category. It might be in use by menu items.');
-    } finally {
-      setIsLoading(false);
+  const handleDeleteCategory = async (categoryId) => {
+    if (window.confirm('Are you sure you want to delete this category? This action cannot be undone.')) {
+      try {
+        setIsLoading(true);
+        setError('');
+        
+        await axios.delete(`http://localhost:5000/api/menu-categories/${categoryId}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+          }
+        });
+        
+        // Remove the category from the local state
+        setCategories(categories.filter(cat => cat.id !== categoryId));
+        setSuccess('Category deleted successfully!');
+        setTimeout(() => setSuccess(''), 3000);
+      } catch (err) {
+        console.error('Error deleting category:', err);
+        setError(err.response?.data?.message || 'Failed to delete category. It might be in use by menu items.');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -923,301 +927,356 @@ const RestaurantMonitoring = () => {
               <button style={{ ...styles.button, ...styles.addButton }} onClick={() => { setEditingItem(null); setMenuModalOpen(true); }}><FaPlus /> Add New Item</button>
               <button
                 style={{ ...styles.button, ...styles.addButton, backgroundColor: '#f39c12', marginTop: '10px', marginLeft: '10px' }}
-                onClick={() => setCategoryModalOpen(true)}>
-                <FaPlus /> Manage Categories
+                onClick={() => setActiveSection(activeSection === 'categories' ? 'menu' : 'categories')}>
+                <FaPlus /> {activeSection === 'categories' ? 'Hide Categories' : 'Manage Categories'}
               </button>
             </div>
           </div>
 
-          {Object.keys(menuByCategory).map(category => (
-            <div key={category}>
-              <h3 style={styles.categoryTitle}>{category}</h3>
-              <table style={styles.table} className="responsive-table">
-                <thead>
-                  <tr>
-                    <th style={styles.th}>Dish</th>
-                    <th style={styles.th}>Price</th>
-                    <th style={styles.th}>Recommendation</th> {/* Added column */}
-                    <th style={styles.th}>Available</th>
-                    <th style={styles.th}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {menuByCategory[category].map(item => (
-                    <tr key={item.id}>
-                      <td style={styles.td} data-label="Dish">
-                        <div style={{ display: 'flex', alignItems: 'center' }}>
-                          <img src={item.image} alt={item.name} style={styles.menuItemImage} />
-                          <div>
-                            <span style={{ fontWeight: 'bold' }}>{item.name}</span>
-                            {item.subCategory && <span style={{ fontSize: '0.8rem', color: 'white', backgroundColor: item.subCategory === 'Veg' ? '#27ae60' : '#c0392b', padding: '2px 6px', borderRadius: '4px', marginLeft: '8px' }}>{item.subCategory}</span>}
-                            <p style={{ fontSize: '0.9rem', color: '#666', margin: '4px 0 0 0' }}>{item.description}</p>
-                            {item.subDishes && item.subDishes.length > 0 && (
-                              <div style={{ marginTop: '10px' }}>
-                                <strong style={{ fontSize: '0.9rem' }}>Sub-Dishes:</strong>
-                                <ul style={{ margin: '5px 0 0 0', paddingLeft: '20px', fontSize: '0.9rem' }}>
-                                  {item.subDishes.map((sd, i) => <li key={i}>{sd.name} (+₹{sd.price.toFixed(2)})</li>)}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td style={styles.td} data-label="Price">₹{item.price.full.toFixed(2)}</td>
-                      {/* Display Recommendation Tags */}
-                      <td style={styles.td} data-label="Recommendation">
-                        {item.recommendation && item.recommendation.map(tag => (
-                          <span
-                            key={tag}
-                            style={{
-                              ...styles.recommendationTag,
-                              backgroundColor: tag === 'recommended' ? '#3498db' : '#e67e22'
-                            }}
-                          >
-                            {tag === 'recommended' ? 'Recommended' : 'Most Loved'}
-                          </span>
-                        ))}
-                        {(!item.recommendation || item.recommendation.length === 0) && (
-                          <span style={{ color: '#7f8c8d', fontSize: '0.8em' }}>None</span>
-                        )}
-                      </td>
-                      <td style={styles.td} data-label="Available">
-                        <label style={styles.toggleSwitch}>
-                          <input
-                            type="checkbox"
-                            style={styles.toggleInput}
-                            checked={item.available}
-                            onChange={() => setMenuItems(menuItems.map(menuItem => menuItem.id === item.id ? { ...menuItem, available: !menuItem.available } : menuItem))}
-                          />
-                          <span style={sliderStyle(item.available)}><span style={sliderBeforeStyle(item.available)}></span></span>
-                        </label>
-                      </td>
-                      <td style={styles.td} data-label="Actions" className="action-cell-container">
-                        <button
-                          style={{ ...styles.button, ...styles.editButton, marginRight: '10px' }}
-                          onClick={() => {
-                            setEditingItem(item);
-                            setImagePreview(item.image);
-                            setSelectedSubCategory(item.subCategory || '');
-                            setCurrentSubCategories(categories.find(c => c.name === item.category)?.subCategories || []);
-                            setHasSubDishes(item.subDishes && item.subDishes.length > 0);
-                            setCurrentSubDishes(item.subDishes || []);
-                            // Set recommendation tags for edit
-                            setSelectedRecommendationTags(new Set(item.recommendation || []));
-                            setMenuModalOpen(true);
-                          }}
-                        >
-                          <FaEdit /> Edit
-                        </button>
-                        <button
-                          style={{ ...styles.button, ...styles.deleteButton }}
-                          onClick={() => handleDeleteMenuItem(item.id)}
-                        >
-                          <FaTrash /> Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ))}
-        </div>
-
-        {/* --- Categories Section --- */}
-        <div style={styles.card}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h3 style={styles.cardTitle}>Menu Categories</h3>
+          {activeSection === 'menu' && (
             <div>
-              <button 
-                onClick={fetchCategories}
-                style={{ 
-                  ...styles.button, 
-                  marginRight: '10px',
-                  backgroundColor: '#f0f0f0',
-                  color: '#333',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px'
-                }}
-                disabled={isLoading}
-              >
-                <span>🔄</span> {isLoading ? 'Refreshing...' : 'Refresh'}
-              </button>
-              <button 
-                onClick={() => {
-                  console.log('Current categories state:', categories);
-                  setCategoryModalOpen(true);
-                }}
-                style={{ 
-                  ...styles.button, 
-                  ...styles.addButton,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px'
-                }}
-                disabled={isLoading}
-              >
-                <FaPlus /> Add Category
-              </button>
+              {Object.keys(menuByCategory).map(category => (
+                <div key={category}>
+                  <h3 style={styles.categoryTitle}>{category}</h3>
+                  <table style={styles.table} className="responsive-table">
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>Dish</th>
+                        <th style={styles.th}>Price</th>
+                        <th style={styles.th}>Recommendation</th> {/* Added column */}
+                        <th style={styles.th}>Available</th>
+                        <th style={styles.th}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {menuByCategory[category].map(item => (
+                        <tr key={item.id}>
+                          <td style={styles.td} data-label="Dish">
+                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                              <img src={item.image} alt={item.name} style={styles.menuItemImage} />
+                              <div>
+                                <span style={{ fontWeight: 'bold' }}>{item.name}</span>
+                                {item.subCategory && <span style={{ fontSize: '0.8rem', color: 'white', backgroundColor: item.subCategory === 'Veg' ? '#27ae60' : '#c0392b', padding: '2px 6px', borderRadius: '4px', marginLeft: '8px' }}>{item.subCategory}</span>}
+                                <p style={{ fontSize: '0.9rem', color: '#666', margin: '4px 0 0 0' }}>{item.description}</p>
+                                {item.subDishes && item.subDishes.length > 0 && (
+                                  <div style={{ marginTop: '10px' }}>
+                                    <strong style={{ fontSize: '0.9rem' }}>Sub-Dishes:</strong>
+                                    <ul style={{ margin: '5px 0 0 0', paddingLeft: '20px', fontSize: '0.9rem' }}>
+                                      {item.subDishes.map((sd, i) => <li key={i}>{sd.name} (+₹{sd.price.toFixed(2)})</li>)}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td style={styles.td} data-label="Price">₹{item.price.full.toFixed(2)}</td>
+                          {/* Display Recommendation Tags */}
+                          <td style={styles.td} data-label="Recommendation">
+                            {item.recommendation && item.recommendation.map(tag => (
+                              <span
+                                key={tag}
+                                style={{
+                                  ...styles.recommendationTag,
+                                  backgroundColor: tag === 'recommended' ? '#3498db' : '#e67e22'
+                                }}
+                              >
+                                {tag === 'recommended' ? 'Recommended' : 'Most Loved'}
+                              </span>
+                            ))}
+                            {(!item.recommendation || item.recommendation.length === 0) && (
+                              <span style={{ color: '#7f8c8d', fontSize: '0.8em' }}>None</span>
+                            )}
+                          </td>
+                          <td style={styles.td} data-label="Available">
+                            <label style={styles.toggleSwitch}>
+                              <input
+                                type="checkbox"
+                                style={styles.toggleInput}
+                                checked={item.available}
+                                onChange={() => setMenuItems(menuItems.map(menuItem => menuItem.id === item.id ? { ...menuItem, available: !menuItem.available } : menuItem))}
+                              />
+                              <span style={sliderStyle(item.available)}><span style={sliderBeforeStyle(item.available)}></span></span>
+                            </label>
+                          </td>
+                          <td style={styles.td} data-label="Actions" className="action-cell-container">
+                            <button
+                              style={{ ...styles.button, ...styles.editButton, marginRight: '10px' }}
+                              onClick={() => {
+                                setEditingItem(item);
+                                setImagePreview(item.image);
+                                setSelectedSubCategory(item.subCategory || '');
+                                setCurrentSubCategories(categories.find(c => c.name === item.category)?.subCategories || []);
+                                setHasSubDishes(item.subDishes && item.subDishes.length > 0);
+                                setCurrentSubDishes(item.subDishes || []);
+                                // Set recommendation tags for edit
+                                setSelectedRecommendationTags(new Set(item.recommendation || []));
+                                setMenuModalOpen(true);
+                              }}
+                            >
+                              <FaEdit /> Edit
+                            </button>
+                            <button
+                              style={{ ...styles.button, ...styles.deleteButton }}
+                              onClick={() => handleDeleteMenuItem(item.id)}
+                            >
+                              <FaTrash /> Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
             </div>
-          </div>
-          
-          {success && (
-            <div style={{
-              backgroundColor: '#d4edda',
-              color: '#155724',
-              padding: '10px',
-              borderRadius: '4px',
-              marginBottom: '15px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <span>{success}</span>
-              <button 
-                onClick={() => setSuccess('')}
-                style={{
-                  background: 'none',
-                  border: 'none',
+          )}
+
+          {activeSection === 'categories' && (
+            <div style={styles.card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h3 style={styles.cardTitle}>Menu Categories</h3>
+                <div>
+                  <button 
+                    onClick={fetchCategories}
+                    style={{ 
+                      ...styles.button, 
+                      marginRight: '10px',
+                      backgroundColor: '#f0f0f0',
+                      color: '#333',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                    disabled={isLoading}
+                  >
+                    <span>🔄</span> {isLoading ? 'Refreshing...' : 'Refresh'}
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setEditingCategory(null);
+                      setNewCategory({ 
+                        name: '', 
+                        isActive: true, 
+                        hasSubcategories: false, 
+                        subCategories: [] 
+                      });
+                      setCategoryModalOpen(true);
+                    }}
+                    style={{ 
+                      ...styles.button, 
+                      ...styles.addButton,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                    disabled={isLoading}
+                  >
+                    <FaPlus /> Add Category
+                  </button>
+                </div>
+              </div>
+              
+              {success && (
+                <div style={{
+                  backgroundColor: '#d4edda',
                   color: '#155724',
-                  cursor: 'pointer',
-                  fontSize: '16px'
-                }}
-              >
-                ×
-              </button>
-            </div>
-          )}
-          
-          {error && (
-            <div style={{
-              backgroundColor: '#f8d7da',
-              color: '#721c24',
-              padding: '10px',
-              borderRadius: '4px',
-              marginBottom: '15px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <span>{error}</span>
-              <button 
-                onClick={() => setError('')}
-                style={{
-                  background: 'none',
-                  border: 'none',
+                  padding: '10px',
+                  borderRadius: '4px',
+                  marginBottom: '15px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <span>{success}</span>
+                  <button 
+                    onClick={() => setSuccess('')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#155724',
+                      cursor: 'pointer',
+                      fontSize: '16px'
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+              
+              {error && (
+                <div style={{
+                  backgroundColor: '#f8d7da',
                   color: '#721c24',
-                  cursor: 'pointer',
-                  fontSize: '16px'
-                }}
-              >
-                ×
-              </button>
-            </div>
-          )}
-          
-          {isLoading && categories.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '20px' }}>
-              <div className="spinner">Loading categories...</div>
-            </div>
-          ) : categories.length === 0 ? (
-            <div style={{
-              textAlign: 'center',
-              padding: '30px',
-              border: '2px dashed #ddd',
-              borderRadius: '8px',
-              backgroundColor: '#f9f9f9'
-            }}>
-              <p style={{ marginBottom: '15px', fontSize: '16px', color: '#666' }}>
-                {categories.length === 0 ? 'No categories found.' : `Found ${categories.length} categories but not displaying.`}
-              </p>
-              <button 
-                onClick={() => {
-                  console.log('Current categories state:', categories);
-                  setCategoryModalOpen(true);
-                }}
-                style={{
-                  ...styles.button,
-                  ...styles.addButton,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px'
-                }}
-              >
-                <FaPlus /> Add Your First Category
-              </button>
-            </div>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <div>Debug: Found {categories.length} categories</div>
-              <table style={styles.table} className="responsive-table">
-                <thead>
-                  <tr>
-                    <th style={styles.th}>Name</th>
-                    <th style={styles.th}>Status</th>
-                    <th style={styles.th}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {categories.map((category) => (
-                    <tr key={category.id}>
-                      <td style={styles.td}>
-                        <div style={{ fontWeight: 'bold' }}>{category.name}</div>
-                      </td>
-                      <td style={styles.td}>
-                        <span 
-                          style={{
-                            padding: '4px 12px',
-                            borderRadius: '12px',
-                            backgroundColor: category.isActive ? '#d4edda' : '#f8d7da',
-                            color: category.isActive ? '#155724' : '#721c24',
-                            fontSize: '0.85em',
-                            fontWeight: 'bold',
-                            display: 'inline-block',
-                            minWidth: '80px',
-                            textAlign: 'center'
-                          }}
-                        >
-                          {category.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td style={styles.td}>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button 
-                            onClick={() => handleEditCategory(category)}
-                            style={{ 
-                              ...styles.button, 
-                              ...styles.editButton,
-                              padding: '6px 12px',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '5px'
-                            }}
-                            disabled={isLoading}
-                          >
-                            <FaEdit size={14} /> Edit
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteCategory(category)}
-                            style={{ 
-                              ...styles.button, 
-                              ...styles.deleteButton,
-                              padding: '6px 12px',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '5px'
-                            }}
-                            disabled={isLoading}
-                          >
-                            <FaTrash size={14} /> Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                  padding: '10px',
+                  borderRadius: '4px',
+                  marginBottom: '15px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <span>{error}</span>
+                  <button 
+                    onClick={() => setError('')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#721c24',
+                      cursor: 'pointer',
+                      fontSize: '16px'
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+              
+              {isLoading && categories.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px' }}>
+                  <div className="spinner">Loading categories...</div>
+                </div>
+              ) : categories.length === 0 ? (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '30px',
+                  border: '2px dashed #ddd',
+                  borderRadius: '8px',
+                  backgroundColor: '#f9f9f9'
+                }}>
+                  <p style={{ marginBottom: '15px', fontSize: '16px', color: '#666' }}>
+                    No categories found.
+                  </p>
+                  <button 
+                    onClick={() => {
+                      setEditingCategory(null);
+                      setNewCategory({ 
+                        name: '', 
+                        isActive: true, 
+                        hasSubcategories: false, 
+                        subCategories: [] 
+                      });
+                      setCategoryModalOpen(true);
+                    }}
+                    style={{
+                      ...styles.button,
+                      ...styles.addButton,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                  >
+                    <FaPlus /> Add Your First Category
+                  </button>
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={styles.table} className="responsive-table">
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>Name</th>
+                        <th style={styles.th}>Subcategories</th>
+                        <th style={styles.th}>Status</th>
+                        <th style={styles.th}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {categories.map((category) => (
+                        <tr key={category.id || category._id}>
+                          <td style={styles.td}>
+                            <div style={{ fontWeight: 'bold' }}>{category.name}</div>
+                          </td>
+                          <td style={styles.td}>
+                            {category.hasSubcategories && category.subCategories?.length > 0 ? (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '200px' }}>
+                                {category.subCategories.slice(0, 3).map((sub, idx) => (
+                                  <span 
+                                    key={idx}
+                                    style={{
+                                      backgroundColor: '#e9ecef',
+                                      padding: '2px 8px',
+                                      borderRadius: '12px',
+                                      fontSize: '0.8em',
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      maxWidth: '100%',
+                                      display: 'inline-block'
+                                    }}
+                                    title={sub}
+                                  >
+                                    {sub}
+                                  </span>
+                                ))}
+                                {category.subCategories.length > 3 && (
+                                  <span style={{
+                                    backgroundColor: '#f8f9fa',
+                                    padding: '2px 8px',
+                                    borderRadius: '12px',
+                                    fontSize: '0.8em',
+                                    color: '#6c757d'
+                                  }}>
+                                    +{category.subCategories.length - 3} more
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ color: '#6c757d', fontStyle: 'italic' }}>No subcategories</span>
+                            )}
+                          </td>
+                          <td style={styles.td}>
+                            <span 
+                              style={{
+                                padding: '4px 12px',
+                                borderRadius: '12px',
+                                backgroundColor: category.isActive ? '#d4edda' : '#f8d7da',
+                                color: category.isActive ? '#155724' : '#721c24',
+                                fontSize: '0.85em',
+                                fontWeight: 'bold',
+                                display: 'inline-block',
+                                minWidth: '80px',
+                                textAlign: 'center'
+                              }}
+                            >
+                              {category.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td style={styles.td}>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button 
+                                onClick={() => handleEditCategory(category)}
+                                style={{ 
+                                  ...styles.button, 
+                                  ...styles.editButton,
+                                  padding: '6px 12px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px'
+                                }}
+                                disabled={isLoading}
+                              >
+                                <FaEdit size={14} /> Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCategory(category.id || category._id)}
+                                style={{
+                                  ...styles.button,
+                                  ...styles.deleteButton,
+                                  padding: '6px 12px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px'
+                                }}
+                                disabled={isLoading}
+                              >
+                                <FaTrash size={14} /> Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -14,7 +14,11 @@ import {
   getPromoCodes, 
   createPromoCode, 
   updatePromoCode, 
-  deletePromoCode 
+  deletePromoCode, 
+  getAllUsers, 
+  getAllMenuItems, 
+  getAllCategories, 
+  togglePromoCodeActive
 } from '../services/promoCodeService';
 import './PromoCode.css';
 
@@ -49,8 +53,23 @@ const PromoCode = () => {
     startDate: new Date().toISOString().split('T')[0],
     endDate: '',
     usageLimit: '',
-    isActive: true
+    isActive: true,
+    userType: 'all',
+    specificUsers: [],
+    appliesTo: 'total',
+    menuItems: [],
+    categories: []
   });
+  const [allUsers, setAllUsers] = useState([]);
+  const [allMenuItems, setAllMenuItems] = useState([]);
+  const [allCategories, setAllCategories] = useState([]);
+// Loading and error states for dropdowns
+const [usersLoading, setUsersLoading] = useState(false);
+const [usersError, setUsersError] = useState("");
+const [menuLoading, setMenuLoading] = useState(false);
+const [menuError, setMenuError] = useState("");
+const [catLoading, setCatLoading] = useState(false);
+const [catError, setCatError] = useState("");
   // Delete modal state
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -77,6 +96,27 @@ const PromoCode = () => {
 
     fetchPromoCodes();
   }, []);
+
+  // Fetch users, menu items, categories when modal opens
+  useEffect(() => {
+    if (isModalOpen) {
+      setUsersLoading(true); setUsersError("");
+      setMenuLoading(true); setMenuError("");
+      setCatLoading(true); setCatError("");
+      getAllUsers()
+        .then(setAllUsers)
+        .catch(e => setUsersError(e.toString()))
+        .finally(() => setUsersLoading(false));
+      getAllMenuItems()
+        .then(setAllMenuItems)
+        .catch(e => setMenuError(e.toString()))
+        .finally(() => setMenuLoading(false));
+      getAllCategories()
+        .then(setAllCategories)
+        .catch(e => setCatError(e.toString()))
+        .finally(() => setCatLoading(false));
+    }
+  }, [isModalOpen]);
 
   // Get promo status based on dates and active state
   const getPromoStatus = (promo) => {
@@ -161,7 +201,12 @@ const PromoCode = () => {
       startDate: new Date().toISOString().split('T')[0],
       endDate: '',
       usageLimit: '',
-      isActive: true
+      isActive: true,
+      userType: 'all',
+      specificUsers: [],
+      appliesTo: 'total',
+      menuItems: [],
+      categories: []
     });
     setIsModalOpen(true);
   };
@@ -170,6 +215,21 @@ const PromoCode = () => {
     setSelectedPromo(promo);
     setFormData({
       ...promo,
+      userType:
+        promo.userSpecific?.type === 'specific_users'
+          ? 'specific'
+          : promo.userSpecific?.type === 'new_users'
+          ? 'first-time'
+          : 'all',
+      specificUsers: Array.isArray(promo.userSpecific?.userIds) ? promo.userSpecific.userIds : [],
+      appliesTo:
+        promo.applicableOn?.type === 'menu_item'
+          ? 'menu'
+          : promo.applicableOn?.type === 'category'
+          ? 'categories'
+          : 'total',
+      menuItems: Array.isArray(promo.applicableOn?.items) && promo.applicableOn.type === 'menu_item' ? promo.applicableOn.items : [],
+      categories: Array.isArray(promo.applicableOn?.items) && promo.applicableOn.type === 'category' ? promo.applicableOn.items : [],
       startDate: promo.startDate.split('T')[0],
       endDate: promo.endDate ? promo.endDate.split('T')[0] : ''
     });
@@ -217,14 +277,16 @@ const PromoCode = () => {
   // Error state
   if (error) {
     return (
-      <div className="errorContainer">
-        <p className="errorMessage">{error}</p>
-        <button 
-          onClick={() => window.location.reload()} 
-          className="primaryButton"
-        >
-          Retry
-        </button>
+      <div className="promoContainer">
+        <div className="errorContainer">
+          <p className="errorMessage">{error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="primaryButton"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
@@ -240,7 +302,27 @@ const PromoCode = () => {
     }
     setModalLoading(true);
     try {
-      await createPromoCode(formData);
+      // Map discountType to backend expected values
+// Map userType and appliesTo to backend structure
+const userSpecific = {
+  type: formData.userType === 'first-time' ? 'new_users' : (formData.userType === 'specific' ? 'specific_users' : 'all'),
+  userIds: formData.userType === 'specific' ? formData.specificUsers : []
+};
+const applicableOn = {
+  type: formData.appliesTo === 'menu' ? 'menu_item' : (formData.appliesTo === 'categories' ? 'category' : 'all'),
+  items: formData.appliesTo === 'menu' ? formData.menuItems : (formData.appliesTo === 'categories' ? formData.categories : [])
+};
+const mappedFormData = {
+  ...formData,
+  discountType: formData.discountType === 'fixed' ? 'fixed_amount' : formData.discountType,
+  userSpecific,
+  applicableOn
+};
+if (selectedPromo && selectedPromo.id) {
+  await updatePromoCode(selectedPromo.id, mappedFormData);
+} else {
+  await createPromoCode(mappedFormData);
+}
       // Refresh list
       const data = await getPromoCodes();
       setPromoCodes(data);
@@ -308,80 +390,122 @@ const PromoCode = () => {
           </button>
         </div>
       </div>
-
-      <div className="tableContainer">
-        <table className="promoTable">
-          <thead>
+      <table className="promoTable">
+        <thead>
+          <tr>
+            <th className="tableHeader">PROMO CODE</th>
+            <th className="tableHeader">DISCOUNT</th>
+            <th className="tableHeader">VALIDITY</th>
+            <th className="tableHeader">USER LIMIT</th>
+            <th className="tableHeader">USAGE/USER</th>
+            <th className="tableHeader">MIN ORDER</th>
+            <th className="tableHeader">APPLIES TO</th>
+            <th className="tableHeader">STATUS</th>
+            <th className="tableHeader">ACTIONS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredPromos.length === 0 && (
             <tr>
-              <th className="tableHeader">Code</th>
-              <th className="tableHeader">Description</th>
-              <th className="tableHeader">Discount</th>
-              <th className="tableHeader">Status</th>
-              <th className="tableHeader">Actions</th>
+              <td colSpan="9" className="emptyState">
+                No promo codes found
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {paginatedPromos.length > 0 ? (
-              paginatedPromos.map((promo) => {
-                const status = getPromoStatus(promo);
-                return (
-                  <tr key={promo.id} className="tableRow">
-                    <td className="tableCell">
-                      <div className="promoCode">{promo.code}</div>
-                    </td>
-                    <td className="tableCell">
-                      <div className="promoDescription">{promo.description || '-'}</div>
-                    </td>
-                    <td className="tableCell">
-                      <div className="discountValue">
-                        {promo.discountType === 'percentage' 
-                          ? `${promo.discountValue}%` 
-                          : `$${parseFloat(promo.discountValue).toFixed(2)}`}
-                        {promo.maxDiscount && promo.discountType === 'percentage' && (
-                          <span className="maxDiscount">
-                            (max ${parseFloat(promo.maxDiscount).toFixed(2)})
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="tableCell">
-                      {getStatusBadge(status)}
-                    </td>
-                    <td className="tableCell">
-                      <div className="actions">
-                        <button
-                          onClick={() => handleEditPromo(promo)}
-                          className="actionButton editButton"
-                          title="Edit"
-                        >
-                          <FaEdit />
-                        </button>
-                        <button
-                          className="actionButton deleteButton"
-                          title="Delete"
-                          onClick={() => handleDelete(promo)}
-                        >
-                          <FaTrash />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            ) : (
-              <tr>
-                <td colSpan="5" className="emptyState">
-                  No promo codes found
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
+          )}
+          {filteredPromos.map(promo => (
+            <tr key={promo.id}>
+              {/* PROMO CODE */}
+              <td className="promoCodeCell">{promo.code}</td>
+              {/* DISCOUNT */}
+              <td className="discountCell">
+                {promo.discountType === 'percentage' ? (
+                  <span>{promo.discountValue}%</span>
+                ) : promo.discountType === 'fixed' ? (
+                  <span>&#8377;{parseFloat(promo.discountValue).toFixed(0)}</span>
+                ) : promo.discountType === 'free_shipping' ? (
+                  <span>Free Shipping</span>
+                ) : (
+                  <span>{promo.discountValue}</span>
+                )}
+              </td>
+              {/* VALIDITY */}
+              <td className="validityCell">
+                {promo.startDate && promo.endDate ? (
+                  <div>{promo.startDate} - {promo.endDate}</div>
+                ) : (
+                  '-'
+                )}
+              </td>
+              {/* USER LIMIT */}
+              <td className="userLimitCell">
+                {promo.userType === 'specific' && promo.specificUsers && promo.specificUsers.length > 0 ? (
+                  <>
+                    <div>Specific:</div>
+                    {promo.specificUsers.map((u, i) => <div key={i} style={{fontSize:'0.95em',color:'#555'}}>{u}</div>)}
+                  </>
+                ) : promo.userType === 'first-time' ? (
+                  'First-time users'
+                ) : promo.userType === 'all' ? (
+                  'All users'
+                ) : (
+                  '-'
+                )}
+              </td>
+              {/* USAGE/USER */}
+              <td className="usageCell">{promo.usageLimit || '-'}</td>
+              {/* MIN ORDER */}
+              <td className="minOrderCell">{promo.minOrderValue ? `₹${parseFloat(promo.minOrderValue).toFixed(0)}` : '-'}</td>
+              {/* APPLIES TO */}
+              <td className="appliesToCell">
+                {promo.appliesTo && promo.appliesTo.length > 0 ? (
+                  promo.appliesTo.map((a, i) => <div key={i}>{a}</div>)
+                ) : (
+                  '-'
+                )}
+              </td>
+              {/* STATUS */}
+              <td className="statusCell">{getStatusBadge(getPromoStatus(promo))}</td>
+              {/* ACTIONS */}
+              <td className="actionsCell">
+  <button
+    onClick={() => handleEditPromo(promo)}
+    className="actionButton editButton"
+    title="Edit"
+  >
+    <FaEdit />
+  </button>
+  <button
+    onClick={() => handleDelete(promo)}
+    className="actionButton deleteButton"
+    title="Delete"
+  >
+    <FaTrash />
+  </button>
+  <label className="switch">
+  <input
+    type="checkbox"
+    checked={promo.isActive}
+    onChange={async () => {
+      try {
+        await togglePromoCodeActive(promo.id);
+        const data = await getPromoCodes();
+        setPromoCodes(data);
+      } catch (err) {
+        alert(err);
+      }
+    }}
+    aria-label={promo.isActive ? 'Deactivate promo code' : 'Activate promo code'}
+  />
+  <span className="slider round"></span>
+</label>
+</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       {totalPages > 1 && (
         <div className="pagination">
-          <div className="paginationInfo">
+          <div>
             Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredPromos.length)} of {filteredPromos.length} results
           </div>
           <div className="paginationControls">
@@ -408,22 +532,30 @@ const PromoCode = () => {
 
       {/* Modal for Delete Promo Code */}
       {deleteModalOpen && (
-        <div className="modalOverlay">
-          <div className="modalContent">
-            <button className="modalClose" onClick={cancelDelete}>&times;</button>
-            <h2 className="modalTitle">Delete Promo Code</h2>
-            <div style={{marginBottom:'1.5rem', fontSize:'1.05rem', color:'#374151'}}>
-              Are you sure you want to delete promo code <b>{deleteTarget?.code}</b>?
-            </div>
-            {deleteError && <div className="errorMessage" style={{marginBottom:8}}>{deleteError}</div>}
-            {deleteLoading && <div className="spinner" style={{margin:'0 auto 1rem auto'}} />}
-            <div className="formActions">
-              <button type="button" className="secondaryButton" onClick={cancelDelete} disabled={deleteLoading}>Cancel</button>
-              <button type="button" className="primaryButton" style={{background:'#ef4444'}} onClick={confirmDelete} disabled={deleteLoading}>Delete</button>
-            </div>
-          </div>
+  <div className="modalOverlay">
+    <div className="modalContent deleteModalContent">
+      <button className="modalClose" onClick={cancelDelete}>&times;</button>
+      <div className="deleteWarningIcon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" fill="#fff3cd" stroke="#f59e42" strokeWidth="2"/><path d="M12 7v5" stroke="#f59e42" strokeWidth="2" strokeLinecap="round"/><circle cx="12" cy="16" r="1" fill="#f59e42"/></svg>
+      </div>
+      <h2 className="modalTitle" style={{color:'#b45309'}}>Delete Promo Code?</h2>
+      <div className="deleteModalText">
+        <p>This action <b>cannot be undone</b>. Deleting will permanently remove the promo code and all its data.</p>
+        <div className="deletePromoDetails">
+          <div><b>Code:</b> {deleteTarget?.code}</div>
+          {deleteTarget?.description && <div><b>Description:</b> {deleteTarget.description}</div>}
         </div>
-      )}
+        <p style={{marginTop:8, color:'#b45309'}}><b>Are you sure you want to proceed?</b></p>
+      </div>
+      {deleteError && <div className="errorMessage" style={{marginBottom:8}}>{deleteError}</div>}
+      {deleteLoading && <div className="spinner" style={{margin:'0 auto 1rem auto'}} />}
+      <div className="formActions deleteModalActions">
+        <button type="button" className="secondaryButton" onClick={cancelDelete} disabled={deleteLoading}>Cancel</button>
+        <button type="button" className="dangerButton" onClick={confirmDelete} disabled={deleteLoading}>Delete</button>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Modal for Create Promo Code */}
       {isModalOpen && (
@@ -432,32 +564,145 @@ const PromoCode = () => {
             <button className="modalClose" onClick={() => setIsModalOpen(false)}>&times;</button>
             <h2 className="modalTitle">Create Promo Code</h2>
             <form className="promoForm" onSubmit={handleModalSubmit}>
-              {modalError && <div className="errorMessage" style={{marginBottom: 8}}>{modalError}</div>}
-              {modalLoading && <div className="spinner" style={{margin:'0 auto 1rem auto'}} />}
-              <div className="formRow">
-                <div className="formGroup">
-                  <label>Promo Code Name</label>
-                  <input type="text" className="formInput" value={formData.code} onChange={e => setFormData({ ...formData, code: e.target.value })} />
-                </div>
-                <div className="formGroup">
-                  <label>Start Date</label>
-                  <input type="date" className="formInput" value={formData.startDate} onChange={e => setFormData({ ...formData, startDate: e.target.value })} />
-                </div>
-              </div>
-              <div className="formRow">
-                <div className="formGroup">
-                  <label>Expiry Date</label>
-                  <input type="date" className="formInput" value={formData.endDate} onChange={e => setFormData({ ...formData, endDate: e.target.value })} />
-                </div>
-                <div className="formGroup">
-                  <label>Users</label>
-                  <div className="formRadioGroup">
-                    <label><input type="radio" name="users" checked /> All users</label>
-                    <label><input type="radio" name="users" /> First-time users</label>
-                    <label><input type="radio" name="users" /> Specific users</label>
-                  </div>
-                </div>
-              </div>
+  {modalError && <div className="errorMessage" style={{marginBottom: 8}}>{modalError}</div>}
+  {modalLoading && <div className="spinner" style={{margin:'0 auto 1rem auto'}} />}
+  {/* 1st line: Promo Code Name (full width) */}
+  <div className="formRow">
+    <div className="formGroup" style={{flex: 1}}>
+      <label>Promo Code Name</label>
+      <input type="text" className="formInput" value={formData.code} onChange={e => setFormData({ ...formData, code: e.target.value })} />
+    </div>
+  </div>
+  {/* 2nd line: Dates */}
+  <div className="formRow">
+    <div className="formGroup">
+      <label>Start Date</label>
+      <input type="date" className="formInput" value={formData.startDate} onChange={e => setFormData({ ...formData, startDate: e.target.value })} />
+    </div>
+    <div className="formGroup">
+      <label>Expiry Date</label>
+      <input type="date" className="formInput" value={formData.endDate} onChange={e => setFormData({ ...formData, endDate: e.target.value })} />
+    </div>
+  </div>
+  {/* 3rd line: User Type & Apply On */}
+  <div className="formRow">
+    <div className="formGroup">
+      <label>User Type</label>
+      <div className="formRadioGroup">
+        <label>
+          <input type="radio" name="userType" value="all" checked={formData.userType === 'all'} onChange={e => setFormData({ ...formData, userType: 'all', specificUsers: [] })} /> All users
+        </label>
+        <label>
+          <input type="radio" name="userType" value="first-time" checked={formData.userType === 'first-time'} onChange={e => setFormData({ ...formData, userType: 'first-time', specificUsers: [] })} /> First-time users
+        </label>
+        <label>
+          <input type="radio" name="userType" value="specific" checked={formData.userType === 'specific'} onChange={e => setFormData({ ...formData, userType: 'specific' })} /> Specific users
+        </label>
+      </div>
+      {formData.userType === 'specific' && (
+  <div className="checkboxList">
+    {usersLoading ? (
+      <div style={{ color:'#2563eb' }}>Loading users...</div>
+    ) : usersError ? (
+      <div className="errorMessage">{usersError}</div>
+    ) : allUsers && allUsers.length > 0 ? (
+      allUsers.map(u => (
+        <label key={u.id || u._id} className="checkboxItem">
+          <input
+            type="checkbox"
+            value={u.id || u._id}
+            checked={Array.isArray(formData.specificUsers) && formData.specificUsers.includes(u.id || u._id)}
+            onChange={e => {
+              const val = u.id || u._id;
+              setFormData(prev => ({
+                ...prev,
+                specificUsers: e.target.checked
+                  ? [...prev.specificUsers, val]
+                  : prev.specificUsers.filter(id => id !== val)
+              }));
+            }}
+          />
+          {u.email || u.name || u.phone}
+        </label>
+      ))
+    ) : (
+      <div style={{ color: '#888' }}>No users found</div>
+    )}
+  </div>
+)}
+    </div>
+    <div className="formGroup">
+      <label>Apply On</label>
+      <select className="formInput" value={formData.appliesTo} onChange={e => setFormData({ ...formData, appliesTo: e.target.value, menuItems: [], categories: [] })}>
+        <option value="total">Total Order (All Menu Items)</option>
+        <option value="menu">Menu Items</option>
+        <option value="categories">Specific Categories</option>
+      </select>
+      {formData.appliesTo === 'menu' && (
+  <div className="checkboxList">
+    {menuLoading ? (
+      <div style={{ color:'#2563eb' }}>Loading menu items...</div>
+    ) : menuError ? (
+      <div className="errorMessage">{menuError}</div>
+    ) : allMenuItems && allMenuItems.length > 0 ? (
+      allMenuItems.map(item => (
+        <label key={item.id || item._id} className="checkboxItem">
+          <input
+            type="checkbox"
+            value={item.id || item._id}
+            checked={formData.menuItems.includes(item.id || item._id)}
+            onChange={e => {
+              const val = item.id || item._id;
+              setFormData(prev => ({
+                ...prev,
+                menuItems: e.target.checked
+                  ? [...prev.menuItems, val]
+                  : prev.menuItems.filter(id => id !== val)
+              }));
+            }}
+          />
+          {item.name}
+        </label>
+      ))
+    ) : (
+      <div style={{ color: '#888' }}>No menu items found</div>
+    )}
+  </div>
+)}
+      {formData.appliesTo === 'categories' && (
+  <div className="checkboxList">
+    {catLoading ? (
+      <div style={{ color:'#2563eb' }}>Loading categories...</div>
+    ) : catError ? (
+      <div className="errorMessage">{catError}</div>
+    ) : allCategories && allCategories.length > 0 ? (
+      allCategories.map(cat => (
+        <label key={cat.id || cat._id} className="checkboxItem">
+          <input
+            type="checkbox"
+            value={cat.id || cat._id}
+            checked={formData.categories.includes(cat.id || cat._id)}
+            onChange={e => {
+              const val = cat.id || cat._id;
+              setFormData(prev => ({
+                ...prev,
+                categories: e.target.checked
+                  ? [...prev.categories, val]
+                  : prev.categories.filter(id => id !== val)
+              }));
+            }}
+          />
+          {cat.name}
+        </label>
+      ))
+    ) : (
+      <div style={{ color: '#888' }}>No categories found</div>
+    )}
+  </div>
+)}
+    </div>
+  </div>
+
               <div className="formRow">
                 <div className="formGroup">
                   <label>Usage Limit Per User</label>
@@ -481,20 +726,36 @@ const PromoCode = () => {
                   <input type="number" min="0" className="formInput" value={formData.minOrderValue} onChange={e => setFormData({ ...formData, minOrderValue: e.target.value })} />
                 </div>
               </div>
-              <div className="formRow">
-                <div className="formGroup">
-                  <label>Apply On</label>
-                  <div className="formCheckboxGroup">
-                    <label><input type="checkbox" /> Total Order</label>
-                    <label><input type="checkbox" /> Menu Items</label>
-                    <label><input type="checkbox" /> Specific Categories</label>
-                  </div>
-                </div>
-              </div>
-              <div className="formActions">
-                <button type="button" className="secondaryButton" onClick={() => setIsModalOpen(false)}>Cancel</button>
-                <button type="submit" className="primaryButton">Save Promo Code</button>
-              </div>
+                  <div className="formActions" style={{display:'flex',flexDirection:'row',gap:'0.75rem',width:'100%',justifyContent:'flex-end'}}>
+  <button 
+    type="button" 
+    className="secondaryButton" 
+    onClick={() => setIsModalOpen(false)}
+  >
+    Cancel
+  </button>
+  
+  {selectedPromo && selectedPromo.id && (
+    <button
+      type="button"
+      className="secondaryButton"
+      style={{background:'#ef4444',color:'#fff'}}
+      onClick={() => {
+        setDeleteTarget(selectedPromo);
+        setDeleteModalOpen(true);
+      }}
+    >
+      Delete
+    </button>
+  )}
+  
+  <button 
+    type="submit" 
+    className="primaryButton"
+  >
+    {selectedPromo && selectedPromo.id ? 'Update' : 'Save'}
+  </button>
+</div>
             </form>
           </div>
         </div>

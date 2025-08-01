@@ -104,7 +104,7 @@ export default function FeedbackAndComplaints() {
   };
 
   const markResolved = async (compId) => {
-    await updateStatus(compId, "Resolved");
+    await updateStatus(compId, "Pending");
      await fetchComplaints(); // Refresh complaints after status update
    
   };
@@ -115,7 +115,7 @@ export default function FeedbackAndComplaints() {
     alert(`Block action triggered for complaint ${compId}`);
   };
   const handleUndo = async (compId) => {
-    await updateStatus(compId, "Pending");
+    await updateStatus(compId, "Resolved");
     await fetchComplaints(); // Refresh complaints after status update
   };
   const gotoDeliveryBoy = (deliveryBoyId) => {

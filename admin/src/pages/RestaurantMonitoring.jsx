@@ -506,6 +506,17 @@ const RestaurantMonitoring = () => {
     setSelectedRecommendationTags(newTags);
   };
 
+  const [price, setPrice] = useState('');
+
+  useEffect(() => {
+    if (editingItem) {
+      const itemPrice = editingItem.price?.full || editingItem.price;
+      setPrice(itemPrice ? parseFloat(itemPrice).toFixed(2) : '');
+    } else {
+      setPrice('');
+    }
+  }, [editingItem]);
+
   const handleMenuFormSubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -533,16 +544,11 @@ const RestaurantMonitoring = () => {
       categoryId: formData.get('category'),
       subCategory: subCategory,
       isVeg: foodType === 'Veg' ? 'true' : 'false',
-      price: parseFloat(formData.get('price_full')),
+      price: parseFloat(price) || 0, // Send price as a single number
       description: formData.get('description') || '',
-      tags: formattedTags, // Use the formatted tags
+      tags: formattedTags,
       isActive: true,
-      addOns: hasSubDishes && currentSubDishes.length > 0
-        ? currentSubDishes.map(dish => ({
-          name: dish.name,
-          price: parseFloat(dish.price) || 0
-        }))
-        : []
+      addOns: hasSubDishes && currentSubDishes.length > 0 ? currentSubDishes : []
     };
 
     // If category has subcategories but none is selected, show error
@@ -726,6 +732,45 @@ const RestaurantMonitoring = () => {
   const [currentSubDishes, setCurrentSubDishes] = useState([]);
   const [subDishName, setSubDishName] = useState('');
   const [subDishPrice, setSubDishPrice] = useState('');
+  const [foodType, setFoodType] = useState('Veg');
+
+  useEffect(() => {
+    if (editingItem) {
+      // Set the current subcategories based on the selected category
+      const selectedCategory = categories.find(cat => cat.id === editingItem.categoryId);
+      if (selectedCategory) {
+        setCurrentSubCategories(selectedCategory.subCategories || []);
+        
+        // If the category has subcategories and the editing item has a subcategory, select it
+        if (selectedCategory.subCategories && selectedCategory.subCategories.length > 0 && editingItem.subCategory) {
+          setSelectedSubCategory(editingItem.subCategory);
+        }
+      }
+    } else {
+      // Reset when not editing
+      setCurrentSubCategories([]);
+      setSelectedSubCategory('');
+    }
+  }, [editingItem, categories]);
+
+  useEffect(() => {
+    if (editingItem) {
+      // Set the food type based on isVeg
+      setFoodType(editingItem.isVeg === true || editingItem.subCategory === 'Veg' ? 'Veg' : 'Non-Veg');
+      
+      // Set recommendation tags if they exist
+      if (editingItem.tags && editingItem.tags.length > 0) {
+        const tagsSet = new Set(editingItem.tags.map(tag => tag.toLowerCase()));
+        setSelectedRecommendationTags(tagsSet);
+      }
+      
+      // Set sub-dishes if they exist
+      if (editingItem.addOns && editingItem.addOns.length > 0) {
+        setCurrentSubDishes(editingItem.addOns);
+        setHasSubDishes(true);
+      }
+    }
+  }, [editingItem, categories]);
 
   return (
     <div style={styles.pageContainer}>
@@ -979,12 +1024,22 @@ const RestaurantMonitoring = () => {
               <select
                 name="category"
                 style={styles.input}
-                defaultValue={editingItem?.category || ""}
+                value={editingItem?.categoryId || ""}
                 onChange={(e) => {
                   const selectedCat = categories.find(c => c.id === e.target.value);
                   setCurrentSubCategories(selectedCat?.subCategories || []);
-                  // Reset subcategory when category changes
-                  setSelectedSubCategory('');
+                  
+                  // If the current selectedSubCategory is not in the new category's subcategories, reset it
+                  if (newSubCategories.length > 0 && !newSubCategories.includes(selectedSubCategory)) {
+                    // If editing an existing item and its subcategory is in the new category, keep it selected
+                    if (editingItem?.subCategory && newSubCategories.includes(editingItem.subCategory)) {
+                      setSelectedSubCategory(editingItem.subCategory);
+                    } else {
+                      setSelectedSubCategory('');
+                    }
+                  } else if (newSubCategories.length === 0) {
+                    setSelectedSubCategory('');
+                  }
                 }}
                 required
               >
@@ -1027,7 +1082,7 @@ const RestaurantMonitoring = () => {
                       name="subCategory"
                       value={subCat}
                       checked={selectedSubCategory === subCat}
-                      onChange={(e) => setSelectedSubCategory(e.target.value)}
+                      onChange={() => setSelectedSubCategory(subCat)}
                       required={currentSubCategories.length > 0}
                       style={{ display: 'none' }}
                     />
@@ -1041,7 +1096,31 @@ const RestaurantMonitoring = () => {
           {/* Price */}
           <div style={styles.formGroup}>
             <label style={styles.label}>Price (₹)</label>
-            <input name="price_full" type="number" step="0.01" style={styles.input} defaultValue={editingItem?.price?.full || ''} required />
+            <input 
+              name="price_full" 
+              type="number" 
+              step="0.01" 
+              min="0"
+              style={styles.input} 
+              value={price}
+              onChange={(e) => {
+                const value = e.target.value;
+                // Only update if it's a valid number or an empty string
+                if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
+                  setPrice(value);
+                }
+              }}
+              onBlur={(e) => {
+                // Format to 2 decimal places when input loses focus
+                const numValue = parseFloat(e.target.value);
+                if (!isNaN(numValue)) {
+                  setPrice(numValue.toFixed(2));
+                } else {
+                  setPrice('');
+                }
+              }}
+              required 
+            />
           </div>
 
           {/* Veg/Non-Veg Toggle */}
@@ -1055,19 +1134,20 @@ const RestaurantMonitoring = () => {
                 cursor: 'pointer',
                 padding: '8px 16px',
                 borderRadius: '4px',
-                border: `1px solid ${editingItem?.subCategory === 'Veg' ? '#27ae60' : '#ddd'}`,
-                backgroundColor: editingItem?.subCategory === 'Veg' ? '#e8f8f0' : '#fff',
+                border: `1px solid ${foodType === 'Veg' ? '#27ae60' : '#ddd'}`,
+                backgroundColor: foodType === 'Veg' ? '#e8f8f0' : '#fff',
                 transition: 'all 0.2s',
                 ':hover': {
-                  borderColor: editingItem?.subCategory === 'Veg' ? '#27ae60' : '#3498db',
-                  backgroundColor: editingItem?.subCategory === 'Veg' ? '#e8f8f0' : '#f0f8ff'
+                  borderColor: foodType === 'Veg' ? '#27ae60' : '#3498db',
+                  backgroundColor: foodType === 'Veg' ? '#e8f8f0' : '#f0f8ff'
                 }
               }}>
                 <input
                   type="radio"
                   name="foodType"
                   value="Veg"
-                  defaultChecked={editingItem?.subCategory === 'Veg'}
+                  checked={foodType === 'Veg'}
+                  onChange={() => setFoodType('Veg')}
                   style={{ width: '18px', height: '18px' }}
                 />
                 <span>Veg</span>
@@ -1079,19 +1159,20 @@ const RestaurantMonitoring = () => {
                 cursor: 'pointer',
                 padding: '8px 16px',
                 borderRadius: '4px',
-                border: `1px solid ${editingItem?.subCategory === 'Non-Veg' ? '#e74c3c' : '#ddd'}`,
-                backgroundColor: editingItem?.subCategory === 'Non-Veg' ? '#fdedec' : '#fff',
+                border: `1px solid ${foodType === 'Non-Veg' ? '#e74c3c' : '#ddd'}`,
+                backgroundColor: foodType === 'Non-Veg' ? '#fdedec' : '#fff',
                 transition: 'all 0.2s',
                 ':hover': {
-                  borderColor: editingItem?.subCategory === 'Non-Veg' ? '#e74c3c' : '#3498db',
-                  backgroundColor: editingItem?.subCategory === 'Non-Veg' ? '#fdedec' : '#f0f8ff'
+                  borderColor: foodType === 'Non-Veg' ? '#e74c3c' : '#3498db',
+                  backgroundColor: foodType === 'Non-Veg' ? '#fdedec' : '#f0f8ff'
                 }
               }}>
                 <input
                   type="radio"
                   name="foodType"
                   value="Non-Veg"
-                  defaultChecked={editingItem?.subCategory === 'Non-Veg'}
+                  checked={foodType === 'Non-Veg'}
+                  onChange={() => setFoodType('Non-Veg')}
                   style={{ width: '18px', height: '18px' }}
                 />
                 <span>Non-Veg</span>

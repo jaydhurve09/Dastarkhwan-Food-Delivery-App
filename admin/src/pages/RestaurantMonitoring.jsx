@@ -459,23 +459,43 @@ const RestaurantMonitoring = () => {
     const foodType = formData.get('foodType');
     const token = localStorage.getItem('adminToken');
     
+    // Get the selected category
+    const selectedCategory = categories.find(cat => cat.id === formData.get('category'));
+    
+    // Determine the subcategory - use the selected subcategory if available
+    // Otherwise, use the food type as fallback (but this should be avoided)
+    const subCategory = selectedSubCategory || foodType;
+    
     // Prepare the request data
     const menuItemData = {
       name: formData.get('name'),
-      categoryId: formData.get('category'), // This should be the category ID, not name
-      subCategory: foodType,
-      isVeg: foodType === 'Veg',
+      categoryId: formData.get('category'),
+      subCategory: subCategory, // Use the selected subcategory
+      isVeg: foodType === 'Veg' ? 'true' : 'false',
       price: parseFloat(formData.get('price_full')),
       description: formData.get('description') || '',
       tags: Array.from(selectedRecommendationTags),
       isActive: true,
-      ...(hasSubDishes && currentSubDishes.length > 0 && {
-        addOns: currentSubDishes.map(dish => ({
-          name: dish.name,
-          price: dish.price
-        }))
-      })
+      addOns: hasSubDishes && currentSubDishes.length > 0 
+        ? currentSubDishes.map(dish => ({
+            name: dish.name,
+            price: parseFloat(dish.price) || 0
+          }))
+        : []
     };
+
+    // If category has subcategories but none is selected, show error
+    if (selectedCategory?.subCategories?.length > 0 && !selectedSubCategory) {
+      toast.error('Please select a subcategory', {
+        position: "top-right",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+      return;
+    }
 
     try {
       let response;
@@ -492,7 +512,6 @@ const RestaurantMonitoring = () => {
           { headers }
         );
         
-        // Show success toast for update
         toast.success('Menu item updated successfully!', {
           position: "top-right",
           autoClose: 3000,
@@ -509,7 +528,6 @@ const RestaurantMonitoring = () => {
           { headers }
         );
         
-        // Show success toast for create
         toast.success('Menu item added successfully!', {
           position: "top-right",
           autoClose: 3000,
@@ -530,7 +548,7 @@ const RestaurantMonitoring = () => {
       setSelectedRecommendationTags(new Set());
       
       // Refresh the menu items
-      fetchMenuItems();
+      await fetchMenuItems();
       
     } catch (error) {
       console.error('Error saving menu item:', error);
@@ -905,6 +923,7 @@ const RestaurantMonitoring = () => {
                 onChange={(e) => {
                   const selectedCat = categories.find(c => c.id === e.target.value);
                   setCurrentSubCategories(selectedCat?.subCategories || []);
+                  // Reset subcategory when category changes
                   setSelectedSubCategory('');
                 }}
                 required
@@ -919,13 +938,40 @@ const RestaurantMonitoring = () => {
             </div>
           </div>
 
+          {/* Sub-category Selection (only show if category has subcategories) */}
           {currentSubCategories.length > 0 && (
             <div style={styles.formGroup}>
-              <label style={styles.label}>Sub-Category</label>
-              <div>
+              <label style={styles.label}>Sub-Category <span style={{color: 'red'}}>*</span></label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
                 {currentSubCategories.map(subCat => (
-                  <label key={subCat} style={{ marginRight: '15px' }}>
-                    <input type="radio" name="subCategory" value={subCat} checked={selectedSubCategory === subCat} onChange={(e) => setSelectedSubCategory(e.target.value)} required /> {subCat}
+                  <label 
+                    key={subCat} 
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '8px 16px',
+                      borderRadius: '4px',
+                      border: `1px solid ${selectedSubCategory === subCat ? '#3498db' : '#ddd'}`,
+                      backgroundColor: selectedSubCategory === subCat ? '#ebf5fb' : '#fff',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      ':hover': {
+                        borderColor: '#3498db',
+                        backgroundColor: '#f0f8ff'
+                      }
+                    }}
+                  >
+                    <input 
+                      type="radio" 
+                      name="subCategory" 
+                      value={subCat} 
+                      checked={selectedSubCategory === subCat} 
+                      onChange={(e) => setSelectedSubCategory(e.target.value)} 
+                      required={currentSubCategories.length > 0}
+                      style={{ display: 'none' }} 
+                    />
+                    {subCat}
                   </label>
                 ))}
               </div>
@@ -942,7 +988,21 @@ const RestaurantMonitoring = () => {
           <div style={styles.formGroup}>
             <label style={styles.label}>Food Type</label>
             <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <label style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px', 
+                cursor: 'pointer',
+                padding: '8px 16px',
+                borderRadius: '4px',
+                border: `1px solid ${editingItem?.subCategory === 'Veg' ? '#27ae60' : '#ddd'}`,
+                backgroundColor: editingItem?.subCategory === 'Veg' ? '#e8f8f0' : '#fff',
+                transition: 'all 0.2s',
+                ':hover': {
+                  borderColor: editingItem?.subCategory === 'Veg' ? '#27ae60' : '#3498db',
+                  backgroundColor: editingItem?.subCategory === 'Veg' ? '#e8f8f0' : '#f0f8ff'
+                }
+              }}>
                 <input
                   type="radio"
                   name="foodType"
@@ -952,7 +1012,21 @@ const RestaurantMonitoring = () => {
                 />
                 <span>Veg</span>
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <label style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px', 
+                cursor: 'pointer',
+                padding: '8px 16px',
+                borderRadius: '4px',
+                border: `1px solid ${editingItem?.subCategory === 'Non-Veg' ? '#e74c3c' : '#ddd'}`,
+                backgroundColor: editingItem?.subCategory === 'Non-Veg' ? '#fdedec' : '#fff',
+                transition: 'all 0.2s',
+                ':hover': {
+                  borderColor: editingItem?.subCategory === 'Non-Veg' ? '#e74c3c' : '#3498db',
+                  backgroundColor: editingItem?.subCategory === 'Non-Veg' ? '#fdedec' : '#f0f8ff'
+                }
+              }}>
                 <input
                   type="radio"
                   name="foodType"
@@ -972,8 +1046,8 @@ const RestaurantMonitoring = () => {
               <label style={{ marginRight: '15px' }}>
                 <input
                   type="checkbox"
-                  checked={selectedRecommendationTags.has('recommended')}
-                  onChange={() => handleRecommendationTagChange('recommended')}
+                  checked={selectedRecommendationTags.has('Recommended')}
+                  onChange={() => handleRecommendationTagChange('Recommended')}
                   style={{ marginRight: '5px' }}
                 />
                 Recommended for You
@@ -981,8 +1055,8 @@ const RestaurantMonitoring = () => {
               <label>
                 <input
                   type="checkbox"
-                  checked={selectedRecommendationTags.has('mostLoved')}
-                  onChange={() => handleRecommendationTagChange('mostLoved')}
+                  checked={selectedRecommendationTags.has('Most Loved')}
+                  onChange={() => handleRecommendationTagChange('Most Loved')}
                   style={{ marginRight: '5px' }}
                 />
                 Most Loved

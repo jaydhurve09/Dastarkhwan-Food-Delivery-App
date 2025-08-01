@@ -57,7 +57,7 @@ const createCategory = async (req, res, next) => {
 const updateCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, description, isActive } = req.body;
+    const { name, description, isActive, subCategories } = req.body;
 
     // Get the existing category first
     const existingCategory = await MenuCategory.findById(id);
@@ -78,6 +78,13 @@ const updateCategory = async (req, res, next) => {
       isActive: isActive !== undefined ? isActive !== 'false' : existingCategory.isActive,
       updatedAt: new Date()
     };
+
+    // Handle subcategories if provided
+    if (subCategories !== undefined) {
+      updateData.subCategories = Array.isArray(subCategories) 
+        ? subCategories 
+        : [subCategories];
+    }
 
     // Add image path if there's a new image
     if (imagePath) {

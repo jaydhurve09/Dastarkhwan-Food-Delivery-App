@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { FaStar, FaEdit, FaTrash, FaPlus, FaUpload } from 'react-icons/fa';
 import axios from 'axios';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { AdminContext } from '../contexts/adminContext';
-
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -119,7 +120,6 @@ const ResponsiveStyles = () => (
   </style>
 );
 
-
 // Reusable Modal Component
 const Modal = ({ children, isOpen, onClose }) => {
   if (!isOpen) return null;
@@ -138,6 +138,7 @@ const Modal = ({ children, isOpen, onClose }) => {
   );
 };
 
+const DEFAULT_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlZWVlZWUiLz48dGV4dCB4PSI1MCIgeT0iNTAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzk5OSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+';
 
 const RestaurantMonitoring = () => {
   const {deliveryPartners,orders,users,fetchOrders} = useContext(AdminContext);
@@ -194,7 +195,6 @@ const RestaurantMonitoring = () => {
       });
       
       console.log('Categories API response:', response);
-      console.log('Categories data:', response.data);
       
       if (response.data && response.data.data) {
         console.log('Setting categories:', response.data.data);
@@ -210,6 +210,37 @@ const RestaurantMonitoring = () => {
       setCategories([]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Fetch menu items from the backend
+  const fetchMenuItems = async () => {
+    try {
+      const token = localStorage.getItem('adminToken');
+      const response = await axios.get('http://localhost:5000/api/menu-items', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      // Transform the data to match the frontend format
+      const transformedItems = response.data.data.map(item => ({
+        id: item.id,
+        name: item.name,
+        price: { full: item.price },
+        subCategory: item.subCategory,
+        available: item.isActive,
+        category: item.categoryId,
+        description: item.description,
+        image: item.image || 'https://via.placeholder.com/150',
+        recommendation: item.tags || [],
+        addOns: item.addOns || []
+      }));
+      
+      setMenuItems(transformedItems);
+    } catch (error) {
+      console.error('Error fetching menu items:', error);
+      toast.error('Failed to load menu items');
     }
   };
 
@@ -422,42 +453,121 @@ const RestaurantMonitoring = () => {
     setSelectedRecommendationTags(newTags);
   };
 
-  const handleMenuFormSubmit = (e) => {
+  const handleMenuFormSubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const newItemData = {
-      id: editingItem ? editingItem.id : Date.now(),
+    const foodType = formData.get('foodType');
+    const token = localStorage.getItem('adminToken');
+    
+    // Prepare the request data
+    const menuItemData = {
       name: formData.get('name'),
-      price: {
-        full: parseFloat(formData.get('price_full')),
-      },
-      subCategory: selectedSubCategory,
-      subDishes: hasSubDishes ? currentSubDishes : [],
-      available: editingItem ? editingItem.available : true,
-      category: formData.get('category'),
-      description: formData.get('description'),
-      image: imagePreview || (editingItem ? editingItem.image : 'https://via.placeholder.com/150'),
-      recommendation: Array.from(selectedRecommendationTags), // Store as array
+      categoryId: formData.get('category'), // This should be the category ID, not name
+      subCategory: foodType,
+      isVeg: foodType === 'Veg',
+      price: parseFloat(formData.get('price_full')),
+      description: formData.get('description') || '',
+      tags: Array.from(selectedRecommendationTags),
+      isActive: true,
+      ...(hasSubDishes && currentSubDishes.length > 0 && {
+        addOns: currentSubDishes.map(dish => ({
+          name: dish.name,
+          price: dish.price
+        }))
+      })
     };
 
-    if (editingItem) {
-      setMenuItems(menuItems.map(item => item.id === editingItem.id ? newItemData : item));
-    } else {
-      setMenuItems([...menuItems, newItemData]);
+    try {
+      let response;
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      };
+
+      if (editingItem) {
+        // Update existing menu item
+        response = await axios.put(
+          `http://localhost:5000/api/menu-items/${editingItem.id}`,
+          menuItemData,
+          { headers }
+        );
+        
+        // Show success toast for update
+        toast.success('Menu item updated successfully!', {
+          position: "top-right",
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+      } else {
+        // Create new menu item
+        response = await axios.post(
+          'http://localhost:5000/api/menu-items',
+          menuItemData,
+          { headers }
+        );
+        
+        // Show success toast for create
+        toast.success('Menu item added successfully!', {
+          position: "top-right",
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+      }
+
+      // Close the modal and reset form
+      setMenuModalOpen(false);
+      setEditingItem(null);
+      setImagePreview(null);
+      setSelectedSubCategory('');
+      setHasSubDishes(false);
+      setCurrentSubDishes([]);
+      setSelectedRecommendationTags(new Set());
+      
+      // Refresh the menu items
+      fetchMenuItems();
+      
+    } catch (error) {
+      console.error('Error saving menu item:', error);
+      toast.error(error.response?.data?.message || 'Failed to save menu item', {
+        position: "top-right",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
     }
-    setMenuModalOpen(false);
-    setEditingItem(null);
-    setImagePreview(null);
-    setSelectedSubCategory('');
-    setHasSubDishes(false);
-    setCurrentSubDishes([]);
-    setSelectedRecommendationTags(new Set()); // Reset tags
   };
 
   const handleImageChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       setImagePreview(URL.createObjectURL(e.target.files[0]));
     }
+  };
+
+  // Handle adding sub-dishes (add-ons)
+  const handleAddSubDish = () => {
+    if (subDishName && subDishPrice) {
+      setCurrentSubDishes([...currentSubDishes, {
+        name: subDishName,
+        price: parseFloat(subDishPrice)
+      }]);
+      setSubDishName('');
+      setSubDishPrice('');
+    }
+  };
+
+  // Handle removing a sub-dish (add-on)
+  const handleRemoveSubDish = (index) => {
+    const newSubDishes = [...currentSubDishes];
+    newSubDishes.splice(index, 1);
+    setCurrentSubDishes(newSubDishes);
   };
 
   // Group menu items by category
@@ -541,7 +651,7 @@ const RestaurantMonitoring = () => {
   return (
     <div style={styles.pageContainer}>
       <ResponsiveStyles />
-
+      <ToastContainer />
       {/* --- Modals --- */}
       <Modal 
         isOpen={isCategoryModalOpen} 
@@ -793,14 +903,18 @@ const RestaurantMonitoring = () => {
                 style={styles.input}
                 defaultValue={editingItem?.category || ""}
                 onChange={(e) => {
-                  const selectedCat = categories.find(c => c.name === e.target.value);
+                  const selectedCat = categories.find(c => c.id === e.target.value);
                   setCurrentSubCategories(selectedCat?.subCategories || []);
                   setSelectedSubCategory('');
                 }}
                 required
               >
                 <option value="" disabled>Select a category</option>
-                {categories.map(cat => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -822,6 +936,33 @@ const RestaurantMonitoring = () => {
           <div style={styles.formGroup}>
             <label style={styles.label}>Price (₹)</label>
             <input name="price_full" type="number" step="0.01" style={styles.input} defaultValue={editingItem?.price?.full || ''} required />
+          </div>
+
+          {/* Veg/Non-Veg Toggle */}
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Food Type</label>
+            <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="foodType"
+                  value="Veg"
+                  defaultChecked={editingItem?.subCategory === 'Veg'}
+                  style={{ width: '18px', height: '18px' }}
+                />
+                <span>Veg</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="foodType"
+                  value="Non-Veg"
+                  defaultChecked={editingItem?.subCategory === 'Non-Veg'}
+                  style={{ width: '18px', height: '18px' }}
+                />
+                <span>Non-Veg</span>
+              </label>
+            </div>
           </div>
 
           {/* Recommendation Checkboxes */}
@@ -992,7 +1133,15 @@ const RestaurantMonitoring = () => {
                         <tr key={item.id}>
                           <td style={styles.td} data-label="Dish">
                             <div style={{ display: 'flex', alignItems: 'center' }}>
-                              <img src={item.image} alt={item.name} style={styles.menuItemImage} />
+                              <img 
+                                src={item.image} 
+                                alt={item.name} 
+                                style={styles.menuItemImage} 
+                                onError={(e) => {
+                                  e.target.onerror = null; 
+                                  e.target.src = DEFAULT_IMAGE;
+                                }} 
+                              />
                               <div>
                                 <span style={{ fontWeight: 'bold' }}>{item.name}</span>
                                 {item.subCategory && <span style={{ fontSize: '0.8rem', color: 'white', backgroundColor: item.subCategory === 'Veg' ? '#27ae60' : '#c0392b', padding: '2px 6px', borderRadius: '4px', marginLeft: '8px' }}>{item.subCategory}</span>}

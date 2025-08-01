@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useContext } from "react";
 import { AdminContext } from "../contexts/adminContext";
-import {updateDeliveryPartner, blockDeliveryPartner } from "../services/deliveryPatnerService";
+import {updateDeliveryPartner, blockDeliveryPartner , resetPassword , approveDeliveryPartner} from "../services/deliveryPatnerService";
 
 
 const initialPendingApprovals = [
@@ -206,10 +206,11 @@ const styles = {
 
 export default function DeliveryPartnerManagement() {
   const {fetchOrders,fetchDeliveryPartners ,deliveryPartners ,orders} = useContext(AdminContext);
-  const [pendingApprovals, setPendingApprovals] = useState(initialPendingApprovals);
+  const [pendingApprovals, setPendingApprovals] = useState(deliveryPartners);
   const [partners, setPartners] = useState(deliveryPartners);
   const [showPending, setShowPending] = useState(false);
   const [pendingDetail, setPendingDetail] = useState(null);
+
   const [partnerDetail, setPartnerDetail] = useState(null);
   const [editPartner, setEditPartner] = useState(null);
   const [editForm, setEditForm] = useState({ name: "", mobile: "", vehicle: "", vehicleNo: "" });
@@ -221,8 +222,6 @@ export default function DeliveryPartnerManagement() {
   });
   const [passwordError, setPasswordError] = useState("");
 
-  console.log(deliveryPartners , "deliveryPartners");
-
   // Filter to search delivery partners by name
   const filteredPartners = useMemo(() => {
     let s = searchTerm.trim().toLowerCase();
@@ -233,33 +232,17 @@ export default function DeliveryPartnerManagement() {
 
 
   // Approve pending partner & move to partners list
-  function approvePending(id) {
-    const approved = pendingApprovals.find(p => p.id === id);
-    if (!approved) return;
-    setPendingApprovals(ps => ps.filter(p => p.id !== id));
-    setPartners(ps => [
-      ...ps,
-      {
-        id: 1000 + approved.id,
-        name: approved.name,
-        mobile: approved.mobile,
-        vehicle: approved.vehicle,
-        vehicleNo: approved.vehicleNo,
-        online: false,
-        deliveries: 0,
-        rating: 0,
-        earnings: 0,
-        documents: approved.documents,
-        lastOrders: [],
-        blocked: false,
-      },
-    ]);
+  const approvePending = async (id) => {
+
+    await approveDeliveryPartner(id);
+    await fetchDeliveryPartners();
     setPendingDetail(null);
   }
 
   // Reject pending partner & remove
-  function rejectPending(id) {
-    setPendingApprovals(ps => ps.filter(p => p.id !== id));
+  const rejectPending = async (id) => {
+    await approveDeliveryPartner(id);
+    await fetchDeliveryPartners();
     setPendingDetail(null);
   }
 
@@ -268,6 +251,7 @@ const toggleBlockPartner = async (id) => {
 
     await blockDeliveryPartner(id);
     await fetchDeliveryPartners();
+    setPartnerDetail(null);
   }
 
   // Reset password action
@@ -289,7 +273,7 @@ const toggleBlockPartner = async (id) => {
   }
 
   // Submit password reset
-  function submitPasswordReset() {
+  const submitPasswordReset = async () => {
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       setPasswordError("Passwords do not match");
       return;
@@ -300,9 +284,11 @@ const toggleBlockPartner = async (id) => {
     }
     
     // In a real app, you would call an API here to update the password
-    alert(`Password has been reset for ${resetPasswordPartner.name}`);
-    setResetPasswordPartner(null);
+   await resetPassword(resetPasswordPartner.id, passwordForm.newPassword); 
+    await fetchDeliveryPartners();
+    alert("Password reset successfully");
     setPasswordForm({ newPassword: "", confirmPassword: "" });
+    setPasswordError("");
   }
 
   // Open edit modal and populate form
@@ -345,11 +331,11 @@ const toggleBlockPartner = async (id) => {
       {/* Info cards */}
       <div style={styles.infoCardRow}>
         <div style={styles.infoCard}>
-          <div>Pending Approvals <span style={styles.badge}>{pendingApprovals.length}</span></div>
+          <div>Pending Approvals <span style={styles.badge}>{deliveryPartners.filter(p => !p.isVerified).length}</span></div>
           <button style={styles.btnShow} onClick={() => setShowPending(!showPending)}>{showPending ? "Hide" : "Show"}</button>
         </div>
         <div style={styles.infoCard}>
-          <div>Total Active Partners <br /> <strong style={{ fontSize: 22 }}>{partners.length}</strong></div>
+          <div>Total Active Partners <br /> <strong style={{ fontSize: 22 }}>{deliveryPartners.filter(p => p.isOnline).length}</strong></div>
         </div>
       </div>
 
@@ -366,13 +352,14 @@ const toggleBlockPartner = async (id) => {
               </tr>
             </thead>
             <tbody>
-              {pendingApprovals.length === 0 ? (
+              {deliveryPartners.length === 0 ? (
                 <tr><td colSpan={5} style={{ textAlign: "center", padding: 20 }}>No Pending Approvals.</td></tr>
-              ) : pendingApprovals.map(p => (
+              ) : 
+              deliveryPartners.filter(p => !p.isVerified).map(p => (
                 <tr key={p.id}>
                   <td style={styles.td}>{p.name}</td>
                   <td style={styles.td}>{p.phone}</td>
-                  <td style={styles.td}>{p.vehicle} | {p.vehicleNo}</td>
+                  <td style={styles.td}>{p.vehicle.name} | {p.vehicle.number}</td>
                   <td style={styles.td}>{p.appliedDate}</td>
                   <td style={{ ...styles.td, color: "#2563eb" }}>
                     <button style={{...styles.btn, ...styles.btnView}} onClick={() => setPendingDetail(p)}>View</button>
@@ -421,7 +408,7 @@ const toggleBlockPartner = async (id) => {
               <tr key={p.id}>
                 <td style={styles.td}>{p.name}</td>
                 <td style={styles.td}>{p.phone}</td>
-                <td style={styles.td}>{p.vehicle.type} | {p.vehicle.number}</td>
+                <td style={styles.td}>{p.vehicle.name} | {p.vehicle.number}</td>
                 <td style={styles.td}>
                   {p.online ? <span style={styles.online}>● Online</span> : <span style={styles.offline}>● Offline</span>}
                 </td>
@@ -450,14 +437,29 @@ const toggleBlockPartner = async (id) => {
           <div style={styles.modal} role="dialog" aria-modal="true" aria-labelledby="pendingDetailTitle">
             <button style={styles.closeBtn} onClick={() => setPendingDetail(null)} aria-label="Close modal">&times;</button>
             <h2 id="pendingDetailTitle" style={styles.modalHeader}>{pendingDetail.name}</h2>
-            <p><b>Mobile:</b> {pendingDetail.mobile}</p>
-            <p><b>Vehicle:</b> {pendingDetail.vehicle} | {pendingDetail.vehicleNo}</p>
+            <p><b>Mobile:</b> {pendingDetail.phone}</p>
+            <p><b>Vehicle:</b> {pendingDetail.vehicle.name} | {pendingDetail.vehicle.number}</p>
             <p><b>Applied Date:</b> {pendingDetail.appliedDate}</p>
             <div>
               <b>Documents:</b>
               <ul style={styles.docList}>
                 {pendingDetail.documents.map((doc, i) => (
-                  <li key={i} style={styles.docItem} title="Click to view document">{doc}</li>
+                  <li key={i} style={styles.docItem}>
+                    <span>{doc.type || doc.documentNumber || "Document"}</span>
+                    {doc.imageUrl && (
+                      <>
+                        {" "}
+                        <a
+                          href={doc.imageUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: "#2563eb", marginLeft: 8, textDecoration: "underline" }}
+                        >
+                          View
+                        </a>
+                      </>
+                    )}
+                  </li>
                 ))}
               </ul>
             </div>

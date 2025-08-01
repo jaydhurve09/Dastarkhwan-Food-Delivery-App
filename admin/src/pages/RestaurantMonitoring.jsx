@@ -372,12 +372,13 @@ const RestaurantMonitoring = () => {
   // Open modal for editing a category
   const handleEditCategory = (category) => {
     setEditingCategory(category);
+    const hasSubs = category.subCategories && category.subCategories.length > 0;
     setNewCategory({
       name: category.name,
       isActive: category.isActive,
-      hasSubcategories: category.hasSubcategories || false,
+      hasSubcategories: hasSubs, // Set based on whether there are subcategories
       subCategories: Array.isArray(category.subCategories) 
-        ? category.subCategories 
+        ? [...category.subCategories] 
         : (category.subCategories || '').split(',').map(s => s.trim()).filter(Boolean),
       // ... include image handling if needed
     });

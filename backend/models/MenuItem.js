@@ -1,4 +1,5 @@
 import { BaseModel } from './BaseModel.js';
+import { db } from '../config/firebase.js';
 
 export class MenuItem extends BaseModel {
   static collectionName = 'menuItems';
@@ -7,11 +8,20 @@ export class MenuItem extends BaseModel {
     super();
     this.name = data.name || ''; // Required
     this.image = data.image || ''; // Optional
-    this.category = data.category || ''; // Reference to menuCategories collection
-    this.subCategory = data.subCategory || ''; // Reference to subcategory in menuCategories
+    this.categoryId = data.categoryId || ''; // Reference to menuCategories document ID
+    this.categoryName = data.categoryName || ''; // Denormalized category name for easier queries
+    this.subCategory = data.subCategory || ''; // Subcategory name (must exist in the category's subCategories array)
     this.price = data.price || 0; // Price in smallest currency unit (e.g., cents)
     this.tags = data.tags || []; // Array of tags like ["Recommended for You", "Most Loved"]
     this.description = data.description || ''; // Item description
+    this.isActive = data.isActive !== undefined ? data.isActive : true; // Item active status
+    this.isVeg = data.isVeg !== undefined ? data.isVeg : false; // Vegetarian status
+    this.addOns = Array.isArray(data.addOns) 
+      ? data.addOns.map(addOn => ({
+          name: addOn.name || '',
+          price: typeof addOn.price === 'number' ? addOn.price : 0
+        }))
+      : []; // Array of add-ons with name and price
     this.createdAt = data.createdAt || new Date();
     this.updatedAt = data.updatedAt || new Date();
   }
@@ -20,75 +30,110 @@ export class MenuItem extends BaseModel {
   toFirestore() {
     return {
       name: this.name,
-      ...(this.image && { image: this.image }), // Only include if exists
-      category: this.category, // Reference to menuCategories collection
-      subCategory: this.subCategory, // Reference to subcategory
+      image: this.image,
+      categoryId: this.categoryId,
+      categoryName: this.categoryName,
+      subCategory: this.subCategory,
       price: this.price,
       tags: this.tags,
       description: this.description,
+      isActive: this.isActive,
+      isVeg: this.isVeg,
+      addOns: this.addOns,
       createdAt: this.createdAt,
-      updatedAt: new Date()
+      updatedAt: this.updatedAt,
     };
   }
 
+  // Create MenuItem from Firestore data
+  static fromFirestore(snapshot, options) {
+    const data = snapshot.data(options);
+    return new MenuItem({
+      id: snapshot.id,
+      ...data,
+    });
+  }
+
   // Validate menu item data
-  validate() {
+  async validate() {
+    const errors = [];
+    
     if (!this.name || this.name.trim() === '') {
-      throw new Error('Item name is required');
+      errors.push('Menu item name is required');
     }
-
-    if (this.name.length > 100) {
-      throw new Error('Item name cannot exceed 100 characters');
+    
+    if (!this.categoryId || this.categoryId.trim() === '') {
+      errors.push('Category reference is required');
     }
-
-    if (!this.category) {
-      throw new Error('Category is required');
-    }
-
+    
     if (this.price < 0) {
-      throw new Error('Price cannot be negative');
+      errors.push('Price cannot be negative');
     }
 
-    if (this.description && this.description.length > 500) {
-      throw new Error('Description cannot exceed 500 characters');
+    // Validate add-ons
+    if (this.addOns && !Array.isArray(this.addOns)) {
+      errors.push('Add-ons must be an array');
+    } else if (Array.isArray(this.addOns)) {
+      this.addOns.forEach((addOn, index) => {
+        if (!addOn.name || typeof addOn.name !== 'string') {
+          errors.push(`Add-on at index ${index} must have a valid name`);
+        }
+        if (typeof addOn.price !== 'number' || addOn.price < 0) {
+          errors.push(`Add-on "${addOn.name || 'unnamed'}" must have a valid non-negative price`);
+        }
+      });
     }
 
-    // Validate tags if provided
-    if (this.tags && !Array.isArray(this.tags)) {
-      throw new Error('Tags must be an array');
+    // Validate subcategory belongs to the category
+    if (this.subCategory && this.subCategory.trim() !== '') {
+      try {
+        const categoryDoc = await db.collection('menuCategories').doc(this.categoryId).get();
+        
+        if (!categoryDoc.exists) {
+          errors.push('Invalid category reference');
+        } else {
+          const categoryData = categoryDoc.data();
+          const validSubCategories = categoryData.subCategories || [];
+          
+          if (!validSubCategories.includes(this.subCategory)) {
+            errors.push(`Subcategory "${this.subCategory}" is not valid for the selected category`);
+          }
+          
+          // Ensure categoryName is in sync
+          if (!this.categoryName) {
+            this.categoryName = categoryData.name;
+          }
+        }
+      } catch (error) {
+        console.error('Error validating category/subcategory:', error);
+        errors.push('Error validating category and subcategory relationship');
+      }
     }
-
-    return true;
+    
+    return errors.length === 0 ? null : errors;
   }
 
-  // Static method to find items by category
-  static async findByCategory(categoryId) {
-    return this.find({ category: categoryId });
-  }
-
-  // Static method to find items by subcategory
-  static async findBySubCategory(subCategoryId) {
-    return this.find({ subCategory: subCategoryId });
-  }
-
-  // Static method to find items by tag
-  static async findByTag(tag) {
-    return this.find({ tags: tag });
-  }
-
-  // Method to add a tag
-  addTag(tag) {
-    if (!this.tags.includes(tag)) {
-      this.tags.push(tag);
+  // Save with validation
+  async save() {
+    const validationErrors = await this.validate();
+    if (validationErrors) {
+      throw new Error(validationErrors.join(', '));
     }
-    return this;
-  }
-
-  // Method to remove a tag
-  removeTag(tag) {
-    this.tags = this.tags.filter(t => t !== tag);
+    
+    this.updatedAt = new Date();
+    
+    if (this.id) {
+      // Update existing document
+      const docRef = db.collection(MenuItem.collectionName).doc(this.id);
+      await docRef.update(this.toFirestore());
+    } else {
+      // Create new document
+      const docRef = await db.collection(MenuItem.collectionName).add(this.toFirestore());
+      this.id = docRef.id;
+    }
+    
     return this;
   }
 }
 
-export default new MenuItem();
+export default MenuItem;

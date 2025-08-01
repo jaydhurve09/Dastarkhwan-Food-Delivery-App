@@ -23,14 +23,36 @@ const menuItemValidation = [
     .notEmpty().withMessage('Item name is required')
     .isLength({ max: 100 }).withMessage('Item name cannot exceed 100 characters'),
     
-  body('category')
-    .notEmpty().withMessage('Category is required'),
+  body('categoryId')
+    .notEmpty().withMessage('Category ID is required'),
     
   body('subCategory')
     .optional(),
     
   body('price')
     .isFloat({ min: 0 }).withMessage('Price must be a positive number'),
+    
+  body('isVeg')
+    .optional()
+    .isBoolean()
+    .withMessage('isVeg must be a boolean'),
+    
+  body('addOns')
+    .optional()
+    .isArray()
+    .withMessage('addOns must be an array')
+    .custom((addOns) => {
+      if (!Array.isArray(addOns)) return false;
+      return addOns.every(addOn => 
+        addOn && 
+        typeof addOn === 'object' &&
+        typeof addOn.name === 'string' &&
+        addOn.name.trim() !== '' &&
+        typeof addOn.price === 'number' &&
+        addOn.price >= 0
+      );
+    })
+    .withMessage('Each add-on must have a name (string) and price (non-negative number)'),
     
   body('tags')
     .optional()

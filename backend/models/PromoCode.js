@@ -247,5 +247,5 @@ export class PromoCode extends BaseModel {
   }
 }
 
-// Export a singleton instance
-export default new PromoCode();
+// Export the class directly
+export default PromoCode;

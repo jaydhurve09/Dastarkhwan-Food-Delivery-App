@@ -1,7 +1,11 @@
-import React, { useState,useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { FaStar, FaEdit, FaTrash, FaPlus, FaUpload } from 'react-icons/fa';
+import axios from 'axios';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { AdminContext } from '../contexts/adminContext';
-import { updateOrderAgent,updateOrderStatus } from '../services/orderService';
+
+const API_BASE_URL = 'http://localhost:5000/api';
 
 // --- MOCK DATA ---
 const initialMenuItems = [
@@ -116,7 +120,6 @@ const ResponsiveStyles = () => (
   </style>
 );
 
-
 // Reusable Modal Component
 const Modal = ({ children, isOpen, onClose }) => {
   if (!isOpen) return null;
@@ -135,6 +138,7 @@ const Modal = ({ children, isOpen, onClose }) => {
   );
 };
 
+const DEFAULT_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlZWVlZWUiLz48dGV4dCB4PSI1MCIgeT0iNTAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzk5OSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+';
 
 const RestaurantMonitoring = () => {
   const {deliveryPartners,orders,users,fetchOrders} = useContext(AdminContext);
@@ -151,43 +155,279 @@ const RestaurantMonitoring = () => {
 
   // State for modals and forms
   const [isMenuModalOpen, setMenuModalOpen] = useState(false);
-  const [isOfferModalOpen, setOfferModalOpen] = useState(false); // This modal is no longer used for offers but kept.
-  const [editingItem, setEditingItem] = useState(null);
-  const [editingOffer, setEditingOffer] = useState(null); // This state is no longer used for offers but kept.
-  const [imagePreview, setImagePreview] = useState(null);
   const [isCategoryModalOpen, setCategoryModalOpen] = useState(false);
-  const [categories, setCategories] = useState([
-    { name: 'Pizzas', subCategories: ['Veg', 'Non-Veg'] },
-    { name: 'Starters', subCategories: ['Veg', 'Non-Veg'] },
-    { name: 'Beverages', subCategories: [] },
-    { name: 'Ice Cream', subCategories: [] },
-    { name: 'Biryani', subCategories: ['Chicken', 'Mutton', 'Veg'] }
-  ]);
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [newSubCategoryStr, setNewSubCategoryStr] = useState('');
-  const [newCategoryHasSub, setNewCategoryHasSub] = useState(false);
-  const [selectedSubCategory, setSelectedSubCategory] = useState('');
-  const [currentSubCategories, setCurrentSubCategories] = useState([]);
-  const [hasSubDishes, setHasSubDishes] = useState(false);
-  const [currentSubDishes, setCurrentSubDishes] = useState([]);
-  const [subDishName, setSubDishName] = useState('');
-  const [subDishPrice, setSubDishPrice] = useState('');
+  const [editingItem, setEditingItem] = useState(null);
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [newCategory, setNewCategory] = useState({
+    name: '',
+    isActive: true,
+    hasSubcategories: false,
+    subCategories: []
+  });
+  const [subCategoryInput, setSubCategoryInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
-  // New state for multi-select recommendation tags (using Set for easy management)
-  const [selectedRecommendationTags, setSelectedRecommendationTags] = useState(new Set());
+  // Add state to track active section
+  const [activeSection, setActiveSection] = useState('menu'); // 'menu' or 'categories'
 
+  // Fetch categories on component mount
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  // Fetch all categories
+  const fetchCategories = async () => {
+    try {
+      setIsLoading(true);
+      setError('');
+      const token = localStorage.getItem('adminToken');
+      console.log('Fetching categories with token:', token);
+      
+      const response = await axios.get(`${API_BASE_URL}/menu-categories`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
+      });
+      
+      console.log('Categories API response:', response);
+      
+      if (response.data && response.data.data) {
+        console.log('Setting categories:', response.data.data);
+        setCategories(response.data.data);
+      } else {
+        console.warn('Unexpected response format:', response.data);
+        setCategories([]);
+      }
+    } catch (err) {
+      console.error('Error in fetchCategories:', err);
+      console.error('Error response:', err.response);
+      setError('Failed to load categories. Please try again.');
+      setCategories([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fetch menu items from the backend
+  const fetchMenuItems = async () => {
+    try {
+      const token = localStorage.getItem('adminToken');
+      const response = await axios.get('http://localhost:5000/api/menu-items', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      // Transform the data to match the frontend format
+      const transformedItems = response.data.data.map(item => ({
+        id: item.id,
+        name: item.name,
+        price: { full: item.price },
+        subCategory: item.subCategory,
+        available: item.isActive,
+        category: item.categoryId,
+        description: item.description,
+        image: item.image || 'https://via.placeholder.com/150',
+        recommendation: item.tags || [],
+        addOns: item.addOns || []
+      }));
+      
+      setMenuItems(transformedItems);
+    } catch (error) {
+      console.error('Error fetching menu items:', error);
+      toast.error('Failed to load menu items');
+    }
+  };
+
+  // Handle input change for category form
+  const handleCategoryInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setNewCategory(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  // Add a function to handle subcategory input
+  const handleAddSubCategory = () => {
+    if (subCategoryInput.trim()) {
+      setNewCategory(prev => ({
+        ...prev,
+        subCategories: [...prev.subCategories, subCategoryInput.trim()]
+      }));
+      setSubCategoryInput('');
+    }
+  };
+
+  // Function to remove a subcategory
+  const handleRemoveSubCategory = (index) => {
+    setNewCategory(prev => ({
+      ...prev,
+      subCategories: prev.subCategories.filter((_, i) => i !== index)
+    }));
+  };
+
+  // Add new category
+  const handleAddCategory = async () => {
+    try {
+      setIsLoading(true);
+      setError('');
+
+      // Format subcategories as an array of strings
+      const formattedSubCategories = newCategory.hasSubcategories
+        ? (Array.isArray(newCategory.subCategories) 
+            ? newCategory.subCategories 
+            : (newCategory.subCategories || '').split(',').map(s => s.trim()).filter(Boolean)
+          )
+        : [];
+
+      const formData = new FormData();
+      formData.append('name', newCategory.name);
+      formData.append('isActive', newCategory.isActive);
+      formData.append('hasSubcategories', newCategory.hasSubcategories);
+      
+      // Append each subcategory individually if they exist
+      if (formattedSubCategories.length > 0) {
+        formattedSubCategories.forEach((subCat, index) => {
+          formData.append(`subCategories[${index}]`, subCat);
+        });
+      }
+
+      const response = await axios.post(
+        `${API_BASE_URL}/menu-categories`,
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+          }
+        }
+      );
+
+      setCategories([...categories, response.data]);
+      setSuccess('Category added successfully!');
+      setCategoryModalOpen(false);
+      setNewCategory({
+        name: '',
+        isActive: true,
+        hasSubcategories: false,
+        subCategories: [],
+        image: null,
+        imagePreview: ''
+      });
+    } catch (error) {
+      console.error('Error adding category:', error);
+      setError(error.response?.data?.message || 'Failed to add category');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Update category
+  const handleUpdateCategory = async () => {
+    if (!editingCategory) return;
+  
+    try {
+      setIsLoading(true);
+      setError('');
+  
+      // Format subcategories as an array of strings
+      const formattedSubCategories = newCategory.hasSubcategories
+        ? (Array.isArray(newCategory.subCategories) 
+            ? newCategory.subCategories 
+            : (newCategory.subCategories || '').split(',').map(s => s.trim()).filter(Boolean)
+          )
+        : [];
+  
+      const response = await axios.put(
+        `http://localhost:5000/api/menu-categories/${editingCategory.id}`,
+        {
+          name: newCategory.name,
+          isActive: newCategory.isActive,
+          hasSubcategories: newCategory.hasSubcategories,
+          subCategories: formattedSubCategories,
+          // ... include image handling if needed
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+          }
+        }
+      );
+  
+      setCategories(categories.map(cat => 
+        cat.id === editingCategory.id ? response.data : cat
+      ));
+      setSuccess('Category updated successfully!');
+      setCategoryModalOpen(false);
+      setEditingCategory(null);
+    } catch (error) {
+      console.error('Error updating category:', error);
+      setError(error.response?.data?.message || 'Failed to update category');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Delete category
+  const handleDeleteCategory = async (categoryId) => {
+    if (window.confirm('Are you sure you want to delete this category? This action cannot be undone.')) {
+      try {
+        setIsLoading(true);
+        setError('');
+        
+        await axios.delete(`http://localhost:5000/api/menu-categories/${categoryId}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+          }
+        });
+        
+        // Remove the category from the local state
+        setCategories(categories.filter(cat => cat.id !== categoryId));
+        setSuccess('Category deleted successfully!');
+        setTimeout(() => setSuccess(''), 3000);
+      } catch (err) {
+        console.error('Error deleting category:', err);
+        setError(err.response?.data?.message || 'Failed to delete category. It might be in use by menu items.');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  // Open modal for editing a category
+  const handleEditCategory = (category) => {
+    setEditingCategory(category);
+    const hasSubs = category.subCategories && category.subCategories.length > 0;
+    setNewCategory({
+      name: category.name,
+      isActive: category.isActive,
+      hasSubcategories: hasSubs, // Set based on whether there are subcategories
+      subCategories: Array.isArray(category.subCategories) 
+        ? [...category.subCategories] 
+        : (category.subCategories || '').split(',').map(s => s.trim()).filter(Boolean),
+      // ... include image handling if needed
+    });
+    setCategoryModalOpen(true);
+  };
+
+  // Reset form and close modal
+  const handleCloseModal = () => {
+    setCategoryModalOpen(false);
+    setEditingCategory(null);
+    setNewCategory({ name: '', isActive: true, hasSubcategories: false, subCategories: [] });
+    setError('');
+  };
 
   // --- Handlers ---
   const handleDeleteMenuItem = (id) => {
     if (window.confirm('Are you sure you want to delete this menu item?')) {
       setMenuItems(menuItems.filter(item => item.id !== id));
-    }
-  };
-
-  const handleDeleteOffer = (id) => {
-    if (window.confirm('Are you sure you want to delete this offer?')) {
-      // Assuming 'offers' state existed, but since it's not in the initial state, this will do nothing.
-      // setOffers(offers.filter(offer => offer.id !== id));
     }
   };
 
@@ -199,47 +439,8 @@ const RestaurantMonitoring = () => {
     alert('Operational hours updated!');
   };
 
-  const handleAddCategory = (e) => {
-    e.preventDefault();
-    if (newCategoryName && !categories.find(c => c.name === newCategoryName)) {
-      const subCategories = newCategoryHasSub ? newSubCategoryStr.split(',').map(s => s.trim()).filter(Boolean) : [];
-      setCategories([...categories, { name: newCategoryName, subCategories }]);
-      setNewCategoryName('');
-      setNewSubCategoryStr('');
-      setNewCategoryHasSub(false);
-    } else {
-      alert('Category name is empty or already exists.');
-    }
-  };
-
-  const handleAddSubDish = () => {
-    if (subDishName && subDishPrice) {
-      setCurrentSubDishes([...currentSubDishes, { name: subDishName, price: parseFloat(subDishPrice) }]);
-      setSubDishName('');
-      setSubDishPrice('');
-    } else {
-      alert('Please enter a name and price for the sub-dish.');
-    }
-  };
-
-  const handleRemoveSubDish = (index) => {
-    setCurrentSubDishes(currentSubDishes.filter((_, i) => i !== index));
-  };
-
-  const handleUpdateOrderStatus =  async (orderId, newStatus) => {
-    await updateOrderStatus(orderId, newStatus);
-    await fetchOrders(); // Assuming fetchOrders is defined to refresh the orders list
-  };
-
-  const handleDeleteCategory = (categoryToDelete) => {
-    const isCategoryInUse = menuItems.some(item => item.category === categoryToDelete.name);
-    if (isCategoryInUse) {
-      alert(`Cannot delete "${categoryToDelete.name}" as it is currently in use by a menu item.`);
-      return;
-    }
-    if (window.confirm(`Are you sure you want to delete the category "${categoryToDelete.name}"?`)) {
-      setCategories(categories.filter(cat => cat.name !== categoryToDelete.name));
-    }
+  const handleUpdateOrderStatus = (orderId, newStatus) => {
+    setOrders(orders.map(order => order.id === orderId ? { ...order, status: newStatus } : order));
   };
 
   const handleRecommendationTagChange = (tag) => {
@@ -252,50 +453,121 @@ const RestaurantMonitoring = () => {
     setSelectedRecommendationTags(newTags);
   };
 
-  const handleMenuFormSubmit = (e) => {
+  const handleMenuFormSubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const newItemData = {
-      id: editingItem ? editingItem.id : Date.now(),
+    const foodType = formData.get('foodType');
+    const token = localStorage.getItem('adminToken');
+    
+    // Prepare the request data
+    const menuItemData = {
       name: formData.get('name'),
-      price: {
-        full: parseFloat(formData.get('price_full')),
-      },
-      subCategory: selectedSubCategory,
-      subDishes: hasSubDishes ? currentSubDishes : [],
-      available: editingItem ? editingItem.available : true,
-      category: formData.get('category'),
-      description: formData.get('description'),
-      image: imagePreview || (editingItem ? editingItem.image : 'https://via.placeholder.com/150'),
-      recommendation: Array.from(selectedRecommendationTags), // Store as array
+      categoryId: formData.get('category'), // This should be the category ID, not name
+      subCategory: foodType,
+      isVeg: foodType === 'Veg',
+      price: parseFloat(formData.get('price_full')),
+      description: formData.get('description') || '',
+      tags: Array.from(selectedRecommendationTags),
+      isActive: true,
+      ...(hasSubDishes && currentSubDishes.length > 0 && {
+        addOns: currentSubDishes.map(dish => ({
+          name: dish.name,
+          price: dish.price
+        }))
+      })
     };
 
-    if (editingItem) {
-      setMenuItems(menuItems.map(item => item.id === editingItem.id ? newItemData : item));
-    } else {
-      setMenuItems([...menuItems, newItemData]);
-    }
-    setMenuModalOpen(false);
-    setEditingItem(null);
-    setImagePreview(null);
-    setSelectedSubCategory('');
-    setHasSubDishes(false);
-    setCurrentSubDishes([]);
-    setSelectedRecommendationTags(new Set()); // Reset tags
-  };
+    try {
+      let response;
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      };
 
-  // This handler is for the offer modal, which is currently disabled.
-  const handleOfferFormSubmit = (e) => {
-    e.preventDefault();
-    alert("Offer management is currently disabled in this version.");
-    setOfferModalOpen(false);
-    setEditingOffer(null);
-  }
+      if (editingItem) {
+        // Update existing menu item
+        response = await axios.put(
+          `http://localhost:5000/api/menu-items/${editingItem.id}`,
+          menuItemData,
+          { headers }
+        );
+        
+        // Show success toast for update
+        toast.success('Menu item updated successfully!', {
+          position: "top-right",
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+      } else {
+        // Create new menu item
+        response = await axios.post(
+          'http://localhost:5000/api/menu-items',
+          menuItemData,
+          { headers }
+        );
+        
+        // Show success toast for create
+        toast.success('Menu item added successfully!', {
+          position: "top-right",
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+      }
+
+      // Close the modal and reset form
+      setMenuModalOpen(false);
+      setEditingItem(null);
+      setImagePreview(null);
+      setSelectedSubCategory('');
+      setHasSubDishes(false);
+      setCurrentSubDishes([]);
+      setSelectedRecommendationTags(new Set());
+      
+      // Refresh the menu items
+      fetchMenuItems();
+      
+    } catch (error) {
+      console.error('Error saving menu item:', error);
+      toast.error(error.response?.data?.message || 'Failed to save menu item', {
+        position: "top-right",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+    }
+  };
 
   const handleImageChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       setImagePreview(URL.createObjectURL(e.target.files[0]));
     }
+  };
+
+  // Handle adding sub-dishes (add-ons)
+  const handleAddSubDish = () => {
+    if (subDishName && subDishPrice) {
+      setCurrentSubDishes([...currentSubDishes, {
+        name: subDishName,
+        price: parseFloat(subDishPrice)
+      }]);
+      setSubDishName('');
+      setSubDishPrice('');
+    }
+  };
+
+  // Handle removing a sub-dish (add-on)
+  const handleRemoveSubDish = (index) => {
+    const newSubDishes = [...currentSubDishes];
+    newSubDishes.splice(index, 1);
+    setCurrentSubDishes(newSubDishes);
   };
 
   // Group menu items by category
@@ -341,8 +613,16 @@ const RestaurantMonitoring = () => {
     toggleSliderBefore: { position: 'absolute', content: '""', height: '26px', width: '26px', left: '4px', bottom: '4px', backgroundColor: 'white', transition: '.4s', borderRadius: '50%' },
     input: { width: '100%', padding: '10px', margin: '5px 0 15px 0', borderRadius: '4px', border: '1px solid #ddd', boxSizing: 'border-box' },
     textarea: { width: '100%', padding: '10px', margin: '5px 0 15px 0', borderRadius: '4px', border: '1px solid #ddd', minHeight: '80px', boxSizing: 'border-box' },
-    formGroup: { marginBottom: '15px' },
-    label: { display: 'block', marginBottom: '5px', fontWeight: 'bold' },
+    formGroup: {
+      marginBottom: '15px',
+      width: '100%',
+    },
+    label: {
+      display: 'block',
+      marginBottom: '5px',
+      fontWeight: '500',
+      color: '#333',
+    },
     imagePreview: { width: '100px', height: '100px', objectFit: 'cover', borderRadius: '8px', marginBottom: '10px' },
     menuItemImage: { width: '60px', height: '60px', objectFit: 'cover', borderRadius: '8px', marginRight: '15px' },
     categoryTitle: { fontSize: '1.8rem', color: '#1a2c3e', marginTop: '30px', marginBottom: '15px', borderBottom: '2px solid #1a2c3e', paddingBottom: '5px' },
@@ -360,12 +640,245 @@ const RestaurantMonitoring = () => {
   const sliderStyle = (isChecked) => ({ ...styles.toggleSlider, backgroundColor: isChecked ? '#2ecc71' : '#ccc' });
   const sliderBeforeStyle = (isChecked) => ({ ...styles.toggleSliderBefore, transform: isChecked ? 'translateX(26px)' : 'translateX(0)' });
 
+  const [selectedRecommendationTags, setSelectedRecommendationTags] = useState(new Set());
+  const [selectedSubCategory, setSelectedSubCategory] = useState('');
+  const [currentSubCategories, setCurrentSubCategories] = useState([]);
+  const [hasSubDishes, setHasSubDishes] = useState(false);
+  const [currentSubDishes, setCurrentSubDishes] = useState([]);
+  const [subDishName, setSubDishName] = useState('');
+  const [subDishPrice, setSubDishPrice] = useState('');
 
   return (
     <div style={styles.pageContainer}>
       <ResponsiveStyles />
-
+      <ToastContainer />
       {/* --- Modals --- */}
+      <Modal 
+        isOpen={isCategoryModalOpen} 
+        onClose={() => { 
+          setCategoryModalOpen(false); 
+          setEditingCategory(null); 
+          setNewCategory({ 
+            name: '', 
+            isActive: true, 
+            hasSubcategories: false, 
+            subCategories: [] 
+          }); 
+          setSubCategoryInput('');
+          setError(''); 
+        }}
+      >
+        <div style={{ padding: '20px', maxWidth: '500px', margin: '0 auto' }}>
+          <h3 style={{ marginBottom: '20px', color: '#2c3e50', fontSize: '1.5rem' }}>
+            {editingCategory ? 'Edit Category' : 'Add New Category'}
+          </h3>
+          
+          <form onSubmit={editingCategory ? handleUpdateCategory : handleAddCategory}>
+            <div style={styles.formGroup}>
+              <label style={styles.label} htmlFor="categoryName">Category Name</label>
+              <input
+                id="categoryName"
+                type="text"
+                name="name"
+                value={newCategory.name}
+                onChange={handleCategoryInputChange}
+                style={styles.input}
+                placeholder="e.g., Main Course, Desserts"
+                required
+              />
+            </div>
+            
+            <div style={{ ...styles.formGroup, display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '6px' }}>
+              <input 
+                type="checkbox" 
+                id="hasSubcategories" 
+                name="hasSubcategories" 
+                checked={newCategory.hasSubcategories} 
+                onChange={handleCategoryInputChange} 
+                style={{ width: '18px', height: '18px' }}
+              />
+              <label htmlFor="hasSubcategories" style={{ margin: 0, cursor: 'pointer', userSelect: 'none' }}>
+                This category has subcategories
+              </label>
+            </div>
+            
+            {newCategory.hasSubcategories && (
+              <div style={{ ...styles.formGroup, marginTop: '15px', padding: '15px', border: '1px solid #e9ecef', borderRadius: '6px', backgroundColor: '#fff' }}>
+                <label style={{ ...styles.label, marginBottom: '10px' }}>Subcategories</label>
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                  <input 
+                    type="text" 
+                    value={subCategoryInput}
+                    onChange={(e) => setSubCategoryInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddSubCategory())}
+                    placeholder="Enter subcategory name" 
+                    style={{ ...styles.input, flex: 1, margin: 0 }} 
+                  />
+                  <button 
+                    type="button" 
+                    onClick={handleAddSubCategory}
+                    style={{
+                      padding: '8px 15px',
+                      backgroundColor: '#3498db',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      transition: 'background-color 0.2s'
+                    }}
+                    onMouseOver={(e) => e.target.style.backgroundColor = '#2980b9'}
+                    onMouseOut={(e) => e.target.style.backgroundColor = '#3498db'}
+                  >
+                    Add
+                  </button>
+                </div>
+                
+                {newCategory.subCategories.length > 0 && (
+                  <div style={{ marginTop: '15px' }}>
+                    <p style={{ margin: '0 0 8px 0', fontSize: '0.9em', color: '#495057' }}>Subcategories:</p>
+                    <div style={{ 
+                      display: 'flex', 
+                      flexWrap: 'wrap', 
+                      gap: '8px', 
+                      maxHeight: '150px', 
+                      overflowY: 'auto', 
+                      padding: '10px',
+                      backgroundColor: '#f8f9fa',
+                      borderRadius: '6px',
+                      border: '1px solid #e9ecef'
+                    }}>
+                      {newCategory.subCategories.length === 0 ? (
+                        <div style={{ color: '#6c757d', fontStyle: 'italic' }}>No subcategories added yet</div>
+                      ) : (
+                        newCategory.subCategories.map((subCat, index) => (
+                          <div 
+                            key={index}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              backgroundColor: '#e9ecef',
+                              padding: '4px 12px',
+                              borderRadius: '12px',
+                              fontSize: '0.85em',
+                              color: '#212529'
+                            }}
+                          >
+                            {subCat}
+                            <button 
+                              type="button" 
+                              onClick={() => handleRemoveSubCategory(index)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#dc3545',
+                                cursor: 'pointer',
+                                padding: '0 0 0 5px',
+                                fontSize: '1.1em',
+                                lineHeight: '1',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '18px',
+                                height: '18px',
+                                borderRadius: '50%',
+                                transition: 'background-color 0.2s'
+                              }}
+                              onMouseOver={(e) => e.target.style.backgroundColor = '#f1f1f1'}
+                              onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
+                              aria-label={`Remove ${subCat}`}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            <div style={{ ...styles.formGroup, display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '6px', marginTop: '15px' }}>
+              <input 
+                type="checkbox" 
+                id="isActive" 
+                name="isActive" 
+                checked={newCategory.isActive} 
+                onChange={handleCategoryInputChange}
+                style={{ width: '18px', height: '18px' }}
+              />
+              <label htmlFor="isActive" style={{ margin: 0, cursor: 'pointer', userSelect: 'none' }}>
+                Active (visible to customers)
+              </label>
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '25px', paddingTop: '15px', borderTop: '1px solid #e9ecef' }}>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setCategoryModalOpen(false);
+                  setEditingCategory(null);
+                  setNewCategory({ 
+                    name: '', 
+                    isActive: true, 
+                    hasSubcategories: false, 
+                    subCategories: [] 
+                  });
+                  setSubCategoryInput('');
+                }}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#f8f9fa',
+                  color: '#495057',
+                  border: '1px solid #dee2e6',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: '500',
+                  transition: 'all 0.2s'
+                }}
+                onMouseOver={(e) => e.target.backgroundColor = '#e9ecef'}
+                onMouseOut={(e) => e.target.backgroundColor = '#f8f9fa'}
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit" 
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: '500',
+                  transition: 'background-color 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+                onMouseOver={(e) => e.target.style.backgroundColor = '#218838'}
+                onMouseOut={(e) => e.target.style.backgroundColor = '#28a745'}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <span className="spinner" style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid rgba(255,255,255,0.3)', borderRadius: '50%', borderTopColor: '#fff', animation: 'spin 1s ease-in-out infinite' }}></span>
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <span>💾</span>
+                    {editingCategory ? 'Update Category' : 'Save Category'}
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </Modal>
+
       <Modal isOpen={isMenuModalOpen} onClose={() => { setMenuModalOpen(false); setEditingItem(null); setImagePreview(null); setCurrentSubDishes([]); setHasSubDishes(false); setSelectedSubCategory(''); setSelectedRecommendationTags(new Set()); }}>
         <h3 style={{ marginBottom: '20px' }}>{editingItem ? 'Edit' : 'Add'} Menu Item</h3>
         <form onSubmit={handleMenuFormSubmit}>
@@ -390,14 +903,18 @@ const RestaurantMonitoring = () => {
                 style={styles.input}
                 defaultValue={editingItem?.category || ""}
                 onChange={(e) => {
-                  const selectedCat = categories.find(c => c.name === e.target.value);
+                  const selectedCat = categories.find(c => c.id === e.target.value);
                   setCurrentSubCategories(selectedCat?.subCategories || []);
                   setSelectedSubCategory('');
                 }}
                 required
               >
                 <option value="" disabled>Select a category</option>
-                {categories.map(cat => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -419,6 +936,33 @@ const RestaurantMonitoring = () => {
           <div style={styles.formGroup}>
             <label style={styles.label}>Price (₹)</label>
             <input name="price_full" type="number" step="0.01" style={styles.input} defaultValue={editingItem?.price?.full || ''} required />
+          </div>
+
+          {/* Veg/Non-Veg Toggle */}
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Food Type</label>
+            <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="foodType"
+                  value="Veg"
+                  defaultChecked={editingItem?.subCategory === 'Veg'}
+                  style={{ width: '18px', height: '18px' }}
+                />
+                <span>Veg</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="foodType"
+                  value="Non-Veg"
+                  defaultChecked={editingItem?.subCategory === 'Non-Veg'}
+                  style={{ width: '18px', height: '18px' }}
+                />
+                <span>Non-Veg</span>
+              </label>
+            </div>
           </div>
 
           {/* Recommendation Checkboxes */}
@@ -466,7 +1010,7 @@ const RestaurantMonitoring = () => {
             <div style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '8px', marginTop: '10px' }}>
               <h4 style={{ marginTop: 0, marginBottom: '15px' }}>Add Sub-Dishes</h4>
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                <input type="text" placeholder="Item Name" value={subDishName} onChange={(e) => setSubDishName(e.target.value)} style={{ ...styles.input, margin: 0 }} />
+                <input type="text" placeholder="Item Name" value={subDishName} onChange={(e) => setSubDishName(e.target.value)} style={{ ...styles.input, flex: 1 }} />
                 <input type="number" placeholder="Price" value={subDishPrice} onChange={(e) => setSubDishPrice(e.target.value)} style={{ ...styles.input, margin: 0, width: '100px' }} />
                 <button type="button" onClick={handleAddSubDish} style={{ ...styles.button, backgroundColor: '#5dade2', color: 'white' }}>Add</button>
               </div>
@@ -489,59 +1033,6 @@ const RestaurantMonitoring = () => {
           </div>
 
           <button type="submit" style={{ ...styles.button, ...styles.addButton }}>Save Item</button>
-        </form>
-      </Modal>
-
-      {/* This modal is no longer used but kept in case of future need, or can be removed */}
-      <Modal isOpen={isOfferModalOpen} onClose={() => { setOfferModalOpen(false); setEditingOffer(null); }}>
-        <h3>Offer Management Disabled</h3>
-      </Modal>
-
-      <Modal isOpen={isCategoryModalOpen} onClose={() => { setCategoryModalOpen(false); setNewCategoryHasSub(false); setNewSubCategoryStr(''); setNewCategoryName(''); }}>
-        <h3 style={{ marginBottom: '20px' }}>Manage Categories</h3>
-        <div>
-          {categories.map(cat => (
-            <div key={cat.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid #eee' }}>
-              <span>{cat.name} <em style={{ color: '#666' }}>{cat.subCategories.length > 0 ? `(${cat.subCategories.join(', ')})` : '(No Sub-categories)'}</em></span>
-              <button style={{ ...styles.button, ...styles.deleteButton }} onClick={() => handleDeleteCategory(cat)}>
-                <FaTrash />
-              </button>
-            </div>
-          ))}
-        </div>
-        <form onSubmit={handleAddCategory} style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          <input
-            type="text"
-            value={newCategoryName}
-            onChange={(e) => setNewCategoryName(e.target.value)}
-            placeholder="Add new category name"
-            style={{ ...styles.input, margin: 0 }}
-            required
-          />
-          <label>
-            <input
-              type="checkbox"
-              checked={newCategoryHasSub}
-              onChange={(e) => setNewCategoryHasSub(e.target.checked)}
-              style={{ marginRight: '8px' }}
-            />
-            Has sub-categories?
-          </label>
-
-          {newCategoryHasSub && (
-            <div>
-              <label style={{ display: 'block', marginBottom: '5px' }}>Sub-categories (comma-separated):</label>
-              <input
-                type="text"
-                value={newSubCategoryStr}
-                onChange={(e) => setNewSubCategoryStr(e.target.value)}
-                placeholder="e.g., Chicken, Mutton, Veg"
-                style={{ ...styles.input, margin: 0, width: '100%' }}
-              />
-            </div>
-          )}
-
-          <button type="submit" style={{ ...styles.button, ...styles.addButton, marginTop: 0 }}>Add Category</button>
         </form>
       </Modal>
 
@@ -616,105 +1107,378 @@ const RestaurantMonitoring = () => {
               <button style={{ ...styles.button, ...styles.addButton }} onClick={() => { setEditingItem(null); setMenuModalOpen(true); }}><FaPlus /> Add New Item</button>
               <button
                 style={{ ...styles.button, ...styles.addButton, backgroundColor: '#f39c12', marginTop: '10px', marginLeft: '10px' }}
-                onClick={() => setCategoryModalOpen(true)}>
-                <FaPlus /> Manage Categories
+                onClick={() => setActiveSection(activeSection === 'categories' ? 'menu' : 'categories')}>
+                <FaPlus /> {activeSection === 'categories' ? 'Hide Categories' : 'Manage Categories'}
               </button>
             </div>
           </div>
 
-          {Object.keys(menuByCategory).map(category => (
-            <div key={category}>
-              <h3 style={styles.categoryTitle}>{category}</h3>
-              <table style={styles.table} className="responsive-table">
-                <thead>
-                  <tr>
-                    <th style={styles.th}>Dish</th>
-                    <th style={styles.th}>Price</th>
-                    <th style={styles.th}>Recommendation</th> {/* Added column */}
-                    <th style={styles.th}>Available</th>
-                    <th style={styles.th}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {menuByCategory[category].map(item => (
-                    <tr key={item.id}>
-                      <td style={styles.td} data-label="Dish">
-                        <div style={{ display: 'flex', alignItems: 'center' }}>
-                          <img src={item.image} alt={item.name} style={styles.menuItemImage} />
-                          <div>
-                            <span style={{ fontWeight: 'bold' }}>{item.name}</span>
-                            {item.subCategory && <span style={{ fontSize: '0.8rem', color: 'white', backgroundColor: item.subCategory === 'Veg' ? '#27ae60' : '#c0392b', padding: '2px 6px', borderRadius: '4px', marginLeft: '8px' }}>{item.subCategory}</span>}
-                            <p style={{ fontSize: '0.9rem', color: '#666', margin: '4px 0 0 0' }}>{item.description}</p>
-                            {item.subDishes && item.subDishes.length > 0 && (
-                              <div style={{ marginTop: '10px' }}>
-                                <strong style={{ fontSize: '0.9rem' }}>Sub-Dishes:</strong>
-                                <ul style={{ margin: '5px 0 0 0', paddingLeft: '20px', fontSize: '0.9rem' }}>
-                                  {item.subDishes.map((sd, i) => <li key={i}>{sd.name} (+₹{sd.price.toFixed(2)})</li>)}
-                                </ul>
+          {activeSection === 'menu' && (
+            <div>
+              {Object.keys(menuByCategory).map(category => (
+                <div key={category}>
+                  <h3 style={styles.categoryTitle}>{category}</h3>
+                  <table style={styles.table} className="responsive-table">
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>Dish</th>
+                        <th style={styles.th}>Price</th>
+                        <th style={styles.th}>Recommendation</th> {/* Added column */}
+                        <th style={styles.th}>Available</th>
+                        <th style={styles.th}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {menuByCategory[category].map(item => (
+                        <tr key={item.id}>
+                          <td style={styles.td} data-label="Dish">
+                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                              <img 
+                                src={item.image} 
+                                alt={item.name} 
+                                style={styles.menuItemImage} 
+                                onError={(e) => {
+                                  e.target.onerror = null; 
+                                  e.target.src = DEFAULT_IMAGE;
+                                }} 
+                              />
+                              <div>
+                                <span style={{ fontWeight: 'bold' }}>{item.name}</span>
+                                {item.subCategory && <span style={{ fontSize: '0.8rem', color: 'white', backgroundColor: item.subCategory === 'Veg' ? '#27ae60' : '#c0392b', padding: '2px 6px', borderRadius: '4px', marginLeft: '8px' }}>{item.subCategory}</span>}
+                                <p style={{ fontSize: '0.9rem', color: '#666', margin: '4px 0 0 0' }}>{item.description}</p>
+                                {item.subDishes && item.subDishes.length > 0 && (
+                                  <div style={{ marginTop: '10px' }}>
+                                    <strong style={{ fontSize: '0.9rem' }}>Sub-Dishes:</strong>
+                                    <ul style={{ margin: '5px 0 0 0', paddingLeft: '20px', fontSize: '0.9rem' }}>
+                                      {item.subDishes.map((sd, i) => <li key={i}>{sd.name} (+₹{sd.price.toFixed(2)})</li>)}
+                                    </ul>
+                                  </div>
+                                )}
                               </div>
+                            </div>
+                          </td>
+                          <td style={styles.td} data-label="Price">₹{item.price.full.toFixed(2)}</td>
+                          {/* Display Recommendation Tags */}
+                          <td style={styles.td} data-label="Recommendation">
+                            {item.recommendation && item.recommendation.map(tag => (
+                              <span
+                                key={tag}
+                                style={{
+                                  ...styles.recommendationTag,
+                                  backgroundColor: tag === 'recommended' ? '#3498db' : '#e67e22'
+                                }}
+                              >
+                                {tag === 'recommended' ? 'Recommended' : 'Most Loved'}
+                              </span>
+                            ))}
+                            {(!item.recommendation || item.recommendation.length === 0) && (
+                              <span style={{ color: '#7f8c8d', fontSize: '0.8em' }}>None</span>
                             )}
-                          </div>
-                        </div>
-                      </td>
-                      <td style={styles.td} data-label="Price">₹{item.price.full.toFixed(2)}</td>
-                      {/* Display Recommendation Tags */}
-                      <td style={styles.td} data-label="Recommendation">
-                        {item.recommendation && item.recommendation.map(tag => (
-                          <span
-                            key={tag}
-                            style={{
-                              ...styles.recommendationTag,
-                              backgroundColor: tag === 'recommended' ? '#3498db' : '#e67e22'
-                            }}
-                          >
-                            {tag === 'recommended' ? 'Recommended' : 'Most Loved'}
-                          </span>
-                        ))}
-                        {(!item.recommendation || item.recommendation.length === 0) && (
-                          <span style={{ color: '#7f8c8d', fontSize: '0.8em' }}>None</span>
-                        )}
-                      </td>
-                      <td style={styles.td} data-label="Available">
-                        <label style={styles.toggleSwitch}>
-                          <input
-                            type="checkbox"
-                            style={styles.toggleInput}
-                            checked={item.available}
-                            onChange={() => setMenuItems(menuItems.map(menuItem => menuItem.id === item.id ? { ...menuItem, available: !menuItem.available } : menuItem))}
-                          />
-                          <span style={sliderStyle(item.available)}><span style={sliderBeforeStyle(item.available)}></span></span>
-                        </label>
-                      </td>
-                      <td style={styles.td} data-label="Actions" className="action-cell-container">
-                        <button
-                          style={{ ...styles.button, ...styles.editButton, marginRight: '10px' }}
-                          onClick={() => {
-                            setEditingItem(item);
-                            setImagePreview(item.image);
-                            setSelectedSubCategory(item.subCategory || '');
-                            setCurrentSubCategories(categories.find(c => c.name === item.category)?.subCategories || []);
-                            setHasSubDishes(item.subDishes && item.subDishes.length > 0);
-                            setCurrentSubDishes(item.subDishes || []);
-                            // Set recommendation tags for edit
-                            setSelectedRecommendationTags(new Set(item.recommendation || []));
-                            setMenuModalOpen(true);
-                          }}
-                        >
-                          <FaEdit /> Edit
-                        </button>
-                        <button
-                          style={{ ...styles.button, ...styles.deleteButton }}
-                          onClick={() => handleDeleteMenuItem(item.id)}
-                        >
-                          <FaTrash /> Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                          </td>
+                          <td style={styles.td} data-label="Available">
+                            <label style={styles.toggleSwitch}>
+                              <input
+                                type="checkbox"
+                                style={styles.toggleInput}
+                                checked={item.available}
+                                onChange={() => setMenuItems(menuItems.map(menuItem => menuItem.id === item.id ? { ...menuItem, available: !menuItem.available } : menuItem))}
+                              />
+                              <span style={sliderStyle(item.available)}><span style={sliderBeforeStyle(item.available)}></span></span>
+                            </label>
+                          </td>
+                          <td style={styles.td} data-label="Actions" className="action-cell-container">
+                            <button
+                              style={{ ...styles.button, ...styles.editButton, marginRight: '10px' }}
+                              onClick={() => {
+                                setEditingItem(item);
+                                setImagePreview(item.image);
+                                setSelectedSubCategory(item.subCategory || '');
+                                setCurrentSubCategories(categories.find(c => c.name === item.category)?.subCategories || []);
+                                setHasSubDishes(item.subDishes && item.subDishes.length > 0);
+                                setCurrentSubDishes(item.subDishes || []);
+                                // Set recommendation tags for edit
+                                setSelectedRecommendationTags(new Set(item.recommendation || []));
+                                setMenuModalOpen(true);
+                              }}
+                            >
+                              <FaEdit /> Edit
+                            </button>
+                            <button
+                              style={{ ...styles.button, ...styles.deleteButton }}
+                              onClick={() => handleDeleteMenuItem(item.id)}
+                            >
+                              <FaTrash /> Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+
+          {activeSection === 'categories' && (
+            <div style={styles.card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h3 style={styles.cardTitle}>Menu Categories</h3>
+                <div>
+                  <button 
+                    onClick={fetchCategories}
+                    style={{ 
+                      ...styles.button, 
+                      marginRight: '10px',
+                      backgroundColor: '#f0f0f0',
+                      color: '#333',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                    disabled={isLoading}
+                  >
+                    <span>🔄</span> {isLoading ? 'Refreshing...' : 'Refresh'}
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setEditingCategory(null);
+                      setNewCategory({ 
+                        name: '', 
+                        isActive: true, 
+                        hasSubcategories: false, 
+                        subCategories: [] 
+                      });
+                      setCategoryModalOpen(true);
+                    }}
+                    style={{ 
+                      ...styles.button, 
+                      ...styles.addButton,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                    disabled={isLoading}
+                  >
+                    <FaPlus /> Add Category
+                  </button>
+                </div>
+              </div>
+              
+              {success && (
+                <div style={{
+                  backgroundColor: '#d4edda',
+                  color: '#155724',
+                  padding: '10px',
+                  borderRadius: '4px',
+                  marginBottom: '15px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <span>{success}</span>
+                  <button 
+                    onClick={() => setSuccess('')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#155724',
+                      cursor: 'pointer',
+                      fontSize: '16px'
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+              
+              {error && (
+                <div style={{
+                  backgroundColor: '#f8d7da',
+                  color: '#721c24',
+                  padding: '10px',
+                  borderRadius: '4px',
+                  marginBottom: '15px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <span>{error}</span>
+                  <button 
+                    onClick={() => setError('')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#721c24',
+                      cursor: 'pointer',
+                      fontSize: '16px'
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+              
+              {isLoading && categories.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px' }}>
+                  <div className="spinner">Loading categories...</div>
+                </div>
+              ) : categories.length === 0 ? (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '30px',
+                  border: '2px dashed #ddd',
+                  borderRadius: '8px',
+                  backgroundColor: '#f9f9f9'
+                }}>
+                  <p style={{ marginBottom: '15px', fontSize: '16px', color: '#666' }}>
+                    No categories found.
+                  </p>
+                  <button 
+                    onClick={() => {
+                      setEditingCategory(null);
+                      setNewCategory({ 
+                        name: '', 
+                        isActive: true, 
+                        hasSubcategories: false, 
+                        subCategories: [] 
+                      });
+                      setCategoryModalOpen(true);
+                    }}
+                    style={{
+                      ...styles.button,
+                      ...styles.addButton,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                  >
+                    <FaPlus /> Add Your First Category
+                  </button>
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={styles.table} className="responsive-table">
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>Name</th>
+                        <th style={styles.th}>Subcategories</th>
+                        <th style={styles.th}>Status</th>
+                        <th style={styles.th}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {categories.map((category) => {
+                        console.log('Category:', category);
+                        console.log('subCategories:', category.subCategories);
+                        console.log('hasSubcategories:', category.hasSubcategories);
+                        console.log('isArray:', Array.isArray(category.subCategories));
+                        
+                        return (
+                          <tr key={category.id || category._id}>
+                            <td style={styles.td}>
+                              <div style={{ fontWeight: 'bold' }}>{category.name}</div>
+                            </td>
+                            <td style={styles.td}>
+                              {category.subCategories && category.subCategories.length > 0 ? (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '200px' }}>
+                                  {(Array.isArray(category.subCategories) ? category.subCategories : [category.subCategories])
+                                    .filter(sub => sub)
+                                    .slice(0, 3)
+                                    .map((sub, idx) => (
+                                      <span 
+                                        key={idx}
+                                        style={{
+                                          backgroundColor: '#e9ecef',
+                                          padding: '2px 8px',
+                                          borderRadius: '12px',
+                                          fontSize: '0.8em',
+                                          whiteSpace: 'nowrap',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          maxWidth: '100%',
+                                          display: 'inline-block'
+                                        }}
+                                        title={sub}
+                                      >
+                                        {sub}
+                                      </span>
+                                    ))}
+                                  {category.subCategories.length > 3 && (
+                                    <span style={{
+                                      backgroundColor: '#f8f9fa',
+                                      padding: '2px 8px',
+                                      borderRadius: '12px',
+                                      fontSize: '0.8em',
+                                      color: '#6c757d'
+                                    }}>
+                                      +{category.subCategories.length - 3} more
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span style={{ color: '#6c757d', fontStyle: 'italic' }}>
+                                  No subcategories
+                                </span>
+                              )}
+                            </td>
+                            <td style={styles.td}>
+                              <span 
+                                style={{
+                                  padding: '4px 12px',
+                                  borderRadius: '12px',
+                                  backgroundColor: category.isActive ? '#d4edda' : '#f8d7da',
+                                  color: category.isActive ? '#155724' : '#721c24',
+                                  fontSize: '0.85em',
+                                  fontWeight: 'bold',
+                                  display: 'inline-block',
+                                  minWidth: '80px',
+                                  textAlign: 'center'
+                                }}
+                              >
+                                {category.isActive ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                            <td style={styles.td}>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button 
+                                  onClick={() => handleEditCategory(category)}
+                                  style={{ 
+                                    ...styles.button, 
+                                    ...styles.editButton,
+                                    padding: '6px 12px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px'
+                                  }}
+                                  disabled={isLoading}
+                                >
+                                  <FaEdit size={14} /> Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteCategory(category.id || category._id)}
+                                  style={{
+                                    ...styles.button,
+                                    ...styles.deleteButton,
+                                    padding: '6px 12px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px'
+                                  }}
+                                  disabled={isLoading}
+                                >
+                                  <FaTrash size={14} /> Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* --- LEFT COLUMN --- */}

@@ -42,6 +42,29 @@ export class BaseModel {
   }
 
   /**
+   * Find a document by ID and delete it
+   * @param {string} id - The document ID to delete
+   * @returns {Promise<boolean>} - True if document was deleted, false otherwise
+   */
+  static async findByIdAndDelete(id) {
+    try {
+      if (!id) {
+        throw new Error('Document ID is required');
+      }
+      
+      console.log(`[${this.name}] Deleting document with ID:`, id);
+      const docRef = this.getCollection().doc(id);
+      await docRef.delete();
+      
+      console.log(`[${this.name}] Successfully deleted document with ID:`, id);
+      return true;
+    } catch (error) {
+      console.error(`[${this.name}] Error deleting document:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Create a model instance from Firestore document
    */
   static fromFirestore(snapshot) {
@@ -150,6 +173,42 @@ export class BaseModel {
       return results;
     } catch (error) {
       console.error('[FIRESTORE] Error in find query:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update a document by ID
+   * @param {string} id - Document ID to update
+   * @param {Object} data - Data to update
+   * @returns {Promise<Object>} - Updated document
+   */
+  static async update(id, data) {
+    if (!id) {
+      throw new Error('Document ID is required for update');
+    }
+    
+    try {
+      const docRef = this.getCollection().doc(id);
+      
+      // Don't allow updating the ID
+      if (data.id) {
+        delete data.id;
+      }
+      
+      // Add/update timestamps
+      const updateData = {
+        ...data,
+        updatedAt: FieldValue.serverTimestamp()
+      };
+      
+      await docRef.update(updateData);
+      
+      // Fetch and return the updated document
+      const updatedDoc = await docRef.get();
+      return this.fromFirestore(updatedDoc);
+    } catch (error) {
+      console.error(`[${this.name}] Error updating document:`, error);
       throw error;
     }
   }

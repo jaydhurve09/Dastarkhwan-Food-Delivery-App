@@ -21,7 +21,7 @@ const handleFileUpload = (file, oldImagePath = null) => {
 // Create a new category
 const createCategory = async (req, res, next) => {
   try {
-    const { name, description, isActive } = req.body;
+    const { name, description, isActive, subCategories } = req.body;
     
     // Handle file upload if exists
     const imagePath = req.file ? handleFileUpload(req.file) : null;
@@ -30,6 +30,7 @@ const createCategory = async (req, res, next) => {
       name,
       description: description || '',
       isActive: isActive !== 'false',
+      subCategories: Array.isArray(subCategories) ? subCategories : [],
       ...(imagePath && { image: `${process.env.BASE_URL || 'http://localhost:5000'}/${imagePath.replace(/\\/g, '/')}` })
     };
 
@@ -42,7 +43,7 @@ const createCategory = async (req, res, next) => {
     });
   } catch (error) {
     // Clean up uploaded file if there was an error
-    if (req.file && req.file.path) {
+    if (req.file?.path) {
       try {
         fs.unlinkSync(req.file.path);
       } catch (err) {
@@ -57,7 +58,7 @@ const createCategory = async (req, res, next) => {
 const updateCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, description, isActive } = req.body;
+    const { name, description, isActive, subCategories } = req.body;
 
     // Get the existing category first
     const existingCategory = await MenuCategory.findById(id);
@@ -78,6 +79,13 @@ const updateCategory = async (req, res, next) => {
       isActive: isActive !== undefined ? isActive !== 'false' : existingCategory.isActive,
       updatedAt: new Date()
     };
+
+    // Handle subcategories if provided
+    if (subCategories !== undefined) {
+      updateData.subCategories = Array.isArray(subCategories) 
+        ? subCategories 
+        : [subCategories];
+    }
 
     // Add image path if there's a new image
     if (imagePath) {

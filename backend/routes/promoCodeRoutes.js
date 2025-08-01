@@ -228,4 +228,21 @@ router.post('/validate', async (req, res) => {
   }
 });
 
+// Toggle promo code active status (Admin only)
+router.patch('/:id/toggle-active', isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    const existingCode = await PromoCode.findById(req.params.id);
+    if (!existingCode) {
+      return res.status(404).json({ success: false, message: 'Promo code not found' });
+    }
+    const updatedCode = await PromoCode.update(req.params.id, {
+      isActive: !existingCode.isActive,
+      updatedAt: new Date()
+    });
+    res.status(200).json({ success: true, data: updatedCode });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message, error: error.message });
+  }
+});
+
 export default router;

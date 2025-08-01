@@ -105,7 +105,7 @@ export default function FeedbackAndComplaints() {
 
   const markResolved = async (compId) => {
     await updateStatus(compId, "Resolved");
-    fetchComplaints(); // Refresh complaints after status update
+     await fetchComplaints(); // Refresh complaints after status update
    
   };
   const handleRefund = (compId) => {

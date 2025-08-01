@@ -27,6 +27,9 @@ const STATUS = {
 };
 
 const PromoCode = () => {
+  // Modal and promo code state
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalError, setModalError] = useState('');
   const [promoCodes, setPromoCodes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -48,6 +51,11 @@ const PromoCode = () => {
     usageLimit: '',
     isActive: true
   });
+  // Delete modal state
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   const ITEMS_PER_PAGE = 10;
 
@@ -168,15 +176,32 @@ const PromoCode = () => {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this promo code?')) {
-      try {
-        await deletePromoCode(id);
-        setPromoCodes(promoCodes.filter(promo => promo.id !== id));
-      } catch (error) {
-        console.error('Error deleting promo code:', error);
-      }
+  const handleDelete = (promo) => {
+    setDeleteTarget(promo);
+    setDeleteModalOpen(true);
+    setDeleteError('');
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    setDeleteError('');
+    try {
+      await deletePromoCode(deleteTarget.id);
+      setPromoCodes(promoCodes.filter(promo => promo.id !== deleteTarget.id));
+      setDeleteModalOpen(false);
+      setDeleteTarget(null);
+    } catch (error) {
+      setDeleteError(error.message || 'Failed to delete promo code.');
+    } finally {
+      setDeleteLoading(false);
     }
+  };
+
+  const cancelDelete = () => {
+    setDeleteModalOpen(false);
+    setDeleteTarget(null);
+    setDeleteError('');
   };
 
   // Loading state
@@ -202,6 +227,42 @@ const PromoCode = () => {
         </button>
       </div>
     );
+  }
+
+  // Handle create promo code from modal
+  async function handleModalSubmit(e) {
+    e.preventDefault();
+    setModalError('');
+    // Basic validation
+    if (!formData.code || !formData.startDate || !formData.discountType || !formData.discountValue) {
+      setModalError('Please fill all required fields.');
+      return;
+    }
+    setModalLoading(true);
+    try {
+      await createPromoCode(formData);
+      // Refresh list
+      const data = await getPromoCodes();
+      setPromoCodes(data);
+      setIsModalOpen(false);
+      // Reset form
+      setFormData({
+        code: '',
+        description: '',
+        discountType: 'percentage',
+        discountValue: '',
+        minOrderValue: '',
+        maxDiscount: '',
+        startDate: new Date().toISOString().split('T')[0],
+        endDate: '',
+        usageLimit: '',
+        isActive: true
+      });
+    } catch (err) {
+      setModalError(err.message || 'Failed to create promo code.');
+    } finally {
+      setModalLoading(false);
+    }
   }
 
   return (
@@ -296,9 +357,9 @@ const PromoCode = () => {
                           <FaEdit />
                         </button>
                         <button
-                          onClick={() => handleDelete(promo.id)}
                           className="actionButton deleteButton"
                           title="Delete"
+                          onClick={() => handleDelete(promo)}
                         >
                           <FaTrash />
                         </button>
@@ -341,6 +402,100 @@ const PromoCode = () => {
             >
               <FaChevronRight />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal for Delete Promo Code */}
+      {deleteModalOpen && (
+        <div className="modalOverlay">
+          <div className="modalContent">
+            <button className="modalClose" onClick={cancelDelete}>&times;</button>
+            <h2 className="modalTitle">Delete Promo Code</h2>
+            <div style={{marginBottom:'1.5rem', fontSize:'1.05rem', color:'#374151'}}>
+              Are you sure you want to delete promo code <b>{deleteTarget?.code}</b>?
+            </div>
+            {deleteError && <div className="errorMessage" style={{marginBottom:8}}>{deleteError}</div>}
+            {deleteLoading && <div className="spinner" style={{margin:'0 auto 1rem auto'}} />}
+            <div className="formActions">
+              <button type="button" className="secondaryButton" onClick={cancelDelete} disabled={deleteLoading}>Cancel</button>
+              <button type="button" className="primaryButton" style={{background:'#ef4444'}} onClick={confirmDelete} disabled={deleteLoading}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal for Create Promo Code */}
+      {isModalOpen && (
+        <div className="modalOverlay">
+          <div className="modalContent">
+            <button className="modalClose" onClick={() => setIsModalOpen(false)}>&times;</button>
+            <h2 className="modalTitle">Create Promo Code</h2>
+            <form className="promoForm" onSubmit={handleModalSubmit}>
+              {modalError && <div className="errorMessage" style={{marginBottom: 8}}>{modalError}</div>}
+              {modalLoading && <div className="spinner" style={{margin:'0 auto 1rem auto'}} />}
+              <div className="formRow">
+                <div className="formGroup">
+                  <label>Promo Code Name</label>
+                  <input type="text" className="formInput" value={formData.code} onChange={e => setFormData({ ...formData, code: e.target.value })} />
+                </div>
+                <div className="formGroup">
+                  <label>Start Date</label>
+                  <input type="date" className="formInput" value={formData.startDate} onChange={e => setFormData({ ...formData, startDate: e.target.value })} />
+                </div>
+              </div>
+              <div className="formRow">
+                <div className="formGroup">
+                  <label>Expiry Date</label>
+                  <input type="date" className="formInput" value={formData.endDate} onChange={e => setFormData({ ...formData, endDate: e.target.value })} />
+                </div>
+                <div className="formGroup">
+                  <label>Users</label>
+                  <div className="formRadioGroup">
+                    <label><input type="radio" name="users" checked /> All users</label>
+                    <label><input type="radio" name="users" /> First-time users</label>
+                    <label><input type="radio" name="users" /> Specific users</label>
+                  </div>
+                </div>
+              </div>
+              <div className="formRow">
+                <div className="formGroup">
+                  <label>Usage Limit Per User</label>
+                  <input type="number" min="1" className="formInput" value={formData.usageLimit} onChange={e => setFormData({ ...formData, usageLimit: e.target.value })} />
+                </div>
+                <div className="formGroup">
+                  <label>Discount Type</label>
+                  <select className="formInput" value={formData.discountType} onChange={e => setFormData({ ...formData, discountType: e.target.value })}>
+                    <option value="percentage">Percentage</option>
+                    <option value="fixed">Fixed Amount</option>
+                  </select>
+                </div>
+              </div>
+              <div className="formRow">
+                <div className="formGroup">
+                  <label>Discount Value</label>
+                  <input type="number" min="0" className="formInput" value={formData.discountValue} onChange={e => setFormData({ ...formData, discountValue: e.target.value })} />
+                </div>
+                <div className="formGroup">
+                  <label>Minimum Order Value</label>
+                  <input type="number" min="0" className="formInput" value={formData.minOrderValue} onChange={e => setFormData({ ...formData, minOrderValue: e.target.value })} />
+                </div>
+              </div>
+              <div className="formRow">
+                <div className="formGroup">
+                  <label>Apply On</label>
+                  <div className="formCheckboxGroup">
+                    <label><input type="checkbox" /> Total Order</label>
+                    <label><input type="checkbox" /> Menu Items</label>
+                    <label><input type="checkbox" /> Specific Categories</label>
+                  </div>
+                </div>
+              </div>
+              <div className="formActions">
+                <button type="button" className="secondaryButton" onClick={() => setIsModalOpen(false)}>Cancel</button>
+                <button type="submit" className="primaryButton">Save Promo Code</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

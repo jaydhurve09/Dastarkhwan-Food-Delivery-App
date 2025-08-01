@@ -15,6 +15,8 @@ import testRoutes from './routes/testRoutes.js';
 import orderRoutes from './routes/orderRoutes.js'; 
 import { db, auth } from './config/firebase.js'; 
 import deliveryPartnerRoutes from './routes/deliveryPartnerRoutes.js'; 
+import feedbackRoutes from './routes/feedbackRoutes.js';
+import complaintsRoutes from './routes/complaintsRoutes.js'; // Import complaints routes
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -38,6 +40,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/test', testRoutes);
 app.use('/api/delivery-partners', deliveryPartnerRoutes);
+app.use('/api/feedback', feedbackRoutes);
+app.use('/api/complaints', complaintsRoutes);
 
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);

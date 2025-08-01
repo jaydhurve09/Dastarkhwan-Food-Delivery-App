@@ -21,6 +21,7 @@ export class Feedback extends BaseModel {
     super();
     this.userId = data.userId || null; // Reference to User
     this.orderId = data.orderId || null; // Reference to Order
+    this.deliveryPartnerId = data.deliveryPartnerId || null; // Reference to DeliveryPartner
     this.type = data.type || ''; // 'restaurant', 'delivery', 'app'
     this.rating = data.rating || 0; // 1-5
     this.comment = data.comment || '';
@@ -61,6 +62,7 @@ export class Feedback extends BaseModel {
     const data = {
       userId: this.userId,
       orderId: this.orderId,
+      deliveryPartnerId: this.deliveryPartnerId,
       type: this.type,
       rating: this.rating,
       comment: this.comment,
@@ -189,4 +191,4 @@ export class Feedback extends BaseModel {
 }
 
 // Export a singleton instance
-export default new Feedback();
+export default  Feedback;

@@ -30,6 +30,16 @@ const STATUS = {
   INACTIVE: 'inactive'
 };
 
+// Helper to format date as dd-mm-yyyy
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}-${month}-${year}`;
+}
+
 const PromoCode = () => {
   // Modal and promo code state
   const [modalLoading, setModalLoading] = useState(false);
@@ -393,16 +403,14 @@ if (selectedPromo && selectedPromo.id) {
       <table className="promoTable">
         <thead>
           <tr>
-            <th className="tableHeader">PROMO CODE</th>
-            <th className="tableHeader">DISCOUNT</th>
-            <th className="tableHeader">VALIDITY</th>
-            <th className="tableHeader">USER LIMIT</th>
-            <th className="tableHeader">USAGE/USER</th>
-            <th className="tableHeader">MIN ORDER</th>
-            <th className="tableHeader">APPLIES TO</th>
-            <th className="tableHeader">STATUS</th>
-            <th className="tableHeader">ACTIONS</th>
-          </tr>
+  <th className="tableHeader">PROMO CODE</th>
+  <th className="tableHeader">DISCOUNT</th>
+  <th className="tableHeader">VALIDITY</th>
+  <th className="tableHeader">USAGE/USER</th>
+  <th className="tableHeader">STATUS</th>
+  <th className="tableHeader">UPDATE</th>
+  <th className="tableHeader">DELETE</th>
+</tr>
         </thead>
         <tbody>
           {filteredPromos.length === 0 && (
@@ -413,94 +421,73 @@ if (selectedPromo && selectedPromo.id) {
             </tr>
           )}
           {filteredPromos.map(promo => (
-            <tr key={promo.id}>
-              {/* PROMO CODE */}
-              <td className="promoCodeCell">{promo.code}</td>
-              {/* DISCOUNT */}
-              <td className="discountCell">
-                {promo.discountType === 'percentage' ? (
-                  <span>{promo.discountValue}%</span>
-                ) : promo.discountType === 'fixed' ? (
-                  <span>&#8377;{parseFloat(promo.discountValue).toFixed(0)}</span>
-                ) : promo.discountType === 'free_shipping' ? (
-                  <span>Free Shipping</span>
-                ) : (
-                  <span>{promo.discountValue}</span>
-                )}
-              </td>
-              {/* VALIDITY */}
-              <td className="validityCell">
-                {promo.startDate && promo.endDate ? (
-                  <div>{promo.startDate} - {promo.endDate}</div>
-                ) : (
-                  '-'
-                )}
-              </td>
-              {/* USER LIMIT */}
-              <td className="userLimitCell">
-                {promo.userType === 'specific' && promo.specificUsers && promo.specificUsers.length > 0 ? (
-                  <>
-                    <div>Specific:</div>
-                    {promo.specificUsers.map((u, i) => <div key={i} style={{fontSize:'0.95em',color:'#555'}}>{u}</div>)}
-                  </>
-                ) : promo.userType === 'first-time' ? (
-                  'First-time users'
-                ) : promo.userType === 'all' ? (
-                  'All users'
-                ) : (
-                  '-'
-                )}
-              </td>
-              {/* USAGE/USER */}
-              <td className="usageCell">{promo.usageLimit || '-'}</td>
-              {/* MIN ORDER */}
-              <td className="minOrderCell">{promo.minOrderValue ? `₹${parseFloat(promo.minOrderValue).toFixed(0)}` : '-'}</td>
-              {/* APPLIES TO */}
-              <td className="appliesToCell">
-                {promo.appliesTo && promo.appliesTo.length > 0 ? (
-                  promo.appliesTo.map((a, i) => <div key={i}>{a}</div>)
-                ) : (
-                  '-'
-                )}
-              </td>
-              {/* STATUS */}
-              <td className="statusCell">{getStatusBadge(getPromoStatus(promo))}</td>
-              {/* ACTIONS */}
-              <td className="actionsCell">
-  <button
-    onClick={() => handleEditPromo(promo)}
-    className="actionButton editButton"
-    title="Edit"
-  >
-    <FaEdit />
-  </button>
-  <button
-    onClick={() => handleDelete(promo)}
-    className="actionButton deleteButton"
-    title="Delete"
-  >
-    <FaTrash />
-  </button>
-  <label className="switch">
-  <input
-    type="checkbox"
-    checked={promo.isActive}
-    onChange={async () => {
-      try {
-        await togglePromoCodeActive(promo.id);
-        const data = await getPromoCodes();
-        setPromoCodes(data);
-      } catch (err) {
-        alert(err);
-      }
-    }}
-    aria-label={promo.isActive ? 'Deactivate promo code' : 'Activate promo code'}
-  />
-  <span className="slider round"></span>
-</label>
+  <tr key={promo.id}>
+    {/* PROMO CODE */}
+    <td className="promoCodeCell">{promo.code}</td>
+    {/* DISCOUNT */}
+    <td className="discountCell">
+      {promo.discountType === 'percentage' ? (
+        <span>{promo.discountValue}%</span>
+      ) : promo.discountType === 'fixed' ? (
+        <span>&#8377;{parseFloat(promo.discountValue).toFixed(0)}</span>
+      ) : promo.discountType === 'free_shipping' ? (
+        <span>Free Shipping</span>
+      ) : (
+        <span>{promo.discountValue}</span>
+      )}
+    </td>
+    {/* VALIDITY */}
+    <td className="validityCell">
+  {promo.startDate && promo.endDate ? (
+    <div>{formatDate(promo.startDate)} - {formatDate(promo.endDate)}</div>
+  ) : (
+    '-'
+  )}
 </td>
-            </tr>
-          ))}
+    {/* USAGE/USER */}
+    <td className="usageCell">{promo.usageLimit || '-'}</td>
+    {/* STATUS with toggle */}
+    <td className="statusCell">
+  <label className="switch">
+    <input
+      type="checkbox"
+      checked={promo.isActive}
+      onChange={async () => {
+        try {
+          await togglePromoCodeActive(promo.id);
+          const data = await getPromoCodes();
+          setPromoCodes(data);
+        } catch (err) {
+          alert(err);
+        }
+      }}
+      aria-label={promo.isActive ? 'Deactivate promo code' : 'Activate promo code'}
+    />
+    <span className="slider round"></span>
+  </label>
+</td>
+    {/* UPDATE */}
+    <td className="actionsCell">
+      <button
+        onClick={() => handleEditPromo(promo)}
+        className="actionButton editButton"
+        title="Edit"
+      >
+        <FaEdit />
+      </button>
+    </td>
+    {/* DELETE */}
+    <td className="actionsCell">
+      <button
+        onClick={() => handleDelete(promo)}
+        className="actionButton deleteButton"
+        title="Delete"
+      >
+        <FaTrash />
+      </button>
+    </td>
+  </tr>
+))}
         </tbody>
       </table>
       {totalPages > 1 && (
@@ -550,7 +537,7 @@ if (selectedPromo && selectedPromo.id) {
       {deleteError && <div className="errorMessage" style={{marginBottom:8}}>{deleteError}</div>}
       {deleteLoading && <div className="spinner" style={{margin:'0 auto 1rem auto'}} />}
       <div className="formActions deleteModalActions">
-        <button type="button" className="secondaryButton" onClick={cancelDelete} disabled={deleteLoading}>Cancel</button>
+       
         <button type="button" className="dangerButton" onClick={confirmDelete} disabled={deleteLoading}>Delete</button>
       </div>
     </div>
@@ -734,21 +721,7 @@ if (selectedPromo && selectedPromo.id) {
   >
     Cancel
   </button>
-  
-  {selectedPromo && selectedPromo.id && (
-    <button
-      type="button"
-      className="secondaryButton"
-      style={{background:'#ef4444',color:'#fff'}}
-      onClick={() => {
-        setDeleteTarget(selectedPromo);
-        setDeleteModalOpen(true);
-      }}
-    >
-      Delete
-    </button>
-  )}
-  
+    
   <button 
     type="submit" 
     className="primaryButton"

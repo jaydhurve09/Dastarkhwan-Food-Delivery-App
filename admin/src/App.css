@@ -1,6 +1,17 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%; /* Ensure html and body take full height */
+}
+
+* {
+  box-sizing: border-box; /* Consistent box model */
+}
+
 .app-container {
   display: flex;
-  height: 100vh;
+  height: 100%; /* Changed from 100vh to 100% to inherit from body/html */
   /* padding: 0; */
 }
 

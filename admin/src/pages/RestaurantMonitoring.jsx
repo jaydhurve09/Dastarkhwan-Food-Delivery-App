@@ -242,67 +242,102 @@ const RestaurantMonitoring = () => {
   };
 
   // Add new category
-  const handleAddCategory = async (e) => {
-    e.preventDefault();
+  const handleAddCategory = async () => {
     try {
       setIsLoading(true);
       setError('');
-      const token = localStorage.getItem('adminToken');
+
+      // Format subcategories as an array of strings
+      const formattedSubCategories = newCategory.hasSubcategories
+        ? (Array.isArray(newCategory.subCategories) 
+            ? newCategory.subCategories 
+            : (newCategory.subCategories || '').split(',').map(s => s.trim()).filter(Boolean)
+          )
+        : [];
+
+      const formData = new FormData();
+      formData.append('name', newCategory.name);
+      formData.append('isActive', newCategory.isActive);
+      formData.append('hasSubcategories', newCategory.hasSubcategories);
+      
+      // Append each subcategory individually if they exist
+      if (formattedSubCategories.length > 0) {
+        formattedSubCategories.forEach((subCat, index) => {
+          formData.append(`subCategories[${index}]`, subCat);
+        });
+      }
+
       const response = await axios.post(
         `${API_BASE_URL}/menu-categories`,
-        newCategory,
+        formData,
         {
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
           }
         }
       );
-      
-      setCategories([...categories, response.data.data]);
-      setNewCategory({ name: '', isActive: true, hasSubcategories: false, subCategories: [] });
-      setCategoryModalOpen(false);
+
+      setCategories([...categories, response.data]);
       setSuccess('Category added successfully!');
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      console.error('Error adding category:', err);
-      setError(err.response?.data?.message || 'Failed to add category');
+      setCategoryModalOpen(false);
+      setNewCategory({
+        name: '',
+        isActive: true,
+        hasSubcategories: false,
+        subCategories: [],
+        image: null,
+        imagePreview: ''
+      });
+    } catch (error) {
+      console.error('Error adding category:', error);
+      setError(error.response?.data?.message || 'Failed to add category');
     } finally {
       setIsLoading(false);
     }
   };
 
   // Update category
-  const handleUpdateCategory = async (e) => {
-    e.preventDefault();
+  const handleUpdateCategory = async () => {
     if (!editingCategory) return;
-    
+  
     try {
       setIsLoading(true);
       setError('');
-      const token = localStorage.getItem('adminToken');
+  
+      // Format subcategories as an array of strings
+      const formattedSubCategories = newCategory.hasSubcategories
+        ? (Array.isArray(newCategory.subCategories) 
+            ? newCategory.subCategories 
+            : (newCategory.subCategories || '').split(',').map(s => s.trim()).filter(Boolean)
+          )
+        : [];
+  
       const response = await axios.put(
-        `${API_BASE_URL}/menu-categories/${editingCategory.id}`,
-        newCategory,
+        `http://localhost:5000/api/menu-categories/${editingCategory.id}`,
         {
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+          name: newCategory.name,
+          isActive: newCategory.isActive,
+          hasSubcategories: newCategory.hasSubcategories,
+          subCategories: formattedSubCategories,
+          // ... include image handling if needed
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
           }
         }
       );
-      
+  
       setCategories(categories.map(cat => 
-        cat.id === editingCategory.id ? response.data.data : cat
+        cat.id === editingCategory.id ? response.data : cat
       ));
-      setEditingCategory(null);
-      setNewCategory({ name: '', isActive: true, hasSubcategories: false, subCategories: [] });
-      setCategoryModalOpen(false);
       setSuccess('Category updated successfully!');
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      console.error('Error updating category:', err);
-      setError(err.response?.data?.message || 'Failed to update category');
+      setCategoryModalOpen(false);
+      setEditingCategory(null);
+    } catch (error) {
+      console.error('Error updating category:', error);
+      setError(error.response?.data?.message || 'Failed to update category');
     } finally {
       setIsLoading(false);
     }
@@ -337,11 +372,15 @@ const RestaurantMonitoring = () => {
   // Open modal for editing a category
   const handleEditCategory = (category) => {
     setEditingCategory(category);
+    const hasSubs = category.subCategories && category.subCategories.length > 0;
     setNewCategory({
       name: category.name,
       isActive: category.isActive,
-      hasSubcategories: category.hasSubcategories || false,
-      subCategories: category.subCategories || []
+      hasSubcategories: hasSubs, // Set based on whether there are subcategories
+      subCategories: Array.isArray(category.subCategories) 
+        ? [...category.subCategories] 
+        : (category.subCategories || '').split(',').map(s => s.trim()).filter(Boolean),
+      // ... include image handling if needed
     });
     setCategoryModalOpen(true);
   };
@@ -1179,100 +1218,112 @@ const RestaurantMonitoring = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {categories.map((category) => (
-                        <tr key={category.id || category._id}>
-                          <td style={styles.td}>
-                            <div style={{ fontWeight: 'bold' }}>{category.name}</div>
-                          </td>
-                          <td style={styles.td}>
-                            {category.hasSubcategories && category.subCategories?.length > 0 ? (
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '200px' }}>
-                                {category.subCategories.slice(0, 3).map((sub, idx) => (
-                                  <span 
-                                    key={idx}
-                                    style={{
-                                      backgroundColor: '#e9ecef',
+                      {categories.map((category) => {
+                        console.log('Category:', category);
+                        console.log('subCategories:', category.subCategories);
+                        console.log('hasSubcategories:', category.hasSubcategories);
+                        console.log('isArray:', Array.isArray(category.subCategories));
+                        
+                        return (
+                          <tr key={category.id || category._id}>
+                            <td style={styles.td}>
+                              <div style={{ fontWeight: 'bold' }}>{category.name}</div>
+                            </td>
+                            <td style={styles.td}>
+                              {category.subCategories && category.subCategories.length > 0 ? (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '200px' }}>
+                                  {(Array.isArray(category.subCategories) ? category.subCategories : [category.subCategories])
+                                    .filter(sub => sub)
+                                    .slice(0, 3)
+                                    .map((sub, idx) => (
+                                      <span 
+                                        key={idx}
+                                        style={{
+                                          backgroundColor: '#e9ecef',
+                                          padding: '2px 8px',
+                                          borderRadius: '12px',
+                                          fontSize: '0.8em',
+                                          whiteSpace: 'nowrap',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          maxWidth: '100%',
+                                          display: 'inline-block'
+                                        }}
+                                        title={sub}
+                                      >
+                                        {sub}
+                                      </span>
+                                    ))}
+                                  {category.subCategories.length > 3 && (
+                                    <span style={{
+                                      backgroundColor: '#f8f9fa',
                                       padding: '2px 8px',
                                       borderRadius: '12px',
                                       fontSize: '0.8em',
-                                      whiteSpace: 'nowrap',
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
-                                      maxWidth: '100%',
-                                      display: 'inline-block'
-                                    }}
-                                    title={sub}
-                                  >
-                                    {sub}
-                                  </span>
-                                ))}
-                                {category.subCategories.length > 3 && (
-                                  <span style={{
-                                    backgroundColor: '#f8f9fa',
-                                    padding: '2px 8px',
-                                    borderRadius: '12px',
-                                    fontSize: '0.8em',
-                                    color: '#6c757d'
-                                  }}>
-                                    +{category.subCategories.length - 3} more
-                                  </span>
-                                )}
-                              </div>
-                            ) : (
-                              <span style={{ color: '#6c757d', fontStyle: 'italic' }}>No subcategories</span>
-                            )}
-                          </td>
-                          <td style={styles.td}>
-                            <span 
-                              style={{
-                                padding: '4px 12px',
-                                borderRadius: '12px',
-                                backgroundColor: category.isActive ? '#d4edda' : '#f8d7da',
-                                color: category.isActive ? '#155724' : '#721c24',
-                                fontSize: '0.85em',
-                                fontWeight: 'bold',
-                                display: 'inline-block',
-                                minWidth: '80px',
-                                textAlign: 'center'
-                              }}
-                            >
-                              {category.isActive ? 'Active' : 'Inactive'}
-                            </span>
-                          </td>
-                          <td style={styles.td}>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button 
-                                onClick={() => handleEditCategory(category)}
-                                style={{ 
-                                  ...styles.button, 
-                                  ...styles.editButton,
-                                  padding: '6px 12px',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '5px'
-                                }}
-                                disabled={isLoading}
-                              >
-                                <FaEdit size={14} /> Edit
-                              </button>
-                              <button
-                                onClick={() => handleDeleteCategory(category.id || category._id)}
+                                      color: '#6c757d'
+                                    }}>
+                                      +{category.subCategories.length - 3} more
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span style={{ color: '#6c757d', fontStyle: 'italic' }}>
+                                  No subcategories
+                                </span>
+                              )}
+                            </td>
+                            <td style={styles.td}>
+                              <span 
                                 style={{
-                                  ...styles.button,
-                                  ...styles.deleteButton,
-                                  padding: '6px 12px',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '5px'
+                                  padding: '4px 12px',
+                                  borderRadius: '12px',
+                                  backgroundColor: category.isActive ? '#d4edda' : '#f8d7da',
+                                  color: category.isActive ? '#155724' : '#721c24',
+                                  fontSize: '0.85em',
+                                  fontWeight: 'bold',
+                                  display: 'inline-block',
+                                  minWidth: '80px',
+                                  textAlign: 'center'
                                 }}
-                                disabled={isLoading}
                               >
-                                <FaTrash size={14} /> Delete
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                                {category.isActive ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                            <td style={styles.td}>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button 
+                                  onClick={() => handleEditCategory(category)}
+                                  style={{ 
+                                    ...styles.button, 
+                                    ...styles.editButton,
+                                    padding: '6px 12px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px'
+                                  }}
+                                  disabled={isLoading}
+                                >
+                                  <FaEdit size={14} /> Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteCategory(category.id || category._id)}
+                                  style={{
+                                    ...styles.button,
+                                    ...styles.deleteButton,
+                                    padding: '6px 12px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px'
+                                  }}
+                                  disabled={isLoading}
+                                >
+                                  <FaTrash size={14} /> Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

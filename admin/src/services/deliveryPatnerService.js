@@ -22,4 +22,23 @@ const blockDeliveryPartner = async (id) => {
     }
 };
 
-export { updateDeliveryPartner, blockDeliveryPartner };
+const resetPassword = async (id, password) => {
+    try {
+        const response = await axios.post(`${url}/delivery-partners/resetpassword`, { id, password });
+        return response.data;
+    } catch (error) {
+        console.error('Reset delivery partner password error:', error.response?.data?.message || error.message);
+        throw error.response?.data?.message || 'Failed to reset delivery partner password';
+    }
+};
+
+const approveDeliveryPartner = async (id) => {
+    try {
+        const response = await axios.put(`${url}/delivery-partners/approve/${id}`);
+        return response.data;
+    } catch (error) {
+        console.error('Approve delivery partner error:', error.response?.data?.message || error.message);
+        throw error.response?.data?.message || 'Failed to approve delivery partner';
+    }
+};
+export { updateDeliveryPartner, blockDeliveryPartner , resetPassword , approveDeliveryPartner };

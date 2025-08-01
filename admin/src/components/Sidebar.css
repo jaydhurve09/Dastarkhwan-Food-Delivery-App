@@ -1,14 +1,16 @@
 .sidebar {
-  width: 260px;
+  /* width: 260px; */ /* Removed fixed width */
   background-color: #5A0505;
-   background-image: url('../assets/Rectangle.png'); 
+  background-image: url('../assets/Rectangle.png');
   color: #fff;
-  height: 120vh;
+  min-height: 100vh; /* Ensure it covers at least the viewport height */
   display: flex;
   flex-direction: column;
   padding: 20px;
+  flex-grow: 0; /* Prevent it from growing */
+  flex-shrink: 0; /* Prevent it from shrinking too much */
+  flex-basis: 260px; /* Set a preferred width, allows shrinking */
 }
-
 
 .sidebar-header {
   padding: 20px 0;
@@ -34,22 +36,29 @@
 .sidebar-nav a {
   display: flex;
   align-items: center;
-  color: #a9b7c5;
+  color: #fff; /* Changed to white for unselected text and icon */
   text-decoration: none;
   padding: 15px 20px;
   border-radius: 8px;
-  transition: background-color 0.3s, color 0.3s;
+  transition: background-color 0.3s, color 0.3s, border-color 0.3s;
   font-size: 1rem;
   font-weight: 500;
+  border: 1px solid white; /* White border for unselected */
 }
 
-.sidebar-nav a:hover,
-.sidebar-nav a.active {
+.sidebar-nav a:hover {
   background-color: #e0e0e0;
-  color: #1a2c3e;
+  color: #1a2c3e; /* Text and icon color on hover */
+  border-color: #e0e0e0; /* Border color on hover (optional, but good for consistency) */
+}
+
+.sidebar-nav a.active {
+  background-color: #DAA520; /* Golden background color when active */
+  color: #1a2c3e; /* Text and icon color when active */
+  border: 1px solid #DAA520; /* Golden border when active */
 }
 
 .sidebar-nav a svg {
   margin-right: 15px;
   font-size: 1.2rem;
-} 
+}

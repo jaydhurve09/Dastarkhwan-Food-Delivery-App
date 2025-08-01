@@ -1,24 +1,13 @@
-import React, { useState } from "react";
+import React, { useState,useContext, } from "react";
+
 import { useNavigate } from "react-router-dom";
 import { FaStar, FaRegStar, FaReply, FaCheckCircle, FaBan, FaUndo } from "react-icons/fa";
 import { AiFillShop, AiOutlineUserDelete } from "react-icons/ai";
 import { motion, AnimatePresence } from "framer-motion";
-
+import { AdminContext } from "../contexts/adminContext";
+import { sendReply,updateStatus } from "../services/feedbackAndComplaints";
 // --- DUMMY DATA --- (Restaurant and Delivery reviews, Complaints with Issue Type, Order ID)
-const sampleRestaurantReviews = [
-  { id: 1, user: "Jane Doe", rating: 4, review: "Great cuisine!", date: "2025-07-21" },
-  { id: 2, user: "Sam Smith", rating: 5, review: "Super food.", date: "2025-07-19" },
-  { id: 3, user: "Rahul Patel", rating: 5, review: "Tastes awesome and polite staff.", date: "2025-07-16" },
-  { id: 4, user: "Emily White", rating: 2, review: "Serving cold soup, not happy.", date: "2025-07-13" },
-  { id: 5, user: "Harish Kumar", rating: 4, review: "Clean and tidy!", date: "2025-07-11" },
-];
 
-const sampleDeliveryReviews = [
-  { id: 21, user: "Ava Lee", rating: 3, review: "Delivery was fast.", date: "2025-07-17", deliveryBoyName: "Rohit Sharma", deliveryBoyId: "db101" },
-  { id: 22, user: "Priya", rating: 5, review: "Delivery boy was so polite.", date: "2025-07-18", deliveryBoyName: "Rajiv Sen", deliveryBoyId: "db102" },
-  { id: 23, user: "Suresh", rating: 2, review: "Late delivery.", date: "2025-07-20", deliveryBoyName: "Sandeep Yadav", deliveryBoyId: "db104" },
-  { id: 24, user: "Michael", rating: 4, review: "Delivery boy followed all instructions.", date: "2025-07-21", deliveryBoyName: "Sunil Kumar", deliveryBoyId: "db105" },
-];
 
 const sampleComplaints = [
   {
@@ -92,13 +81,12 @@ const StarRating = ({ rating }) => (
 );
 
 export default function FeedbackAndComplaints() {
-  const [restaurantReviews, setRestaurantReviews] = useState(
-    sampleRestaurantReviews.map(r => ({ ...r, adminResponse: "" }))
-  );
+  const { feedback, fetchFeedback, users, deliveryPartners, complaints, fetchComplaints,orders } = useContext(AdminContext);
+
   const [deliveryReviews, setDeliveryReviews] = useState(
-    sampleDeliveryReviews.map(r => ({ ...r, adminResponse: "" }))
+    feedback.filter(item => item.type === "delivery")
   );
-  const [complaints, setComplaints] = useState(sampleComplaints);
+  //const [complaints, setComplaints] = useState(sampleComplaints);
   const [replyingId, setReplyingId] = useState(null);
   const [replyText, setReplyText] = useState("");
 
@@ -107,30 +95,18 @@ export default function FeedbackAndComplaints() {
   // Tabs for ratings
   const [ratingsTab, setRatingsTab] = useState("restaurant"); // "restaurant" or "delivery"
 
-  const handleReply = (reviewId, type) => {
-    if (type === "restaurant") {
-      setRestaurantReviews(prev =>
-        prev.map(r =>
-          r.id === reviewId ? { ...r, adminResponse: replyText } : r
-        )
-      );
-    } else if (type === "delivery") {
-      setDeliveryReviews(prev =>
-        prev.map(r =>
-          r.id === reviewId ? { ...r, adminResponse: replyText } : r
-        )
-      );
-    }
+  const handleReply = async (reviewId, replyText) => {
+   console.log(reviewId, replyText, "this is review id and reply text");
+   await sendReply(reviewId, replyText);
     setReplyingId(null);
     setReplyText("");
+    fetchFeedback(); // Refresh feedback after reply
   };
 
-  const markResolved = (compId) => {
-    setComplaints((prev) =>
-      prev.map((c) =>
-        c.id === compId ? { ...c, status: "Resolved" } : c
-      )
-    );
+  const markResolved = async (compId) => {
+    await updateStatus(compId, "Pending");
+     await fetchComplaints(); // Refresh complaints after status update
+   
   };
   const handleRefund = (compId) => {
     alert(`Refund action triggered for complaint ${compId}`);
@@ -138,16 +114,13 @@ export default function FeedbackAndComplaints() {
   const handleBlock = (compId) => {
     alert(`Block action triggered for complaint ${compId}`);
   };
-  const handleUndo = (compId) => {
-    setComplaints((prev) =>
-      prev.map((c) =>
-        c.id === compId ? { ...c, status: "Pending" } : c
-      )
-    );
+  const handleUndo = async (compId) => {
+    await updateStatus(compId, "Resolved");
+    await fetchComplaints(); // Refresh complaints after status update
   };
   const gotoDeliveryBoy = (deliveryBoyId) => {
     // assumes your user management details are routed like `/users/:id`
-    navigate(`/users/${deliveryBoyId}`);
+    navigate(`/delivery-partners`);
   };
 
   // Animation for cards
@@ -220,25 +193,32 @@ export default function FeedbackAndComplaints() {
         >Delivery</button>
       </div>
 
-      {/* Ratings Tab Content */}
-      <motion.div
-        className="reviews-grid"
-        style={{
-          display: "grid",
-          gap: 26,
-          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-          marginBottom: 44
-        }}
-        initial="hidden"
-        animate="visible"
-      >
-        <AnimatePresence>
-          {(ratingsTab === "restaurant" ? restaurantReviews : deliveryReviews).map((r, idx) => (
-            <motion.div
-              key={r.id}
-              className="review-card"
-              custom={idx}
-              variants={cardVariants}
+      
+        <motion.div
+          className="reviews-grid"
+          style={{
+            display: "grid",
+            gap: 26,
+            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+            marginBottom: 44
+          }}
+          initial="hidden"
+          animate="visible"
+        >
+          <AnimatePresence>
+            {(ratingsTab === "restaurant"
+          ? feedback.filter(item => item.type === "restaurant")
+          : feedback.filter(item => item.type === "delivery") 
+            ).map((r, idx) => {
+            const userName = users.find(user => user.id === r.userId)?.name || r.userId;
+            const deliveryPartnerName = deliveryPartners.find(dp => dp.id === r.deliveryPartnerId)?.name || "Unknown Delivery Partner";
+
+            return (
+              <motion.div
+                key={r.id}
+                className="review-card"
+                custom={idx}
+                variants={cardVariants}
               initial="hidden"
               animate="visible"
               exit="hidden"
@@ -270,25 +250,22 @@ export default function FeedbackAndComplaints() {
                   fontSize: 17,
                   marginRight: 15,
                 }}>
-                  {r.user
-                    .split(" ")
-                    .map((s, idx, a) => idx === 0 || idx === a.length - 1 ? s[0].toUpperCase() : "")
-                    .join("")}
+                  {userName ? userName.charAt(0).toUpperCase() : "U"}
                 </div>
                 <div>
-                  <div style={{ fontWeight: 600 }}>{r.user}</div>
+                  <div style={{ fontWeight: 600 }}>{userName}</div>
                   <div style={{ fontSize: 13, color: "#61708a" }}>{r.date}</div>
                 </div>
                 <span style={{ flexGrow: 1 }} />
-                <StarRating rating={r.rating} />
+                <StarRating rating={r.foodQualityRating || r.deliveryRating} />
               </div>
               <div style={{ fontSize: 16, color: "#232323", marginBottom: 6, fontWeight: 480, flex: "1 0 auto" }}>
-                “{r.review}”
+                “{r.comment}”
               </div>
               {/* Delivery Name (for delivery tab) */}
-              {ratingsTab === "delivery" && r.deliveryBoyName && (
+              {ratingsTab === "delivery" && r.deliveryPartnerId && (
                 <div style={{ fontSize: 14, marginBottom: 5 }}>
-                  <span style={{ color: "#666" }}>Delivery Boy: </span>
+                  <span style={{ color: "#666" }}>Delivery Partner: </span>
                   <span
                     style={{
                       color: "#1976d2",
@@ -296,15 +273,15 @@ export default function FeedbackAndComplaints() {
                       cursor: "pointer",
                       textDecoration: "underline"
                     }}
-                    onClick={() => gotoDeliveryBoy(r.deliveryBoyId)}
-                    title={`View ${r.deliveryBoyName}'s details`}
+                    onClick={() => navigate('/delivery-partners/')}
+                    title={`View ${deliveryPartnerName}'s details`}
                   >
-                    {r.deliveryBoyName}
+                    {deliveryPartnerName}
                   </span>
                 </div>
               )}
               <div style={{ minHeight: 31 }}>
-                {r.adminResponse ? (
+                {r.adminResponse.comment ? (
                   <div style={{
                     background: "#e8f5e9",
                     color: "#2e7d32",
@@ -316,7 +293,7 @@ export default function FeedbackAndComplaints() {
                     alignItems: "center"
                   }}>
                     <FaReply style={{ marginRight: 8 }} />
-                    {r.adminResponse}
+                    {r.adminResponse.comment}
                   </div>
                 ) : replyingId === r.id ? (
                   <div style={{ display: "flex", alignItems: "center" }}>
@@ -334,10 +311,10 @@ export default function FeedbackAndComplaints() {
                     />
                     <button
                       style={btnPrimary}
-                      onClick={() =>
-                        handleReply(
+                      onClick={ () =>
+                       handleReply(
                           r.id,
-                          ratingsTab === "restaurant" ? "restaurant" : "delivery"
+                          replyText
                         )
                       }
                       disabled={!replyText}
@@ -361,7 +338,7 @@ export default function FeedbackAndComplaints() {
                 )}
               </div>
             </motion.div>
-          ))}
+          )})}
         </AnimatePresence>
       </motion.div>
 
@@ -389,12 +366,17 @@ export default function FeedbackAndComplaints() {
         animate="visible"
       >
         <AnimatePresence>
-          {complaints.map((c, idx) => (
-            <motion.div
-              key={c.id}
-              custom={idx}
-              variants={cardVariants}
-              initial="hidden"
+          {complaints.map((c, idx) => {
+            const userName = users.find(user => user.id === c.userId)?.name || c.userId;
+            const deliveryPartnerName = deliveryPartners.find(dp => dp.id === c.deliveryPartnerId)?.name || "Unknown Delivery Partner";
+            
+            const orderNumber = orders.find(order => order.id === c.orderId)?.orderNumber || "Unknown Order";
+            return (
+              <motion.div
+                key={c.id}
+                custom={idx}
+                variants={cardVariants}
+                initial="hidden"
               animate="visible"
               exit="hidden"
               className="complaint-card"
@@ -412,7 +394,7 @@ export default function FeedbackAndComplaints() {
             >
               <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
                 <AiFillShop color="#ff9900" size={23} style={{ marginRight: 9 }} />
-                <div style={{ fontWeight: 500, fontSize: 17 }}>{c.user}</div>
+                <div style={{ fontWeight: 500, fontSize: 17 }}>{userName}</div>
                 <span style={{ flexGrow: 1 }} />
                 <span style={{
                   padding: "4px 14px",
@@ -431,7 +413,7 @@ export default function FeedbackAndComplaints() {
                 marginBottom: 7,
                 lineHeight: "21px"
               }}>
-                <b>Issue Type:&nbsp;</b>{c.issueType}
+                <b>Issue Type:&nbsp;</b>{c.type}
               </div>
               <div style={{
                 fontSize: 15,
@@ -447,7 +429,7 @@ export default function FeedbackAndComplaints() {
                 marginBottom: 3,
                 lineHeight: "21px"
               }}>
-                <b>Order ID:</b> {c.orderId}
+                <b>Order ID:</b> {orderNumber}
               </div>
               <div style={{ fontSize: 13, color: "#8a97a2", marginBottom: 8 }}>{c.date}</div>
               {/* Delivery Boy info */}
@@ -460,10 +442,10 @@ export default function FeedbackAndComplaints() {
                     textDecoration: "underline",
                     cursor: "pointer"
                   }}
-                  onClick={() => gotoDeliveryBoy(c.deliveryBoyId)}
-                  title={`View ${c.deliveryBoyName}'s details`}
+                  onClick={() => gotoDeliveryBoy(c.deliveryPartnerId)}
+                  title={`View ${deliveryPartnerName}'s details`}
                 >
-                  {c.deliveryBoyName}
+                  {deliveryPartnerName}
                 </span>
               </div>
               {/* Actions */}
@@ -484,7 +466,7 @@ export default function FeedbackAndComplaints() {
                   <FaBan size={16} style={{ marginRight: 6 }} />
                   Block
                 </button>
-                {c.status !== "Resolved" ? (
+                {c.status == "Resolved" ? (
                   <button
                     style={btnActionDone}
                     title="Mark Resolved"
@@ -505,7 +487,7 @@ export default function FeedbackAndComplaints() {
                 )}
               </div>
             </motion.div>
-          ))}
+          )})}
         </AnimatePresence>
       </motion.div>
     </div>

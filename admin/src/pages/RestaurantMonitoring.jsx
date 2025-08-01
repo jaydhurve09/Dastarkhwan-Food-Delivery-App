@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { FaStar, FaEdit, FaTrash, FaPlus, FaUpload } from 'react-icons/fa';
 import axios from 'axios';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { AdminContext } from '../contexts/adminContext';
-
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -119,7 +120,6 @@ const ResponsiveStyles = () => (
   </style>
 );
 
-
 // Reusable Modal Component
 const Modal = ({ children, isOpen, onClose }) => {
   if (!isOpen) return null;
@@ -138,11 +138,13 @@ const Modal = ({ children, isOpen, onClose }) => {
   );
 };
 
+const DEFAULT_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlZWVlZWUiLz48dGV4dCB4PSI1MCIgeT0iNTAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzk5OSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+';
 
 const RestaurantMonitoring = () => {
-  const {deliveryPartners,orders,users,fetchOrders} = useContext(AdminContext);
-  const [menuItems, setMenuItems] = useState(initialMenuItems);
- // const [orders, setOrders] = useState(initialOrders);
+  const { deliveryPartners, orders, users, fetchOrders } = useContext(AdminContext);
+  const [menuItems, setMenuItems] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [reviews] = useState(initialReviews);
   const [operatingHours, setOperatingHours] = useState(initialHours);
   const [isOnline, setIsOnline] = useState(true);
@@ -166,8 +168,6 @@ const RestaurantMonitoring = () => {
     subCategories: []
   });
   const [subCategoryInput, setSubCategoryInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   // Add state to track active section
@@ -185,17 +185,16 @@ const RestaurantMonitoring = () => {
       setError('');
       const token = localStorage.getItem('adminToken');
       console.log('Fetching categories with token:', token);
-      
+
       const response = await axios.get(`${API_BASE_URL}/menu-categories`, {
-        headers: { 
+        headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
         }
       });
-      
+
       console.log('Categories API response:', response);
-      console.log('Categories data:', response.data);
-      
+
       if (response.data && response.data.data) {
         console.log('Setting categories:', response.data.data);
         setCategories(response.data.data);
@@ -212,6 +211,86 @@ const RestaurantMonitoring = () => {
       setIsLoading(false);
     }
   };
+
+  // Add these helper functions before your component's return statement
+  const getFoodTypeStyle = (isVeg) => ({
+    padding: '4px 8px',
+    borderRadius: '12px',
+    backgroundColor: isVeg ? '#e8f8f0' : '#fdedec',
+    color: isVeg ? '#27ae60' : '#e74c3c',
+    border: `1px solid ${isVeg ? '#27ae60' : '#e74c3c'}`,
+    fontSize: '0.8em',
+    fontWeight: 'bold',
+    display: 'inline-block'
+  });
+
+  const getStatusStyle = (isActive) => ({
+    padding: '4px 8px',
+    borderRadius: '12px',
+    backgroundColor: isActive ? '#e8f8f0' : '#f5f5f5',
+    color: isActive ? '#27ae60' : '#666',
+    border: `1px solid ${isActive ? '#27ae60' : '#ddd'}`,
+    fontSize: '0.8em',
+    fontWeight: 'bold',
+    display: 'inline-block'
+  });
+
+  const getButtonStyle = (bgColor) => ({
+    backgroundColor: bgColor,
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    padding: '5px 10px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px'
+  });
+
+  // Fetch menu items from the backend
+  const fetchMenuItems = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('adminToken');
+      const response = await axios.get('http://localhost:5000/api/menu-items', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      // Handle different response structures
+      let items = [];
+      if (Array.isArray(response.data)) {
+        items = response.data;
+      } else if (response.data && Array.isArray(response.data.data)) {
+        items = response.data.data;
+      } else if (response.data && response.data.items) {
+        items = Array.isArray(response.data.items) ? response.data.items : [];
+      }
+
+      setMenuItems(items || []);
+    } catch (err) {
+      console.error('Error fetching menu items:', err);
+      setError('Failed to load menu items');
+      setMenuItems([]);
+      toast.error('Failed to load menu items', {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Call fetchMenuItems when the component mounts
+  useEffect(() => {
+    fetchMenuItems();
+  }, []);
 
   // Handle input change for category form
   const handleCategoryInputChange = (e) => {
@@ -249,17 +328,17 @@ const RestaurantMonitoring = () => {
 
       // Format subcategories as an array of strings
       const formattedSubCategories = newCategory.hasSubcategories
-        ? (Array.isArray(newCategory.subCategories) 
-            ? newCategory.subCategories 
-            : (newCategory.subCategories || '').split(',').map(s => s.trim()).filter(Boolean)
-          )
+        ? (Array.isArray(newCategory.subCategories)
+          ? newCategory.subCategories
+          : (newCategory.subCategories || '').split(',').map(s => s.trim()).filter(Boolean)
+        )
         : [];
 
       const formData = new FormData();
       formData.append('name', newCategory.name);
       formData.append('isActive', newCategory.isActive);
       formData.append('hasSubcategories', newCategory.hasSubcategories);
-      
+
       // Append each subcategory individually if they exist
       if (formattedSubCategories.length > 0) {
         formattedSubCategories.forEach((subCat, index) => {
@@ -300,19 +379,19 @@ const RestaurantMonitoring = () => {
   // Update category
   const handleUpdateCategory = async () => {
     if (!editingCategory) return;
-  
+
     try {
       setIsLoading(true);
       setError('');
-  
+
       // Format subcategories as an array of strings
       const formattedSubCategories = newCategory.hasSubcategories
-        ? (Array.isArray(newCategory.subCategories) 
-            ? newCategory.subCategories 
-            : (newCategory.subCategories || '').split(',').map(s => s.trim()).filter(Boolean)
-          )
+        ? (Array.isArray(newCategory.subCategories)
+          ? newCategory.subCategories
+          : (newCategory.subCategories || '').split(',').map(s => s.trim()).filter(Boolean)
+        )
         : [];
-  
+
       const response = await axios.put(
         `http://localhost:5000/api/menu-categories/${editingCategory.id}`,
         {
@@ -328,8 +407,8 @@ const RestaurantMonitoring = () => {
           }
         }
       );
-  
-      setCategories(categories.map(cat => 
+
+      setCategories(categories.map(cat =>
         cat.id === editingCategory.id ? response.data : cat
       ));
       setSuccess('Category updated successfully!');
@@ -349,13 +428,13 @@ const RestaurantMonitoring = () => {
       try {
         setIsLoading(true);
         setError('');
-        
+
         await axios.delete(`http://localhost:5000/api/menu-categories/${categoryId}`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
           }
         });
-        
+
         // Remove the category from the local state
         setCategories(categories.filter(cat => cat.id !== categoryId));
         setSuccess('Category deleted successfully!');
@@ -377,8 +456,8 @@ const RestaurantMonitoring = () => {
       name: category.name,
       isActive: category.isActive,
       hasSubcategories: hasSubs, // Set based on whether there are subcategories
-      subCategories: Array.isArray(category.subCategories) 
-        ? [...category.subCategories] 
+      subCategories: Array.isArray(category.subCategories)
+        ? [...category.subCategories]
         : (category.subCategories || '').split(',').map(s => s.trim()).filter(Boolean),
       // ... include image handling if needed
     });
@@ -412,6 +491,11 @@ const RestaurantMonitoring = () => {
     setOrders(orders.map(order => order.id === orderId ? { ...order, status: newStatus } : order));
   };
 
+  const RECOMMENDATION_TAGS = {
+    RECOMMENDED: 'Recommended',
+    MOST_LOVED: 'Most Loved'
+  };
+
   const handleRecommendationTagChange = (tag) => {
     const newTags = new Set(selectedRecommendationTags);
     if (newTags.has(tag)) {
@@ -422,42 +506,153 @@ const RestaurantMonitoring = () => {
     setSelectedRecommendationTags(newTags);
   };
 
-  const handleMenuFormSubmit = (e) => {
+  const [price, setPrice] = useState('');
+
+  useEffect(() => {
+    if (editingItem) {
+      const itemPrice = editingItem.price?.full || editingItem.price;
+      setPrice(itemPrice ? parseFloat(itemPrice).toFixed(2) : '');
+    } else {
+      setPrice('');
+    }
+  }, [editingItem]);
+
+  const handleMenuFormSubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const newItemData = {
-      id: editingItem ? editingItem.id : Date.now(),
+    const foodType = formData.get('foodType');
+    const token = localStorage.getItem('adminToken');
+
+    // Get the selected category
+    const selectedCategory = categories.find(cat => cat.id === formData.get('category'));
+
+    // Determine the subcategory - use the selected subcategory if available
+    // Otherwise, use the food type as fallback (but this should be avoided)
+    const subCategory = selectedSubCategory || foodType;
+
+    // Format tags to ensure consistent casing
+    const formattedTags = Array.from(selectedRecommendationTags).map(tag => {
+      // Convert to title case if needed
+      if (tag === 'recommended') return 'Recommended';
+      if (tag === 'mostLoved' || tag === 'most loved') return 'Most Loved';
+      return tag;
+    });
+
+    // Prepare the request data
+    const menuItemData = {
       name: formData.get('name'),
-      price: {
-        full: parseFloat(formData.get('price_full')),
-      },
-      subCategory: selectedSubCategory,
-      subDishes: hasSubDishes ? currentSubDishes : [],
-      available: editingItem ? editingItem.available : true,
-      category: formData.get('category'),
-      description: formData.get('description'),
-      image: imagePreview || (editingItem ? editingItem.image : 'https://via.placeholder.com/150'),
-      recommendation: Array.from(selectedRecommendationTags), // Store as array
+      categoryId: formData.get('category'),
+      subCategory: subCategory,
+      isVeg: foodType === 'Veg' ? 'true' : 'false',
+      price: parseFloat(price) || 0, // Send price as a single number
+      description: formData.get('description') || '',
+      tags: formattedTags,
+      isActive: true,
+      addOns: hasSubDishes && currentSubDishes.length > 0 ? currentSubDishes : []
     };
 
-    if (editingItem) {
-      setMenuItems(menuItems.map(item => item.id === editingItem.id ? newItemData : item));
-    } else {
-      setMenuItems([...menuItems, newItemData]);
+    // If category has subcategories but none is selected, show error
+    if (selectedCategory?.subCategories?.length > 0 && !selectedSubCategory) {
+      toast.error('Please select a subcategory', {
+        position: "top-right",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+      return;
     }
-    setMenuModalOpen(false);
-    setEditingItem(null);
-    setImagePreview(null);
-    setSelectedSubCategory('');
-    setHasSubDishes(false);
-    setCurrentSubDishes([]);
-    setSelectedRecommendationTags(new Set()); // Reset tags
+
+    try {
+      let response;
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      };
+
+      if (editingItem) {
+        // Update existing menu item
+        response = await axios.put(
+          `http://localhost:5000/api/menu-items/${editingItem.id}`,
+          menuItemData,
+          { headers }
+        );
+
+        toast.success('Menu item updated successfully!', {
+          position: "top-right",
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+      } else {
+        // Create new menu item
+        response = await axios.post(
+          'http://localhost:5000/api/menu-items',
+          menuItemData,
+          { headers }
+        );
+
+        toast.success('Menu item added successfully!', {
+          position: "top-right",
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+      }
+
+      // Close the modal and reset form
+      setMenuModalOpen(false);
+      setEditingItem(null);
+      setImagePreview(null);
+      setSelectedSubCategory('');
+      setHasSubDishes(false);
+      setCurrentSubDishes([]);
+      setSelectedRecommendationTags(new Set());
+
+      // Refresh the menu items
+      await fetchMenuItems();
+
+    } catch (error) {
+      console.error('Error saving menu item:', error);
+      toast.error(error.response?.data?.message || 'Failed to save menu item', {
+        position: "top-right",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+    }
   };
 
   const handleImageChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       setImagePreview(URL.createObjectURL(e.target.files[0]));
     }
+  };
+
+  // Handle adding sub-dishes (add-ons)
+  const handleAddSubDish = () => {
+    if (subDishName && subDishPrice) {
+      setCurrentSubDishes([...currentSubDishes, {
+        name: subDishName,
+        price: parseFloat(subDishPrice)
+      }]);
+      setSubDishName('');
+      setSubDishPrice('');
+    }
+  };
+
+  // Handle removing a sub-dish (add-on)
+  const handleRemoveSubDish = (index) => {
+    const newSubDishes = [...currentSubDishes];
+    newSubDishes.splice(index, 1);
+    setCurrentSubDishes(newSubDishes);
   };
 
   // Group menu items by category
@@ -537,32 +732,71 @@ const RestaurantMonitoring = () => {
   const [currentSubDishes, setCurrentSubDishes] = useState([]);
   const [subDishName, setSubDishName] = useState('');
   const [subDishPrice, setSubDishPrice] = useState('');
+  const [foodType, setFoodType] = useState('Veg');
+
+  useEffect(() => {
+    if (editingItem) {
+      // Set the current subcategories based on the selected category
+      const selectedCategory = categories.find(cat => cat.id === editingItem.categoryId);
+      if (selectedCategory) {
+        setCurrentSubCategories(selectedCategory.subCategories || []);
+        
+        // If the category has subcategories and the editing item has a subcategory, select it
+        if (selectedCategory.subCategories && selectedCategory.subCategories.length > 0 && editingItem.subCategory) {
+          setSelectedSubCategory(editingItem.subCategory);
+        }
+      }
+    } else {
+      // Reset when not editing
+      setCurrentSubCategories([]);
+      setSelectedSubCategory('');
+    }
+  }, [editingItem, categories]);
+
+  useEffect(() => {
+    if (editingItem) {
+      // Set the food type based on isVeg
+      setFoodType(editingItem.isVeg === true || editingItem.subCategory === 'Veg' ? 'Veg' : 'Non-Veg');
+      
+      // Set recommendation tags if they exist
+      if (editingItem.tags && editingItem.tags.length > 0) {
+        const tagsSet = new Set(editingItem.tags.map(tag => tag.toLowerCase()));
+        setSelectedRecommendationTags(tagsSet);
+      }
+      
+      // Set sub-dishes if they exist
+      if (editingItem.addOns && editingItem.addOns.length > 0) {
+        setCurrentSubDishes(editingItem.addOns);
+        setHasSubDishes(true);
+      }
+    }
+  }, [editingItem, categories]);
 
   return (
     <div style={styles.pageContainer}>
       <ResponsiveStyles />
-
+      <ToastContainer />
       {/* --- Modals --- */}
-      <Modal 
-        isOpen={isCategoryModalOpen} 
-        onClose={() => { 
-          setCategoryModalOpen(false); 
-          setEditingCategory(null); 
-          setNewCategory({ 
-            name: '', 
-            isActive: true, 
-            hasSubcategories: false, 
-            subCategories: [] 
-          }); 
+      <Modal
+        isOpen={isCategoryModalOpen}
+        onClose={() => {
+          setCategoryModalOpen(false);
+          setEditingCategory(null);
+          setNewCategory({
+            name: '',
+            isActive: true,
+            hasSubcategories: false,
+            subCategories: []
+          });
           setSubCategoryInput('');
-          setError(''); 
+          setError('');
         }}
       >
         <div style={{ padding: '20px', maxWidth: '500px', margin: '0 auto' }}>
           <h3 style={{ marginBottom: '20px', color: '#2c3e50', fontSize: '1.5rem' }}>
             {editingCategory ? 'Edit Category' : 'Add New Category'}
           </h3>
-          
+
           <form onSubmit={editingCategory ? handleUpdateCategory : handleAddCategory}>
             <div style={styles.formGroup}>
               <label style={styles.label} htmlFor="categoryName">Category Name</label>
@@ -577,62 +811,59 @@ const RestaurantMonitoring = () => {
                 required
               />
             </div>
-            
+
             <div style={{ ...styles.formGroup, display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '6px' }}>
-              <input 
-                type="checkbox" 
-                id="hasSubcategories" 
-                name="hasSubcategories" 
-                checked={newCategory.hasSubcategories} 
-                onChange={handleCategoryInputChange} 
+              <input
+                type="checkbox"
+                id="hasSubcategories"
+                name="hasSubcategories"
+                checked={newCategory.hasSubcategories}
+                onChange={handleCategoryInputChange}
                 style={{ width: '18px', height: '18px' }}
               />
               <label htmlFor="hasSubcategories" style={{ margin: 0, cursor: 'pointer', userSelect: 'none' }}>
                 This category has subcategories
               </label>
             </div>
-            
+
             {newCategory.hasSubcategories && (
               <div style={{ ...styles.formGroup, marginTop: '15px', padding: '15px', border: '1px solid #e9ecef', borderRadius: '6px', backgroundColor: '#fff' }}>
                 <label style={{ ...styles.label, marginBottom: '10px' }}>Subcategories</label>
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={subCategoryInput}
                     onChange={(e) => setSubCategoryInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddSubCategory())}
-                    placeholder="Enter subcategory name" 
-                    style={{ ...styles.input, flex: 1, margin: 0 }} 
+                    placeholder="Enter subcategory name"
+                    style={{ ...styles.input, flex: 1, margin: 0 }}
                   />
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={handleAddSubCategory}
                     style={{
                       padding: '8px 15px',
-                      backgroundColor: '#3498db',
+                      backgroundColor: '#28a745',
                       color: 'white',
                       border: 'none',
                       borderRadius: '4px',
                       cursor: 'pointer',
-                      whiteSpace: 'nowrap',
-                      transition: 'background-color 0.2s'
+                      whiteSpace: 'nowrap'
                     }}
-                    onMouseOver={(e) => e.target.style.backgroundColor = '#2980b9'}
-                    onMouseOut={(e) => e.target.style.backgroundColor = '#3498db'}
                   >
                     Add
                   </button>
                 </div>
-                
+
                 {newCategory.subCategories.length > 0 && (
                   <div style={{ marginTop: '15px' }}>
                     <p style={{ margin: '0 0 8px 0', fontSize: '0.9em', color: '#495057' }}>Subcategories:</p>
-                    <div style={{ 
-                      display: 'flex', 
-                      flexWrap: 'wrap', 
-                      gap: '8px', 
-                      maxHeight: '150px', 
-                      overflowY: 'auto', 
+                    <div style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '8px',
+                      maxHeight: '150px',
+                      overflowY: 'auto',
                       padding: '10px',
                       backgroundColor: '#f8f9fa',
                       borderRadius: '6px',
@@ -641,61 +872,63 @@ const RestaurantMonitoring = () => {
                       {newCategory.subCategories.length === 0 ? (
                         <div style={{ color: '#6c757d', fontStyle: 'italic' }}>No subcategories added yet</div>
                       ) : (
-                        newCategory.subCategories.map((subCat, index) => (
-                          <div 
-                            key={index}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              backgroundColor: '#e9ecef',
-                              padding: '4px 12px',
-                              borderRadius: '12px',
-                              fontSize: '0.85em',
-                              color: '#212529'
-                            }}
-                          >
-                            {subCat}
-                            <button 
-                              type="button" 
-                              onClick={() => handleRemoveSubCategory(index)}
+                        <React.Fragment>
+                          {newCategory.subCategories.map((subCat, index) => (
+                            <div
+                              key={index}
                               style={{
-                                background: 'none',
-                                border: 'none',
-                                color: '#dc3545',
-                                cursor: 'pointer',
-                                padding: '0 0 0 5px',
-                                fontSize: '1.1em',
-                                lineHeight: '1',
                                 display: 'flex',
                                 alignItems: 'center',
-                                justifyContent: 'center',
-                                width: '18px',
-                                height: '18px',
-                                borderRadius: '50%',
-                                transition: 'background-color 0.2s'
+                                gap: '6px',
+                                backgroundColor: '#e9ecef',
+                                padding: '4px 12px',
+                                borderRadius: '12px',
+                                fontSize: '0.85em',
+                                color: '#212529'
                               }}
-                              onMouseOver={(e) => e.target.style.backgroundColor = '#f1f1f1'}
-                              onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
-                              aria-label={`Remove ${subCat}`}
                             >
-                              ×
-                            </button>
-                          </div>
-                        ))
+                              {subCat}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveSubCategory(index)}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  color: '#dc3545',
+                                  cursor: 'pointer',
+                                  padding: '0 0 0 5px',
+                                  fontSize: '1.1em',
+                                  lineHeight: '1',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  width: '18px',
+                                  height: '18px',
+                                  borderRadius: '50%',
+                                  transition: 'background-color 0.2s'
+                                }}
+                                onMouseOver={(e) => e.target.style.backgroundColor = '#f1f1f1'}
+                                onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
+                                aria-label={`Remove ${subCat}`}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </React.Fragment>
                       )}
                     </div>
                   </div>
                 )}
               </div>
             )}
-            
+
             <div style={{ ...styles.formGroup, display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '6px', marginTop: '15px' }}>
-              <input 
-                type="checkbox" 
-                id="isActive" 
-                name="isActive" 
-                checked={newCategory.isActive} 
+              <input
+                type="checkbox"
+                id="isActive"
+                name="isActive"
+                checked={newCategory.isActive}
                 onChange={handleCategoryInputChange}
                 style={{ width: '18px', height: '18px' }}
               />
@@ -703,18 +936,18 @@ const RestaurantMonitoring = () => {
                 Active (visible to customers)
               </label>
             </div>
-            
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '25px', paddingTop: '15px', borderTop: '1px solid #e9ecef' }}>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => {
                   setCategoryModalOpen(false);
                   setEditingCategory(null);
-                  setNewCategory({ 
-                    name: '', 
-                    isActive: true, 
-                    hasSubcategories: false, 
-                    subCategories: [] 
+                  setNewCategory({
+                    name: '',
+                    isActive: true,
+                    hasSubcategories: false,
+                    subCategories: []
                   });
                   setSubCategoryInput('');
                 }}
@@ -733,8 +966,8 @@ const RestaurantMonitoring = () => {
               >
                 Cancel
               </button>
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 style={{
                   padding: '10px 20px',
                   backgroundColor: '#28a745',
@@ -791,27 +1024,69 @@ const RestaurantMonitoring = () => {
               <select
                 name="category"
                 style={styles.input}
-                defaultValue={editingItem?.category || ""}
+                value={editingItem?.categoryId || ""}
                 onChange={(e) => {
-                  const selectedCat = categories.find(c => c.name === e.target.value);
+                  const selectedCat = categories.find(c => c.id === e.target.value);
                   setCurrentSubCategories(selectedCat?.subCategories || []);
-                  setSelectedSubCategory('');
+                  
+                  // If the current selectedSubCategory is not in the new category's subcategories, reset it
+                  if (newSubCategories.length > 0 && !newSubCategories.includes(selectedSubCategory)) {
+                    // If editing an existing item and its subcategory is in the new category, keep it selected
+                    if (editingItem?.subCategory && newSubCategories.includes(editingItem.subCategory)) {
+                      setSelectedSubCategory(editingItem.subCategory);
+                    } else {
+                      setSelectedSubCategory('');
+                    }
+                  } else if (newSubCategories.length === 0) {
+                    setSelectedSubCategory('');
+                  }
                 }}
                 required
               >
                 <option value="" disabled>Select a category</option>
-                {categories.map(cat => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
 
+          {/* Sub-category Selection (only show if category has subcategories) */}
           {currentSubCategories.length > 0 && (
             <div style={styles.formGroup}>
-              <label style={styles.label}>Sub-Category</label>
-              <div>
+              <label style={styles.label}>Sub-Category <span style={{ color: 'red' }}>*</span></label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
                 {currentSubCategories.map(subCat => (
-                  <label key={subCat} style={{ marginRight: '15px' }}>
-                    <input type="radio" name="subCategory" value={subCat} checked={selectedSubCategory === subCat} onChange={(e) => setSelectedSubCategory(e.target.value)} required /> {subCat}
+                  <label
+                    key={subCat}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '8px 16px',
+                      borderRadius: '4px',
+                      border: `1px solid ${selectedSubCategory === subCat ? '#3498db' : '#ddd'}`,
+                      backgroundColor: selectedSubCategory === subCat ? '#ebf5fb' : '#fff',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      ':hover': {
+                        borderColor: '#3498db',
+                        backgroundColor: '#f0f8ff'
+                      }
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="subCategory"
+                      value={subCat}
+                      checked={selectedSubCategory === subCat}
+                      onChange={() => setSelectedSubCategory(subCat)}
+                      required={currentSubCategories.length > 0}
+                      style={{ display: 'none' }}
+                    />
+                    {subCat}
                   </label>
                 ))}
               </div>
@@ -821,7 +1096,88 @@ const RestaurantMonitoring = () => {
           {/* Price */}
           <div style={styles.formGroup}>
             <label style={styles.label}>Price (₹)</label>
-            <input name="price_full" type="number" step="0.01" style={styles.input} defaultValue={editingItem?.price?.full || ''} required />
+            <input 
+              name="price_full" 
+              type="number" 
+              step="0.01" 
+              min="0"
+              style={styles.input} 
+              value={price}
+              onChange={(e) => {
+                const value = e.target.value;
+                // Only update if it's a valid number or an empty string
+                if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
+                  setPrice(value);
+                }
+              }}
+              onBlur={(e) => {
+                // Format to 2 decimal places when input loses focus
+                const numValue = parseFloat(e.target.value);
+                if (!isNaN(numValue)) {
+                  setPrice(numValue.toFixed(2));
+                } else {
+                  setPrice('');
+                }
+              }}
+              required 
+            />
+          </div>
+
+          {/* Veg/Non-Veg Toggle */}
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Food Type</label>
+            <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                padding: '8px 16px',
+                borderRadius: '4px',
+                border: `1px solid ${foodType === 'Veg' ? '#27ae60' : '#ddd'}`,
+                backgroundColor: foodType === 'Veg' ? '#e8f8f0' : '#fff',
+                transition: 'all 0.2s',
+                ':hover': {
+                  borderColor: foodType === 'Veg' ? '#27ae60' : '#3498db',
+                  backgroundColor: foodType === 'Veg' ? '#e8f8f0' : '#f0f8ff'
+                }
+              }}>
+                <input
+                  type="radio"
+                  name="foodType"
+                  value="Veg"
+                  checked={foodType === 'Veg'}
+                  onChange={() => setFoodType('Veg')}
+                  style={{ width: '18px', height: '18px' }}
+                />
+                <span>Veg</span>
+              </label>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                padding: '8px 16px',
+                borderRadius: '4px',
+                border: `1px solid ${foodType === 'Non-Veg' ? '#e74c3c' : '#ddd'}`,
+                backgroundColor: foodType === 'Non-Veg' ? '#fdedec' : '#fff',
+                transition: 'all 0.2s',
+                ':hover': {
+                  borderColor: foodType === 'Non-Veg' ? '#e74c3c' : '#3498db',
+                  backgroundColor: foodType === 'Non-Veg' ? '#fdedec' : '#f0f8ff'
+                }
+              }}>
+                <input
+                  type="radio"
+                  name="foodType"
+                  value="Non-Veg"
+                  checked={foodType === 'Non-Veg'}
+                  onChange={() => setFoodType('Non-Veg')}
+                  style={{ width: '18px', height: '18px' }}
+                />
+                <span>Non-Veg</span>
+              </label>
+            </div>
           </div>
 
           {/* Recommendation Checkboxes */}
@@ -831,20 +1187,20 @@ const RestaurantMonitoring = () => {
               <label style={{ marginRight: '15px' }}>
                 <input
                   type="checkbox"
-                  checked={selectedRecommendationTags.has('recommended')}
-                  onChange={() => handleRecommendationTagChange('recommended')}
+                  checked={selectedRecommendationTags.has(RECOMMENDATION_TAGS.RECOMMENDED)}
+                  onChange={() => handleRecommendationTagChange(RECOMMENDATION_TAGS.RECOMMENDED)}
                   style={{ marginRight: '5px' }}
                 />
-                Recommended for You
+                {RECOMMENDATION_TAGS.RECOMMENDED} for You
               </label>
               <label>
                 <input
                   type="checkbox"
-                  checked={selectedRecommendationTags.has('mostLoved')}
-                  onChange={() => handleRecommendationTagChange('mostLoved')}
+                  checked={selectedRecommendationTags.has(RECOMMENDATION_TAGS.MOST_LOVED)}
+                  onChange={() => handleRecommendationTagChange(RECOMMENDATION_TAGS.MOST_LOVED)}
                   style={{ marginRight: '5px' }}
                 />
-                Most Loved
+                {RECOMMENDATION_TAGS.MOST_LOVED}
               </label>
             </div>
           </div>
@@ -974,99 +1330,102 @@ const RestaurantMonitoring = () => {
 
           {activeSection === 'menu' && (
             <div>
-              {Object.keys(menuByCategory).map(category => (
-                <div key={category}>
-                  <h3 style={styles.categoryTitle}>{category}</h3>
-                  <table style={styles.table} className="responsive-table">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                {/* <h2>Menu Management</h2> */}
+                {/* <button
+                  onClick={() => {
+                    setEditingItem(null);
+                    setMenuModalOpen(true);
+                  }}
+                  style={getButtonStyle('#27ae60')}
+                >
+                  <FaPlus /> Add Menu Item
+                </button> */}
+              </div>
+
+              {isLoading ? (
+                <div style={{ textAlign: 'center', padding: '20px' }}>Loading menu items...</div>
+              ) : error ? (
+                <div style={{ color: 'red', textAlign: 'center', padding: '20px' }}>{error}</div>
+              ) : menuItems.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px' }}>No menu items found</div>
+              ) : (
+                <div style={styles.tableContainer}>
+                  <table style={styles.table}>
                     <thead>
                       <tr>
-                        <th style={styles.th}>Dish</th>
-                        <th style={styles.th}>Price</th>
-                        <th style={styles.th}>Recommendation</th> {/* Added column */}
-                        <th style={styles.th}>Available</th>
-                        <th style={styles.th}>Actions</th>
+                        <th style={styles.tableHeader}>Image</th>
+                        <th style={styles.tableHeader}>Name</th>
+                        <th style={styles.tableHeader}>Category</th>
+                        <th style={styles.tableHeader}>Price (₹)</th>
+                        <th style={styles.tableHeader}>Type</th>
+                        <th style={styles.tableHeader}>Status</th>
+                        <th style={styles.tableHeader}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {menuByCategory[category].map(item => (
-                        <tr key={item.id}>
-                          <td style={styles.td} data-label="Dish">
-                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                              <img src={item.image} alt={item.name} style={styles.menuItemImage} />
-                              <div>
-                                <span style={{ fontWeight: 'bold' }}>{item.name}</span>
-                                {item.subCategory && <span style={{ fontSize: '0.8rem', color: 'white', backgroundColor: item.subCategory === 'Veg' ? '#27ae60' : '#c0392b', padding: '2px 6px', borderRadius: '4px', marginLeft: '8px' }}>{item.subCategory}</span>}
-                                <p style={{ fontSize: '0.9rem', color: '#666', margin: '4px 0 0 0' }}>{item.description}</p>
-                                {item.subDishes && item.subDishes.length > 0 && (
-                                  <div style={{ marginTop: '10px' }}>
-                                    <strong style={{ fontSize: '0.9rem' }}>Sub-Dishes:</strong>
-                                    <ul style={{ margin: '5px 0 0 0', paddingLeft: '20px', fontSize: '0.9rem' }}>
-                                      {item.subDishes.map((sd, i) => <li key={i}>{sd.name} (+₹{sd.price.toFixed(2)})</li>)}
-                                    </ul>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                          <td style={styles.td} data-label="Price">₹{item.price.full.toFixed(2)}</td>
-                          {/* Display Recommendation Tags */}
-                          <td style={styles.td} data-label="Recommendation">
-                            {item.recommendation && item.recommendation.map(tag => (
-                              <span
-                                key={tag}
-                                style={{
-                                  ...styles.recommendationTag,
-                                  backgroundColor: tag === 'recommended' ? '#3498db' : '#e67e22'
-                                }}
-                              >
-                                {tag === 'recommended' ? 'Recommended' : 'Most Loved'}
-                              </span>
-                            ))}
-                            {(!item.recommendation || item.recommendation.length === 0) && (
-                              <span style={{ color: '#7f8c8d', fontSize: '0.8em' }}>None</span>
-                            )}
-                          </td>
-                          <td style={styles.td} data-label="Available">
-                            <label style={styles.toggleSwitch}>
-                              <input
-                                type="checkbox"
-                                style={styles.toggleInput}
-                                checked={item.available}
-                                onChange={() => setMenuItems(menuItems.map(menuItem => menuItem.id === item.id ? { ...menuItem, available: !menuItem.available } : menuItem))}
-                              />
-                              <span style={sliderStyle(item.available)}><span style={sliderBeforeStyle(item.available)}></span></span>
-                            </label>
-                          </td>
-                          <td style={styles.td} data-label="Actions" className="action-cell-container">
-                            <button
-                              style={{ ...styles.button, ...styles.editButton, marginRight: '10px' }}
-                              onClick={() => {
-                                setEditingItem(item);
-                                setImagePreview(item.image);
-                                setSelectedSubCategory(item.subCategory || '');
-                                setCurrentSubCategories(categories.find(c => c.name === item.category)?.subCategories || []);
-                                setHasSubDishes(item.subDishes && item.subDishes.length > 0);
-                                setCurrentSubDishes(item.subDishes || []);
-                                // Set recommendation tags for edit
-                                setSelectedRecommendationTags(new Set(item.recommendation || []));
-                                setMenuModalOpen(true);
+                      {menuItems.map((item) => (
+                        <tr key={item.id || Math.random().toString(36).substr(2, 9)}>
+                          <td style={styles.tableCell}>
+                            <img
+                              src={item.image || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+CiAgPHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlZWVlZWUiLz4KICA8dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBhbGlnbm1lbnQtYmFzZWxpbmU9Im1pZGRsZSIgZmlsbD0iIzk5OSI+Tm8gSW1hZ2U8L3RleHQ+Cjwvc3ZnPg=='}
+                              alt={item.name || 'Menu item'}
+                              style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px' }}
+                              onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+CiAgPHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlZWVlZWUiLz4KICA8dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBhbGlnbm1lbnQtYmFzZWxpbmU9Im1pZGRsZSIgZmlsbD0iIzk5OSI+Tm8gSW1hZ2U8L3RleHQ+Cjwvc3ZnPg==';
                               }}
-                            >
-                              <FaEdit /> Edit
-                            </button>
-                            <button
-                              style={{ ...styles.button, ...styles.deleteButton }}
-                              onClick={() => handleDeleteMenuItem(item.id)}
-                            >
-                              <FaTrash /> Delete
-                            </button>
+                            />
+                          </td>
+                          <td style={styles.tableCell}>
+                            <div style={{ fontWeight: 'bold' }}>{item.name || 'Unnamed Item'}</div>
+                            <div style={{ fontSize: '0.8em', color: '#666' }}>{item.description || 'No description'}</div>
+                          </td>
+                          <td style={styles.tableCell}>
+                            {categories.find(cat => cat.id === item.categoryId)?.name || 'N/A'}
+                          </td>
+                          <td style={styles.tableCell}>₹{item.price ? parseFloat(item.price).toFixed(2) : '0.00'}</td>
+                          <td style={styles.tableCell}>
+                            <span style={getFoodTypeStyle(item.isVeg)}>
+                              {item.isVeg ? 'Veg' : 'Non-Veg'}
+                            </span>
+                          </td>
+                          <td style={styles.tableCell}>
+                            <span style={getStatusStyle(item.isActive)}>
+                              {item.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td style={styles.tableCell}>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                onClick={() => {
+                                  setEditingItem(item);
+                                  setImagePreview(item.image);
+                                  setSelectedSubCategory(item.subCategory || '');
+                                  setCurrentSubCategories(categories.find(c => c.id === item.categoryId)?.subCategories || []);
+                                  setHasSubDishes(item.subDishes && item.subDishes.length > 0);
+                                  setCurrentSubDishes(item.subDishes || []);
+                                  setSelectedRecommendationTags(new Set(item.recommendation || []));
+                                  setMenuModalOpen(true);
+                                }}
+                                style={getButtonStyle('#3498db')}
+                              >
+                                <FaEdit />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteMenuItem(item.id)}
+                                style={getButtonStyle('#e74c3c')}
+                              >
+                                <FaTrash />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              ))}
+              )}
             </div>
           )}
 
@@ -1075,10 +1434,10 @@ const RestaurantMonitoring = () => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <h3 style={styles.cardTitle}>Menu Categories</h3>
                 <div>
-                  <button 
+                  <button
                     onClick={fetchCategories}
-                    style={{ 
-                      ...styles.button, 
+                    style={{
+                      ...styles.button,
                       marginRight: '10px',
                       backgroundColor: '#f0f0f0',
                       color: '#333',
@@ -1090,19 +1449,19 @@ const RestaurantMonitoring = () => {
                   >
                     <span>🔄</span> {isLoading ? 'Refreshing...' : 'Refresh'}
                   </button>
-                  <button 
+                  <button
                     onClick={() => {
                       setEditingCategory(null);
-                      setNewCategory({ 
-                        name: '', 
-                        isActive: true, 
-                        hasSubcategories: false, 
-                        subCategories: [] 
+                      setNewCategory({
+                        name: '',
+                        isActive: true,
+                        hasSubcategories: false,
+                        subCategories: []
                       });
                       setCategoryModalOpen(true);
                     }}
-                    style={{ 
-                      ...styles.button, 
+                    style={{
+                      ...styles.button,
                       ...styles.addButton,
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -1114,7 +1473,7 @@ const RestaurantMonitoring = () => {
                   </button>
                 </div>
               </div>
-              
+
               {success && (
                 <div style={{
                   backgroundColor: '#d4edda',
@@ -1127,7 +1486,7 @@ const RestaurantMonitoring = () => {
                   alignItems: 'center'
                 }}>
                   <span>{success}</span>
-                  <button 
+                  <button
                     onClick={() => setSuccess('')}
                     style={{
                       background: 'none',
@@ -1141,7 +1500,7 @@ const RestaurantMonitoring = () => {
                   </button>
                 </div>
               )}
-              
+
               {error && (
                 <div style={{
                   backgroundColor: '#f8d7da',
@@ -1154,7 +1513,7 @@ const RestaurantMonitoring = () => {
                   alignItems: 'center'
                 }}>
                   <span>{error}</span>
-                  <button 
+                  <button
                     onClick={() => setError('')}
                     style={{
                       background: 'none',
@@ -1168,7 +1527,7 @@ const RestaurantMonitoring = () => {
                   </button>
                 </div>
               )}
-              
+
               {isLoading && categories.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '20px' }}>
                   <div className="spinner">Loading categories...</div>
@@ -1184,14 +1543,14 @@ const RestaurantMonitoring = () => {
                   <p style={{ marginBottom: '15px', fontSize: '16px', color: '#666' }}>
                     No categories found.
                   </p>
-                  <button 
+                  <button
                     onClick={() => {
                       setEditingCategory(null);
-                      setNewCategory({ 
-                        name: '', 
-                        isActive: true, 
-                        hasSubcategories: false, 
-                        subCategories: [] 
+                      setNewCategory({
+                        name: '',
+                        isActive: true,
+                        hasSubcategories: false,
+                        subCategories: []
                       });
                       setCategoryModalOpen(true);
                     }}
@@ -1223,7 +1582,7 @@ const RestaurantMonitoring = () => {
                         console.log('subCategories:', category.subCategories);
                         console.log('hasSubcategories:', category.hasSubcategories);
                         console.log('isArray:', Array.isArray(category.subCategories));
-                        
+
                         return (
                           <tr key={category.id || category._id}>
                             <td style={styles.td}>
@@ -1236,7 +1595,7 @@ const RestaurantMonitoring = () => {
                                     .filter(sub => sub)
                                     .slice(0, 3)
                                     .map((sub, idx) => (
-                                      <span 
+                                      <span
                                         key={idx}
                                         style={{
                                           backgroundColor: '#e9ecef',
@@ -1273,7 +1632,7 @@ const RestaurantMonitoring = () => {
                               )}
                             </td>
                             <td style={styles.td}>
-                              <span 
+                              <span
                                 style={{
                                   padding: '4px 12px',
                                   borderRadius: '12px',
@@ -1291,10 +1650,10 @@ const RestaurantMonitoring = () => {
                             </td>
                             <td style={styles.td}>
                               <div style={{ display: 'flex', gap: '8px' }}>
-                                <button 
+                                <button
                                   onClick={() => handleEditCategory(category)}
-                                  style={{ 
-                                    ...styles.button, 
+                                  style={{
+                                    ...styles.button,
                                     ...styles.editButton,
                                     padding: '6px 12px',
                                     display: 'inline-flex',
@@ -1393,4 +1752,50 @@ const RestaurantMonitoring = () => {
   );
 };
 
-export default RestaurantMonitoring;
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '20px', color: 'red', textAlign: 'center' }}>
+          <h3>Something went wrong</h3>
+          <p>{this.state.error?.message || 'An unexpected error occurred'}</p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#3498db',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              marginTop: '10px'
+            }}
+          >
+            Reload Page
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+export default () => (
+  <ErrorBoundary>
+    <RestaurantMonitoring />
+  </ErrorBoundary>
+);

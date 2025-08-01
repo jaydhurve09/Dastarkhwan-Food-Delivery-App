@@ -242,67 +242,95 @@ const RestaurantMonitoring = () => {
   };
 
   // Add new category
-  const handleAddCategory = async (e) => {
-    e.preventDefault();
+  const handleAddCategory = async () => {
     try {
       setIsLoading(true);
       setError('');
-      const token = localStorage.getItem('adminToken');
+  
+      // Format subcategories as an array of strings
+      const formattedSubCategories = newCategory.hasSubcategories
+        ? (Array.isArray(newCategory.subCategories) 
+            ? newCategory.subCategories 
+            : (newCategory.subCategories || '').split(',').map(s => s.trim()).filter(Boolean)
+          )
+        : [];
+  
       const response = await axios.post(
-        `${API_BASE_URL}/menu-categories`,
-        newCategory,
+        'http://localhost:5000/api/menu-categories',
         {
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+          name: newCategory.name,
+          isActive: newCategory.isActive,
+          hasSubcategories: newCategory.hasSubcategories,
+          subCategories: formattedSubCategories,
+          // ... include image handling if needed
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
           }
         }
       );
-      
-      setCategories([...categories, response.data.data]);
-      setNewCategory({ name: '', isActive: true, hasSubcategories: false, subCategories: [] });
-      setCategoryModalOpen(false);
+  
+      setCategories([...categories, response.data]);
       setSuccess('Category added successfully!');
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      console.error('Error adding category:', err);
-      setError(err.response?.data?.message || 'Failed to add category');
+      setCategoryModalOpen(false);
+      setNewCategory({
+        name: '',
+        isActive: true,
+        hasSubcategories: false,
+        subCategories: [],
+        image: null,
+        imagePreview: ''
+      });
+    } catch (error) {
+      console.error('Error adding category:', error);
+      setError(error.response?.data?.message || 'Failed to add category');
     } finally {
       setIsLoading(false);
     }
   };
 
   // Update category
-  const handleUpdateCategory = async (e) => {
-    e.preventDefault();
+  const handleUpdateCategory = async () => {
     if (!editingCategory) return;
-    
+  
     try {
       setIsLoading(true);
       setError('');
-      const token = localStorage.getItem('adminToken');
+  
+      // Format subcategories as an array of strings
+      const formattedSubCategories = newCategory.hasSubcategories
+        ? (Array.isArray(newCategory.subCategories) 
+            ? newCategory.subCategories 
+            : (newCategory.subCategories || '').split(',').map(s => s.trim()).filter(Boolean)
+          )
+        : [];
+  
       const response = await axios.put(
-        `${API_BASE_URL}/menu-categories/${editingCategory.id}`,
-        newCategory,
+        `http://localhost:5000/api/menu-categories/${editingCategory.id}`,
         {
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+          name: newCategory.name,
+          isActive: newCategory.isActive,
+          hasSubcategories: newCategory.hasSubcategories,
+          subCategories: formattedSubCategories,
+          // ... include image handling if needed
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
           }
         }
       );
-      
+  
       setCategories(categories.map(cat => 
-        cat.id === editingCategory.id ? response.data.data : cat
+        cat.id === editingCategory.id ? response.data : cat
       ));
-      setEditingCategory(null);
-      setNewCategory({ name: '', isActive: true, hasSubcategories: false, subCategories: [] });
-      setCategoryModalOpen(false);
       setSuccess('Category updated successfully!');
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      console.error('Error updating category:', err);
-      setError(err.response?.data?.message || 'Failed to update category');
+      setCategoryModalOpen(false);
+      setEditingCategory(null);
+    } catch (error) {
+      console.error('Error updating category:', error);
+      setError(error.response?.data?.message || 'Failed to update category');
     } finally {
       setIsLoading(false);
     }
@@ -341,7 +369,10 @@ const RestaurantMonitoring = () => {
       name: category.name,
       isActive: category.isActive,
       hasSubcategories: category.hasSubcategories || false,
-      subCategories: category.subCategories || []
+      subCategories: Array.isArray(category.subCategories) 
+        ? category.subCategories 
+        : (category.subCategories || '').split(',').map(s => s.trim()).filter(Boolean),
+      // ... include image handling if needed
     });
     setCategoryModalOpen(true);
   };

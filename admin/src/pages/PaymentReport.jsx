@@ -8,7 +8,7 @@ const PaymentCommissionReport = () => {
   const [reportData, setReportData] = useState({
     restaurantEarnings: 0,
     deliveryPartnerPayouts: 0,
-    commissionRate: 85, 
+    commissionRate: 45, 
     transactions: [],
   });
 
@@ -357,7 +357,7 @@ const PaymentCommissionReport = () => {
         <h2 style={styles.sectionTitle}><FaChartLine /> Commission Settings</h2>
         <div style={styles.commissionInputGroup}>
           <label htmlFor="commission-rate" style={{ fontSize: '18px', color: '#555' }}>
-            Current commission rate:
+            Delivery Partner commission rate:
           </label>
           <input
             id="commission-rate"

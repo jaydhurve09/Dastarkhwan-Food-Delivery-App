@@ -55,13 +55,13 @@ export class Payment extends BaseModel {
         status: Payment.SETTLEMENT_STATUS.PENDING,
         amount: 0,
         settledAt: null,
-        reference: ''
+        references: ''
       },
       delivery: {
         status: Payment.SETTLEMENT_STATUS.PENDING,
         amount: 0,
         settledAt: null,
-        reference: ''
+        references: ''
       }
     };
     
@@ -218,7 +218,7 @@ export class Payment extends BaseModel {
       status,
       amount: amount !== undefined ? amount : this.settlement[recipient].amount,
       settledAt: status === Payment.SETTLEMENT_STATUS.COMPLETED ? new Date() : null,
-      reference: reference || this.settlement[recipient].reference || ''
+      references: reference || this.settlement[recipient].references || ''
     };
     
     return this.save();

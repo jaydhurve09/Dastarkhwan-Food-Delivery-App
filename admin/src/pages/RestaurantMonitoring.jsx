@@ -325,7 +325,7 @@ const RestaurantMonitoring = () => {
     try {
       setIsLoading(true);
       setError('');
-
+  
       // Format subcategories as an array of strings
       const formattedSubCategories = newCategory.hasSubcategories
         ? (Array.isArray(newCategory.subCategories)
@@ -333,30 +333,26 @@ const RestaurantMonitoring = () => {
           : (newCategory.subCategories || '').split(',').map(s => s.trim()).filter(Boolean)
         )
         : [];
-
-      const formData = new FormData();
-      formData.append('name', newCategory.name);
-      formData.append('isActive', newCategory.isActive);
-      formData.append('hasSubcategories', newCategory.hasSubcategories);
-
-      // Append each subcategory individually if they exist
-      if (formattedSubCategories.length > 0) {
-        formattedSubCategories.forEach((subCat, index) => {
-          formData.append(`subCategories[${index}]`, subCat);
-        });
-      }
-
+  
+      const categoryData = {
+        name: newCategory.name,
+        isActive: newCategory.isActive,
+        hasSubcategories: newCategory.hasSubcategories,
+        subCategories: formattedSubCategories,
+        // Removed the image part to simplify, as the form doesn't handle image upload for categories
+      };
+  
       const response = await axios.post(
         `${API_BASE_URL}/menu-categories`,
-        formData,
+        categoryData,
         {
           headers: {
-            'Content-Type': 'multipart/form-data',
+            'Content-Type': 'application/json', // Change content type to application/json
             'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
           }
         }
       );
-
+  
       setCategories([...categories, response.data]);
       setSuccess('Category added successfully!');
       setCategoryModalOpen(false);
@@ -364,9 +360,7 @@ const RestaurantMonitoring = () => {
         name: '',
         isActive: true,
         hasSubcategories: false,
-        subCategories: [],
-        image: null,
-        imagePreview: ''
+        subCategories: []
       });
     } catch (error) {
       console.error('Error adding category:', error);

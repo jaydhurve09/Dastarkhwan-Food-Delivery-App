@@ -28,10 +28,13 @@ export class MenuItem extends BaseModel {
 
   // Convert to Firestore document format
   toFirestore() {
+    // Create a DocumentReference object from the string ID
+    const categoryRef = db.collection('menuCategories').doc(this.categoryId);
+
     return {
       name: this.name,
       image: this.image,
-      categoryId: this.categoryId,
+      categoryId: categoryRef,
       categoryName: this.categoryName,
       subCategory: this.subCategory,
       price: this.price,

@@ -32,6 +32,8 @@ export class MenuItem extends BaseModel {
     // Create a DocumentReference object from the string ID
     const categoryRef = db.collection('menuCategories').doc(this.categoryId);
 
+    const selfRef = this.id ? db.collection('menuItems').doc(this.id) : null;
+
     return {
       name: this.name,
       image: this.image,
@@ -46,6 +48,7 @@ export class MenuItem extends BaseModel {
       addOns: this.addOns,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
+      id: selfRef
     };
   }
 
@@ -134,6 +137,8 @@ export class MenuItem extends BaseModel {
       // Create new document
       const docRef = await db.collection(MenuItem.collectionName).add(this.toFirestore());
       this.id = docRef.id;
+      // Now that the ID is available, update the document with its own reference
+      await docRef.update({ id: docRef }); 
     }
     
     return this;

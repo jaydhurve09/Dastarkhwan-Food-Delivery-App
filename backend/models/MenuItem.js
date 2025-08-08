@@ -16,6 +16,7 @@ export class MenuItem extends BaseModel {
     this.description = data.description || ''; // Item description
     this.isActive = data.isActive !== undefined ? data.isActive : true; // Item active status
     this.isVeg = data.isVeg !== undefined ? data.isVeg : false; // Vegetarian status
+    this.isFavourite = data.isFavourite !== undefined ? data.isFavourite : false;
     this.addOns = Array.isArray(data.addOns) 
       ? data.addOns.map(addOn => ({
           name: addOn.name || '',

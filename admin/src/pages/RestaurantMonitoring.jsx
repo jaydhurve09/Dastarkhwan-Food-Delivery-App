@@ -571,28 +571,30 @@ const RestaurantMonitoring = () => {
         'Authorization': `Bearer ${token}`
       };
 
-      if (editingItem) {
+      if (editingItem && editingItem.id) {
         // Update existing menu item
         response = await axios.put(
           `http://localhost:5000/api/menu-items/${editingItem.id}`,
           menuItemData,
-          { headers }
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          }
         );
-
-        toast.success('Menu item updated successfully!', {
-          position: "top-right",
-          autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-        });
+        toast.success('Menu item updated successfully!', { /* ... */ });
       } else {
         // Create new menu item
         response = await axios.post(
           'http://localhost:5000/api/menu-items',
           menuItemData,
-          { headers }
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          }
         );
 
         toast.success('Menu item added successfully!', {
@@ -745,6 +747,10 @@ const RestaurantMonitoring = () => {
         if (selectedCategory.subCategories && selectedCategory.subCategories.length > 0 && editingItem.subCategory) {
           setSelectedSubCategory(editingItem.subCategory);
         }
+      } else {
+        // If no category is found (e.g., new item), ensure subcategories are reset
+        setCurrentSubCategories([]);
+        setSelectedSubCategory('');
       }
     } else {
       // Reset when not editing
@@ -755,20 +761,37 @@ const RestaurantMonitoring = () => {
 
   useEffect(() => {
     if (editingItem) {
-      // Set the food type based on isVeg
-      setFoodType(editingItem.isVeg === true || editingItem.subCategory === 'Veg' ? 'Veg' : 'Non-Veg');
+      // Set form fields for editing an existing item
+      const itemPrice = editingItem.price || 0;
+      setPrice(itemPrice ? parseFloat(itemPrice).toFixed(2) : '');
+      setFoodType(editingItem.isVeg === true ? 'Veg' : 'Non-Veg');
+  
+      const tagsSet = new Set(editingItem.tags || []);
+      setSelectedRecommendationTags(tagsSet);
       
-      // Set recommendation tags if they exist
-      if (editingItem.tags && editingItem.tags.length > 0) {
-        const tagsSet = new Set(editingItem.tags.map(tag => tag.toLowerCase()));
-        setSelectedRecommendationTags(tagsSet);
+      const addOns = editingItem.addOns || [];
+      setHasSubDishes(addOns.length > 0);
+      setCurrentSubDishes(addOns);
+  
+      // Find the category for the item and set subcategories
+      const selectedCategory = categories.find(cat => cat.id === editingItem.categoryId);
+      if (selectedCategory) {
+        setCurrentSubCategories(selectedCategory.subCategories || []);
+        // Set the selected subcategory if it exists
+        setSelectedSubCategory(editingItem.subCategory || '');
+      } else {
+        setCurrentSubCategories([]);
+        setSelectedSubCategory('');
       }
-      
-      // Set sub-dishes if they exist
-      if (editingItem.addOns && editingItem.addOns.length > 0) {
-        setCurrentSubDishes(editingItem.addOns);
-        setHasSubDishes(true);
-      }
+    } else {
+      // Reset form fields for a new item
+      setPrice('');
+      setFoodType('Veg');
+      setSelectedRecommendationTags(new Set());
+      setHasSubDishes(false);
+      setCurrentSubDishes([]);
+      setCurrentSubCategories([]);
+      setSelectedSubCategory('');
     }
   }, [editingItem, categories]);
 
@@ -1026,20 +1049,21 @@ const RestaurantMonitoring = () => {
                 style={styles.input}
                 value={editingItem?.categoryId || ""}
                 onChange={(e) => {
-                  const selectedCat = categories.find(c => c.id === e.target.value);
+                  const newCategoryId = e.target.value;
+                  const selectedCat = categories.find(c => c.id === newCategoryId);
+
+                  // Update the editingItem state with the new category ID
+                  // This is important for the form to be controlled
+                  setEditingItem(prev => ({
+                    ...prev,
+                    categoryId: newCategoryId
+                  }));
+
+                  // Update the available subcategories
                   setCurrentSubCategories(selectedCat?.subCategories || []);
-                  
-                  // If the current selectedSubCategory is not in the new category's subcategories, reset it
-                  if (newSubCategories.length > 0 && !newSubCategories.includes(selectedSubCategory)) {
-                    // If editing an existing item and its subcategory is in the new category, keep it selected
-                    if (editingItem?.subCategory && newSubCategories.includes(editingItem.subCategory)) {
-                      setSelectedSubCategory(editingItem.subCategory);
-                    } else {
-                      setSelectedSubCategory('');
-                    }
-                  } else if (newSubCategories.length === 0) {
-                    setSelectedSubCategory('');
-                  }
+
+                  // Reset the selected subcategory when the category changes
+                  setSelectedSubCategory('');
                 }}
                 required
               >
@@ -1096,12 +1120,12 @@ const RestaurantMonitoring = () => {
           {/* Price */}
           <div style={styles.formGroup}>
             <label style={styles.label}>Price (₹)</label>
-            <input 
-              name="price_full" 
-              type="number" 
-              step="0.01" 
+            <input
+              name="price_full"
+              type="number"
+              step="0.01"
               min="0"
-              style={styles.input} 
+              style={styles.input}
               value={price}
               onChange={(e) => {
                 const value = e.target.value;
@@ -1119,7 +1143,7 @@ const RestaurantMonitoring = () => {
                   setPrice('');
                 }
               }}
-              required 
+              required
             />
           </div>
 

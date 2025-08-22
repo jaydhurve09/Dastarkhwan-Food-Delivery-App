@@ -303,7 +303,7 @@ useEffect(() => {
   const fetchOrdersByStatus = async (status) => {
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/ordered-products?status=${status}`,
+        `${API_BASE_URL}/admin/orders/${status}`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('adminToken')}`
@@ -649,96 +649,97 @@ useEffect(() => {
       </div>
   
       {isLoadingOrders ? (
-        <div style={{ textAlign: 'center', padding: '20px' }}>
-          <div className="spinner">Loading orders...</div>
-        </div>
-      ) : ordersError ? (
-        <div style={{ color: 'red', textAlign: 'center', padding: '20px' }}>{ordersError}</div>
-      ) : incomingOrders.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '30px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
-          <p style={{ color: '#666', marginBottom: '15px' }}>No pending orders at the moment</p>
-        </div>
+        <div style={{ textAlign: 'center', padding: '20px' }}>Loading orders...</div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ ...styles.table, width: '100%' }}>
             <thead>
               <tr>
                 <th style={styles.th}>Order ID</th>
-                <th style={styles.th}>Item</th>
-                <th style={styles.th}>Quantity</th>
-                <th style={styles.th}>Price</th>
+                <th style={styles.th}>Items</th>
+                <th style={styles.th}>Total</th>
                 <th style={styles.th}>Status</th>
                 <th style={styles.th}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {incomingOrders.map((order) => (
-                <tr key={order.id}>
-                  <td style={styles.td}>#{order.id.slice(0, 8)}</td>
-                  <td style={styles.td}>{order.itemName}</td>
-                  <td style={styles.td}>{order.quantity}</td>
-                  <td style={styles.td}>₹{order.price * order.quantity}</td>
+              {incomingOrders.map((order, index) => (
+                <tr key={`order-${order.id || index}`}>
                   <td style={styles.td}>
-                    <span style={getOrderStatusStyle(order.orderStatus)}>
-                      {order.orderStatus}
+                    <div style={{ fontWeight: 'bold' }}>#{order.id}</div>
+                    <div style={{ fontSize: '0.8em', color: '#666' }}>
+                      {new Date(order.createdAt).toLocaleString()}
+                    </div>
+                  </td>
+                  <td style={styles.td}>
+                    {order.items && order.items.map((item, itemIndex) => (
+                      <div key={`${order.id}-item-${itemIndex}`} style={{ marginBottom: '5px' }}>
+                        {item.quantity}x {item.name}
+                        {item.notes && (
+                          <div style={{ fontSize: '0.8em', color: '#666' }}>
+                            Note: {item.notes}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </td>
+                  <td style={styles.td}>
+                    ${order.total?.toFixed(2) || '0.00'}
+                  </td>
+                  <td style={styles.td}>
+                    <span style={getOrderStatusStyle(order.status)}>
+                      {order.status}
                     </span>
                   </td>
                   <td style={styles.td}>
-                    {order.orderStatus === 'yetToBeAccepted' && (
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                          onClick={() => handleUpdateOrderStatus(order.id, 'preparing')}
-                          style={{
-                            ...styles.button,
-                            backgroundColor: '#2ecc71',
-                            color: 'white',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '5px'
-                          }}
-                        >
-                          <FaCheck /> Accept
-                        </button>
-                        <button
-                          onClick={() => handleUpdateOrderStatus(order.id, 'declined')}
-                          style={{
-                            ...styles.button,
-                            backgroundColor: '#e74c3c',
-                            color: 'white',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '5px'
-                          }}
-                        >
-                          <FaTimes /> Decline
-                        </button>
-                      </div>
-                    )}
-                    {order.orderStatus === 'preparing' && (
+                    {order.status === 'yetToBeAccepted' && (
                       <button
-                        onClick={() => handleUpdateOrderStatus(order.id, 'prepared')}
+                        onClick={() => updateOrderStatus(order.id, 'preparing')}
                         style={{
                           ...styles.button,
-                          backgroundColor: '#3498db',
+                          backgroundColor: '#2ecc71',
                           color: 'white',
+                          marginBottom: '5px',
+                          width: '100%',
                           display: 'flex',
                           alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '5px'
+                        }}
+                      >
+                        <FaCheck /> Accept Order
+                      </button>
+                    )}
+                    {order.status === 'preparing' && (
+                      <button
+                        onClick={() => updateOrderStatus(order.id, 'prepared')}
+                        style={{
+                          ...styles.button,
+                          backgroundColor: '#2ecc71',
+                          color: 'white',
+                          marginBottom: '5px',
+                          width: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
                           gap: '5px'
                         }}
                       >
                         <FaCheck /> Mark as Prepared
                       </button>
                     )}
-                    {order.orderStatus === 'prepared' && (
+                    {order.status === 'prepared' && (
                       <button
-                        onClick={() => handleUpdateOrderStatus(order.id, 'dispatched')}
+                        onClick={() => updateOrderStatus(order.id, 'dispatched')}
                         style={{
                           ...styles.button,
                           backgroundColor: '#9b59b6',
                           color: 'white',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '5px'
+                          justifyContent: 'center',
+                          gap: '5px',
+                          width: '100%'
                         }}
                       >
                         <FaMotorcycle /> Mark as Dispatched

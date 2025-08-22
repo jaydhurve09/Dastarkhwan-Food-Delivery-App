@@ -4,17 +4,16 @@ import { useEffect, useState } from 'react';
 
 const ProtectedRoute = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
+  const token = authService.getAuthToken();
+  
+  // If no token, immediately redirect to login
+  if (!token) {
+    return <Navigate to="/admin/login" replace />;
+  }
   
   useEffect(() => {
     const checkAuth = async () => {
-      const token = authService.getAuthToken();
-      
-      if (!token) {
-        setIsAuthenticated(false);
-        return;
-      }
-      
-      // Check if token is expired
+      // At this point we know token exists, now check if it's expired
       const isExpired = authService.isTokenExpired(token);
       
       if (isExpired) {
@@ -27,14 +26,14 @@ const ProtectedRoute = () => {
     };
     
     checkAuth();
-  }, []);
+  }, [token]);
   
-  // Show loading state while checking auth
+  // Show loading state only while checking token validity
   if (isAuthenticated === null) {
-    return <div>Loading...</div>; // Or a proper loading component
+    return <div>Loading...</div>; // Consider replacing with a proper loading component
   }
   
-  // Redirect to login if not authenticated
+  // If token check completed and not authenticated, redirect to login
   if (!isAuthenticated) {
     return <Navigate to="/admin/login" replace />;
   }

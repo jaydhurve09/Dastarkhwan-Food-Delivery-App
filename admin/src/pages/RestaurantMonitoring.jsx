@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, FaCheck, FaTimes, FaMotorcycle } from 'react';
 import { FaStar, FaEdit, FaTrash, FaPlus, FaUpload } from 'react-icons/fa';
 import axios from 'axios';
 import { toast, ToastContainer } from 'react-toastify';
@@ -148,6 +148,9 @@ const RestaurantMonitoring = () => {
   const [reviews] = useState(initialReviews);
   const [operatingHours, setOperatingHours] = useState(initialHours);
   const [isOnline, setIsOnline] = useState(true);
+
+  const [preparingOrders, setPreparingOrders] = useState([]);
+ 
   const [profile, setProfile] = useState({
     name: 'Dastarkhwan Restaurant',
     deliveryTime: '30-45 min',
@@ -212,40 +215,131 @@ const RestaurantMonitoring = () => {
     }
   };
 
-  // Add these helper functions before your component's return statement
-  const getFoodTypeStyle = (isVeg) => ({
-    padding: '4px 8px',
-    borderRadius: '12px',
-    backgroundColor: isVeg ? '#e8f8f0' : '#fdedec',
-    color: isVeg ? '#27ae60' : '#e74c3c',
-    border: `1px solid ${isVeg ? '#27ae60' : '#e74c3c'}`,
-    fontSize: '0.8em',
-    fontWeight: 'bold',
-    display: 'inline-block'
-  });
+  // Add these state variables near the top of your component with other state declarations
+const [incomingOrders, setIncomingOrders] = useState([]);
+const [isLoadingOrders, setIsLoadingOrders] = useState(true);
+const [ordersError, setOrdersError] = useState(null);
 
-  const getStatusStyle = (isActive) => ({
-    padding: '4px 8px',
-    borderRadius: '12px',
-    backgroundColor: isActive ? '#e8f8f0' : '#f5f5f5',
-    color: isActive ? '#27ae60' : '#666',
-    border: `1px solid ${isActive ? '#27ae60' : '#ddd'}`,
-    fontSize: '0.8em',
-    fontWeight: 'bold',
-    display: 'inline-block'
-  });
+// Add this effect hook with your other effect hooks
+useEffect(() => {
+  const fetchIncomingOrders = async () => {
+    try {
+      setIsLoadingOrders(true);
+      const response = await axios.get(
+        `${API_BASE_URL}/ordered-products?status=yetToBeAccepted`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('adminToken')}`
+          }
+        }
+      );
+      setIncomingOrders(response.data.data || []);
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      setOrdersError('Failed to fetch orders');
+      toast.error('Failed to load orders');
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  };
 
-  const getButtonStyle = (bgColor) => ({
-    backgroundColor: bgColor,
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    padding: '5px 10px',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '5px'
-  });
+  fetchIncomingOrders();
+}, []);
+
+  // Fetch incoming orders
+  const fetchIncomingOrders = async () => {
+    try {
+      setIsLoadingOrders(true);
+      const response = await axios.get(
+        `${API_BASE_URL}/ordered-products?status=yetToBeAccepted`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('adminToken')}`
+          }
+        }
+      );
+      setIncomingOrders(response.data.data || []);
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      setOrdersError('Failed to fetch orders');
+      toast.error('Failed to load orders');
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  };
+
+  // Update order status
+  const updateOrderStatus = async (orderId, status) => {
+    try {
+      setIsLoadingOrders(true);
+      const token = localStorage.getItem('adminToken');
+      await axios.patch(
+        `${API_BASE_URL}/ordered-products/${orderId}/status`,
+        { status },
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      
+      toast.success(`Order ${status === 'declined' ? 'declined' : 'status updated'}`);
+      await Promise.all([
+        fetchAndSetOrders('yetToBeAccepted', setIncomingOrders),
+        fetchAndSetOrders('preparing', setPreparingOrders)
+      ]);
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      toast.error('Failed to update order status');
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  };
+
+  // Helper function to fetch and set orders
+  const fetchAndSetOrders = async (status, setter) => {
+    const orders = await fetchOrdersByStatus(status);
+    setter(orders);
+    return orders;
+  };
+
+  // Fetch orders with specific status
+  const fetchOrdersByStatus = async (status) => {
+    try {
+      const response = await axios.get(
+        `${API_BASE_URL}/ordered-products?status=${status}`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('adminToken')}`
+          }
+        }
+      );
+      return response.data.data || [];
+    } catch (error) {
+      console.error(`Error fetching ${status} orders:`, error);
+      return [];
+    }
+  };
+
+  // Load all orders
+  const loadAllOrders = async () => {
+    setIsLoadingOrders(true);
+    try {
+      await Promise.all([
+        fetchAndSetOrders('yetToBeAccepted', setIncomingOrders),
+        fetchAndSetOrders('preparing', setPreparingOrders)
+      ]);
+    } catch (error) {
+      console.error('Error loading orders:', error);
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  };
+
+  // Load orders on component mount
+  useEffect(() => {
+    loadAllOrders();
+    
+    // Set up refresh interval
+    const interval = setInterval(loadAllOrders, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Fetch menu items from the backend
   const fetchMenuItems = async () => {
@@ -253,7 +347,7 @@ const RestaurantMonitoring = () => {
     setError(null);
     try {
       const token = localStorage.getItem('adminToken');
-      const response = await axios.get('http://localhost:5000/api/menu-items', {
+      const response = await axios.get(`${API_BASE_URL}/menu-items`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -387,7 +481,7 @@ const RestaurantMonitoring = () => {
         : [];
 
       const response = await axios.put(
-        `http://localhost:5000/api/menu-categories/${editingCategory.id}`,
+        `${API_BASE_URL}/menu-categories/${editingCategory.id}`,
         {
           name: newCategory.name,
           isActive: newCategory.isActive,
@@ -423,7 +517,7 @@ const RestaurantMonitoring = () => {
         setIsLoading(true);
         setError('');
 
-        await axios.delete(`http://localhost:5000/api/menu-categories/${categoryId}`, {
+        await axios.delete(`${API_BASE_URL}/menu-categories/${categoryId}`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
           }
@@ -481,9 +575,184 @@ const RestaurantMonitoring = () => {
     alert('Operational hours updated!');
   };
 
-  const handleUpdateOrderStatus = (orderId, newStatus) => {
-    setOrders(orders.map(order => order.id === orderId ? { ...order, status: newStatus } : order));
+  const handleUpdateOrderStatus = async (orderId, newStatus) => {
+    try {
+      await axios.put(
+        `${API_BASE_URL}/ordered-products/${orderId}/status`,
+        { status: newStatus },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+          }
+        }
+      );
+      
+      // Update the local state to reflect the change
+      setIncomingOrders(prevOrders => 
+        prevOrders.map(order => 
+          order.id === orderId 
+            ? { ...order, orderStatus: newStatus } 
+            : order
+        )
+      );
+      
+      toast.success(`Order status updated to ${newStatus}`);
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      toast.error('Failed to update order status');
+    }
   };
+
+  const getOrderStatusStyle = (status) => {
+    const baseStyle = {
+      padding: '4px 8px',
+      borderRadius: '12px',
+      fontSize: '12px',
+      fontWeight: '600',
+      textTransform: 'capitalize'
+    };
+  
+    switch (status) {
+      case 'yetToBeAccepted':
+        return { ...baseStyle, backgroundColor: '#f39c12', color: 'white' };
+      case 'preparing':
+        return { ...baseStyle, backgroundColor: '#3498db', color: 'white' };
+      case 'prepared':
+        return { ...baseStyle, backgroundColor: '#2ecc71', color: 'white' };
+      case 'dispatched':
+        return { ...baseStyle, backgroundColor: '#9b59b6', color: 'white' };
+      case 'declined':
+        return { ...baseStyle, backgroundColor: '#e74c3c', color: 'white' };
+      default:
+        return { ...baseStyle, backgroundColor: '#95a5a6', color: 'white' };
+    }
+  };
+
+  const renderIncomingOrders = () => (
+    <div style={{ ...styles.card, gridColumn: '1 / -1' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2 style={styles.cardTitle}>Incoming Orders</h2>
+        <button 
+          onClick={() => window.location.reload()}
+          style={{
+            ...styles.button,
+            backgroundColor: '#3498db',
+            color: 'white',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px'
+          }}
+        >
+          <span>🔄</span> Refresh
+        </button>
+      </div>
+  
+      {isLoadingOrders ? (
+        <div style={{ textAlign: 'center', padding: '20px' }}>
+          <div className="spinner">Loading orders...</div>
+        </div>
+      ) : ordersError ? (
+        <div style={{ color: 'red', textAlign: 'center', padding: '20px' }}>{ordersError}</div>
+      ) : incomingOrders.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '30px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+          <p style={{ color: '#666', marginBottom: '15px' }}>No pending orders at the moment</p>
+        </div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ ...styles.table, width: '100%' }}>
+            <thead>
+              <tr>
+                <th style={styles.th}>Order ID</th>
+                <th style={styles.th}>Item</th>
+                <th style={styles.th}>Quantity</th>
+                <th style={styles.th}>Price</th>
+                <th style={styles.th}>Status</th>
+                <th style={styles.th}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {incomingOrders.map((order) => (
+                <tr key={order.id}>
+                  <td style={styles.td}>#{order.id.slice(0, 8)}</td>
+                  <td style={styles.td}>{order.itemName}</td>
+                  <td style={styles.td}>{order.quantity}</td>
+                  <td style={styles.td}>₹{order.price * order.quantity}</td>
+                  <td style={styles.td}>
+                    <span style={getOrderStatusStyle(order.orderStatus)}>
+                      {order.orderStatus}
+                    </span>
+                  </td>
+                  <td style={styles.td}>
+                    {order.orderStatus === 'yetToBeAccepted' && (
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          onClick={() => handleUpdateOrderStatus(order.id, 'preparing')}
+                          style={{
+                            ...styles.button,
+                            backgroundColor: '#2ecc71',
+                            color: 'white',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px'
+                          }}
+                        >
+                          <FaCheck /> Accept
+                        </button>
+                        <button
+                          onClick={() => handleUpdateOrderStatus(order.id, 'declined')}
+                          style={{
+                            ...styles.button,
+                            backgroundColor: '#e74c3c',
+                            color: 'white',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px'
+                          }}
+                        >
+                          <FaTimes /> Decline
+                        </button>
+                      </div>
+                    )}
+                    {order.orderStatus === 'preparing' && (
+                      <button
+                        onClick={() => handleUpdateOrderStatus(order.id, 'prepared')}
+                        style={{
+                          ...styles.button,
+                          backgroundColor: '#3498db',
+                          color: 'white',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px'
+                        }}
+                      >
+                        <FaCheck /> Mark as Prepared
+                      </button>
+                    )}
+                    {order.orderStatus === 'prepared' && (
+                      <button
+                        onClick={() => handleUpdateOrderStatus(order.id, 'dispatched')}
+                        style={{
+                          ...styles.button,
+                          backgroundColor: '#9b59b6',
+                          color: 'white',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px'
+                        }}
+                      >
+                        <FaMotorcycle /> Mark as Dispatched
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 
   const RECOMMENDATION_TAGS = {
     RECOMMENDED: 'Recommended',
@@ -568,7 +837,7 @@ const RestaurantMonitoring = () => {
       if (editingItem && editingItem.id) {
         // Update existing menu item
         response = await axios.put(
-          `http://localhost:5000/api/menu-items/${editingItem.id}`,
+          `${API_BASE_URL}/menu-items/${editingItem.id}`,
           menuItemData,
           {
             headers: {
@@ -581,7 +850,7 @@ const RestaurantMonitoring = () => {
       } else {
         // Create new menu item
         response = await axios.post(
-          'http://localhost:5000/api/menu-items',
+          `${API_BASE_URL}/menu-items`,
           menuItemData,
           {
             headers: {
@@ -660,6 +929,44 @@ const RestaurantMonitoring = () => {
     acc[category].push(item);
     return acc;
   }, {});
+
+  const getFoodTypeStyle = (isVeg) => ({
+    padding: '4px 8px',
+    borderRadius: '12px',
+    backgroundColor: isVeg ? '#e8f8f0' : '#fdedec',
+    color: isVeg ? '#27ae60' : '#e74c3c',
+    border: `1px solid ${isVeg ? '#27ae60' : '#e74c3c'}`,
+    fontSize: '0.8em',
+    fontWeight: 'bold',
+    display: 'inline-block'
+  });
+
+  const getStatusStyle = (isActive) => ({
+    padding: '4px 8px',
+    borderRadius: '12px',
+    backgroundColor: isActive ? '#e8f8f0' : '#f5f5f5',
+    color: isActive ? '#27ae60' : '#666',
+    border: `1px solid ${isActive ? '#27ae60' : '#ddd'}`,
+    fontSize: '0.8em',
+    fontWeight: 'bold',
+    display: 'inline-block'
+  });
+
+  const getButtonStyle = (bgColor) => ({
+    backgroundColor: bgColor,
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    padding: '5px 10px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px',
+    transition: 'background-color 0.2s',
+    '&:hover': {
+      opacity: 0.9
+    }
+  });
 
   // Styles
   const styles = {
@@ -851,89 +1158,64 @@ const RestaurantMonitoring = () => {
                     type="text"
                     value={subCategoryInput}
                     onChange={(e) => setSubCategoryInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddSubCategory())}
                     placeholder="Enter subcategory name"
-                    style={{ ...styles.input, flex: 1, margin: 0 }}
+                    style={styles.input}
                   />
-                  <button
+                  <button 
                     type="button"
                     onClick={handleAddSubCategory}
                     style={{
-                      padding: '8px 15px',
+                      padding: '8px 12px',
                       backgroundColor: '#28a745',
                       color: 'white',
                       border: 'none',
                       borderRadius: '4px',
                       cursor: 'pointer',
+                      fontWeight: '500',
                       whiteSpace: 'nowrap'
                     }}
                   >
                     Add
                   </button>
                 </div>
-
                 {newCategory.subCategories.length > 0 && (
-                  <div style={{ marginTop: '15px' }}>
-                    <p style={{ margin: '0 0 8px 0', fontSize: '0.9em', color: '#495057' }}>Subcategories:</p>
-                    <div style={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      gap: '8px',
-                      maxHeight: '150px',
-                      overflowY: 'auto',
-                      padding: '10px',
-                      backgroundColor: '#f8f9fa',
-                      borderRadius: '6px',
-                      border: '1px solid #e9ecef'
-                    }}>
-                      {newCategory.subCategories.length === 0 ? (
-                        <div style={{ color: '#6c757d', fontStyle: 'italic' }}>No subcategories added yet</div>
-                      ) : (
-                        <React.Fragment>
-                          {newCategory.subCategories.map((subCat, index) => (
-                            <div
-                              key={index}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                backgroundColor: '#e9ecef',
-                                padding: '4px 12px',
-                                borderRadius: '12px',
-                                fontSize: '0.85em',
-                                color: '#212529'
-                              }}
-                            >
-                              {subCat}
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveSubCategory(index)}
-                                style={{
-                                  background: 'none',
-                                  border: 'none',
-                                  color: '#dc3545',
-                                  cursor: 'pointer',
-                                  padding: '0 0 0 5px',
-                                  fontSize: '1.1em',
-                                  lineHeight: '1',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  width: '18px',
-                                  height: '18px',
-                                  borderRadius: '50%',
-                                  transition: 'background-color 0.2s'
-                                }}
-                                onMouseOver={(e) => e.target.style.backgroundColor = '#f1f1f1'}
-                                onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
-                                aria-label={`Remove ${subCat}`}
-                              >
-                                ×
-                              </button>
-                            </div>
-                          ))}
-                        </React.Fragment>
-                      )}
+                  <div style={{ marginTop: '10px' }}>
+                    <p style={{ margin: '5px 0 8px 0', fontSize: '0.9rem', color: '#666' }}>Current Subcategories:</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {newCategory.subCategories.map((subCat, index) => (
+                        <div 
+                          key={index} 
+                          style={{
+                            backgroundColor: '#e9ecef',
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontSize: '0.85rem'
+                          }}
+                        >
+                          {subCat}
+                          <button 
+                            type="button"
+                            onClick={() => handleRemoveSubCategory(index)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#dc3545',
+                              cursor: 'pointer',
+                              padding: '2px 4px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '1rem',
+                              lineHeight: 1
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -1272,65 +1554,7 @@ const RestaurantMonitoring = () => {
       <div style={styles.gridContainer} className="responsive-grid-container">
 
         {/* --- Incoming Orders Card (Replaces Offers) --- */}
-        <div style={{ ...styles.card, gridColumn: '1 / -1' }}>
-          <h2 style={styles.cardTitle}>Incoming Orders</h2>
-          <table style={styles.table} className="responsive-table">
-            <thead>
-              <tr>
-                <th style={styles.th}>Order ID</th>
-                <th style={styles.th}>Cart Price</th>
-                <th style={styles.th}>Dishes Ordered</th>
-                <th style={styles.th}>User Location</th>
-                <th style={styles.th}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map(order => (
-                <tr key={order.id}>
-                  <td style={styles.td} data-label="Order ID">{order.orderNumber}</td>
-                  <td style={styles.td} data-label="Cart Price">₹{order.orderTotal}</td>
-                  <td style={styles.td} data-label="Dishes Ordered">
-                    <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                      {order.items.map(d => <li key={d.name}>{d.name} (x{d.quantity})</li>)}
-                    </ul>
-                  </td>
-                  <td style={styles.td} data-label="User Location">{order.deliveryAddress.street}, {order.deliveryAddress.city}, {order.deliveryAddress.state}, {order.deliveryAddress.pincode}</td>
-                  <td style={styles.td} data-label="Actions" className="action-cell-container">
-                    {order.prepareStatus === 'Pending' && (
-                      <div style={{ display: 'flex', gap: '10px' }}>
-                        <button style={{ ...styles.button, backgroundColor: '#2ecc71', color: 'white' }} onClick={() => handleUpdateOrderStatus(order.id, 'Preparing')}>Accept</button>
-                        <button style={{ ...styles.button, ...styles.deleteButton }} onClick={() => handleUpdateOrderStatus(order.id, 'Rejected')}>Reject</button>
-                      </div>
-                    )}
-                    {order.prepareStatus === 'Rejected' && (
-                      <span style={{ color: '#e74c3c', fontWeight: 'bold' }}>Rejected</span>
-                    )}
-                    {(order.prepareStatus === 'Preparing' || order.prepareStatus === 'Ready for Dispatch') && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <select
-                          value={order.prepareStatus}
-                          onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
-                          style={{
-                            ...styles.input,
-                            width: 'auto',
-                            margin: 0,
-                            backgroundColor: '#2ecc71',
-                            color: 'white',
-                            border: '1px solid #2ecc71'
-                          }}
-                        >
-                          <option value="Preparing" style={{ backgroundColor: 'white', color: 'black' }}>Preparing</option>
-                          <option value="Ready for Dispatch" style={{ backgroundColor: 'white', color: 'black' }}>Ready for Dispatch</option>
-                        </select>
-                        <button style={{ ...styles.button, backgroundColor: '#bdc3c7', color: 'black' }} onClick={() => handleUpdateOrderStatus(order.id, 'Pending')}>Cancel</button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {renderIncomingOrders()}
 
         {/* --- Menu Management Card --- */}
         <div style={{ ...styles.card, gridColumn: '1 / -1' }}>
@@ -1764,6 +1988,82 @@ const RestaurantMonitoring = () => {
               <small style={{ color: '#777' }}>{review.date}</small>
             </div>
           ))}
+        </div>
+
+        {/* Incoming Orders Section */}
+        <div className="mb-12">
+          <h2 className="text-2xl font-bold mb-4">Incoming Orders</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {incomingOrders.map((order) => (
+              <div key={order.id} className="bg-white rounded-lg shadow-md p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold">Order #{order.orderId}</h3>
+                  <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
+                    {order.orderStatus}
+                  </span>
+                </div>
+                
+                <div className="mb-4">
+                  <p className="font-medium">{order.itemName}</p>
+                  <p className="text-gray-600">Qty: {order.quantity}</p>
+                  <p className="text-gray-600">₹{order.price * order.quantity}</p>
+                </div>
+                
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => updateOrderStatus(order.id, 'preparing')}
+                    className="flex-1 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+                  >
+                    Accept Order
+                  </button>
+                  <button
+                    onClick={() => updateOrderStatus(order.id, 'declined')}
+                    className="flex-1 bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
+                  >
+                    Decline
+                  </button>
+                </div>
+              </div>
+            ))}
+            
+            {incomingOrders.length === 0 && (
+              <p className="text-gray-500">No new incoming orders</p>
+            )}
+          </div>
+        </div>
+
+        {/* Preparing Orders Section */}
+        <div className="mb-12">
+          <h2 className="text-2xl font-bold mb-4">Preparing Orders</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {preparingOrders.map((order) => (
+              <div key={order.id} className="bg-white rounded-lg shadow-md p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold">Order #{order.orderId}</h3>
+                  <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                    {order.orderStatus}
+                  </span>
+                </div>
+                
+                <div className="mb-4">
+                  <p className="font-medium">{order.itemName}</p>
+                  <p className="text-gray-600">Qty: {order.quantity}</p>
+                  <p className="text-gray-600">₹{order.price * order.quantity}</p>
+                </div>
+                
+                <button
+                  onClick={() => updateOrderStatus(order.id, 'prepared')}
+                  className="w-full bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+                >
+                  Mark as Prepared
+                </button>
+              </div>
+            ))}
+            
+            {preparingOrders.length === 0 && (
+              <p className="text-gray-500">No orders in preparation</p>
+            )}
+          </div>
         </div>
       </div>
     </div>

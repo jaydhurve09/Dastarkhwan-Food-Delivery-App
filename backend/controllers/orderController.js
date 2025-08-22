@@ -89,4 +89,58 @@ const updateStatus = async (req, res) => {
     res.status(500).json({ message: 'Error updating order status', error });
   }
 };
-export { getAllOrders, updateAgent, updateStatus };
+
+// Get all orderedProduct documents from users subcollection
+const getYetToBeAcceptedOrders = async (req, res) => {
+  try {
+    const orders = [];
+    
+    // Get all users
+    const usersSnapshot = await db.collection('users').get();
+    
+    // For each user, get their orderedProduct subcollection
+    for (const userDoc of usersSnapshot.docs) {
+      const orderedProductsSnapshot = await db
+        .collection('users')
+        .doc(userDoc.id)
+        .collection('orderedProduct')
+        .get();
+      
+      orderedProductsSnapshot.docs.forEach(orderDoc => {
+        orders.push({
+          id: orderDoc.id,
+          userId: userDoc.id,
+          userInfo: userDoc.data(),
+          ...orderDoc.data()
+        });
+      });
+    }
+    
+    res.status(200).json(orders);
+  } catch (error) {
+    console.error('Error fetching orderedProduct documents:', error);
+    res.status(500).json({ message: 'Error fetching orders', error: error.message });
+  }
+};
+
+// Update order status in orderedProduct collection
+const updateOrderStatus = async (req, res) => {
+  const { orderId, status } = req.body;
+  
+  if (!orderId || !status) {
+    return res.status(400).json({ message: 'Order ID and status are required' });
+  }
+  
+  try {
+    await db.collection('orderedProduct').doc(orderId).update({ 
+      orderStatus: status 
+    });
+    
+    res.status(200).json({ message: 'Order status updated successfully' });
+  } catch (error) {
+    console.error('Error updating order status:', error);
+    res.status(500).json({ message: 'Error updating order status', error: error.message });
+  }
+};
+
+export { getAllOrders, updateAgent, updateStatus, getYetToBeAcceptedOrders, updateOrderStatus };

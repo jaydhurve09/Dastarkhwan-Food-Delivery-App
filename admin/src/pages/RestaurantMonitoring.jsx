@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useContext, FaCheck, FaTimes, FaMotorcycle } from 'react';
-import { FaStar, FaEdit, FaTrash, FaPlus, FaUpload } from 'react-icons/fa';
+import React, { useState, useEffect, useContext } from 'react';
+import { FaStar, FaEdit, FaTrash, FaPlus, FaUpload, FaCheck, FaTimes, FaMotorcycle } from 'react-icons/fa';
 import axios from 'axios';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { AdminContext } from '../contexts/adminContext';
+import api from '../config/axios';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -216,130 +217,43 @@ const RestaurantMonitoring = () => {
   };
 
   // Add these state variables near the top of your component with other state declarations
-const [incomingOrders, setIncomingOrders] = useState([]);
-const [isLoadingOrders, setIsLoadingOrders] = useState(true);
-const [ordersError, setOrdersError] = useState(null);
+  const [incomingOrders, setIncomingOrders] = useState([]);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(true);
+  const [ordersError, setOrdersError] = useState(null);
 
-// Add this effect hook with your other effect hooks
-useEffect(() => {
-  const fetchIncomingOrders = async () => {
+  // Fetch all orderedProduct documents from users subcollection
+  const fetchYetToBeAcceptedOrders = async () => {
     try {
       setIsLoadingOrders(true);
-      const response = await axios.get(
-        `${API_BASE_URL}/ordered-products?status=yetToBeAccepted`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('adminToken')}`
-          }
-        }
-      );
-      setIncomingOrders(response.data.data || []);
-    } catch (error) {
-      console.error('Error fetching orders:', error);
-      setOrdersError('Failed to fetch orders');
-      toast.error('Failed to load orders');
-    } finally {
-      setIsLoadingOrders(false);
-    }
-  };
-
-  fetchIncomingOrders();
-}, []);
-
-  // Fetch incoming orders
-  const fetchIncomingOrders = async () => {
-    try {
-      setIsLoadingOrders(true);
-      const response = await axios.get(
-        `${API_BASE_URL}/ordered-products?status=yetToBeAccepted`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('adminToken')}`
-          }
-        }
-      );
-      setIncomingOrders(response.data.data || []);
-    } catch (error) {
-      console.error('Error fetching orders:', error);
-      setOrdersError('Failed to fetch orders');
-      toast.error('Failed to load orders');
-    } finally {
-      setIsLoadingOrders(false);
-    }
-  };
-
-  // Update order status
-  const updateOrderStatus = async (orderId, status) => {
-    try {
-      setIsLoadingOrders(true);
-      const token = localStorage.getItem('adminToken');
-      await axios.patch(
-        `${API_BASE_URL}/ordered-products/${orderId}/status`,
-        { status },
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
+      setOrdersError(null);
       
-      toast.success(`Order ${status === 'declined' ? 'declined' : 'status updated'}`);
-      await Promise.all([
-        fetchAndSetOrders('yetToBeAccepted', setIncomingOrders),
-        fetchAndSetOrders('preparing', setPreparingOrders)
-      ]);
+      const response = await api.get('/orders/yet-to-be-accepted');
+      
+      if (response.data) {
+        setIncomingOrders(response.data);
+      } else {
+        setIncomingOrders([]);
+      }
     } catch (error) {
-      console.error('Error updating order status:', error);
-      toast.error('Failed to update order status');
+      console.error('Error fetching orderedProduct documents:', error);
+      setOrdersError('Failed to fetch orders');
+      setIncomingOrders([]);
+      toast.error('Failed to fetch orders');
     } finally {
       setIsLoadingOrders(false);
     }
   };
 
-  // Helper function to fetch and set orders
-  const fetchAndSetOrders = async (status, setter) => {
-    const orders = await fetchOrdersByStatus(status);
-    setter(orders);
-    return orders;
+  // Handle order status update (static for now)
+  const handleOrderStatusUpdate = (orderId, newStatus) => {
+    toast.info(`Order ${orderId} would be ${newStatus} (static button)`);
   };
 
-  // Fetch orders with specific status
-  const fetchOrdersByStatus = async (status) => {
-    try {
-      const response = await axios.get(
-        `${API_BASE_URL}/admin/orders/${status}`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('adminToken')}`
-          }
-        }
-      );
-      return response.data.data || [];
-    } catch (error) {
-      console.error(`Error fetching ${status} orders:`, error);
-      return [];
-    }
-  };
-
-  // Load all orders
-  const loadAllOrders = async () => {
-    setIsLoadingOrders(true);
-    try {
-      await Promise.all([
-        fetchAndSetOrders('yetToBeAccepted', setIncomingOrders),
-        fetchAndSetOrders('preparing', setPreparingOrders)
-      ]);
-    } catch (error) {
-      console.error('Error loading orders:', error);
-    } finally {
-      setIsLoadingOrders(false);
-    }
-  };
-
-  // Load orders on component mount
+  // Fetch orders on component mount
   useEffect(() => {
-    loadAllOrders();
-    
-    // Set up refresh interval
-    const interval = setInterval(loadAllOrders, 30000);
-    return () => clearInterval(interval);
+    fetchYetToBeAcceptedOrders();
   }, []);
+
 
   // Fetch menu items from the backend
   const fetchMenuItems = async () => {
@@ -634,7 +548,7 @@ useEffect(() => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <h2 style={styles.cardTitle}>Incoming Orders</h2>
         <button 
-          onClick={() => window.location.reload()}
+          onClick={fetchYetToBeAcceptedOrders}
           style={{
             ...styles.button,
             backgroundColor: '#3498db',
@@ -656,98 +570,104 @@ useEffect(() => {
             <thead>
               <tr>
                 <th style={styles.th}>Order ID</th>
+                <th style={styles.th}>Customer</th>
                 <th style={styles.th}>Items</th>
                 <th style={styles.th}>Total</th>
+                <th style={styles.th}>Date</th>
                 <th style={styles.th}>Status</th>
                 <th style={styles.th}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {incomingOrders.map((order, index) => (
-                <tr key={`order-${order.id || index}`}>
-                  <td style={styles.td}>
-                    <div style={{ fontWeight: 'bold' }}>#{order.id}</div>
-                    <div style={{ fontSize: '0.8em', color: '#666' }}>
-                      {new Date(order.createdAt).toLocaleString()}
-                    </div>
-                  </td>
-                  <td style={styles.td}>
-                    {order.items && order.items.map((item, itemIndex) => (
-                      <div key={`${order.id}-item-${itemIndex}`} style={{ marginBottom: '5px' }}>
-                        {item.quantity}x {item.name}
-                        {item.notes && (
-                          <div style={{ fontSize: '0.8em', color: '#666' }}>
-                            Note: {item.notes}
-                          </div>
-                        )}
+              {incomingOrders.length === 0 ? (
+                <tr>
+                  <td colSpan="7" style={{ ...styles.td, textAlign: 'center', padding: '40px', color: '#666' }}>
+                    {ordersError ? (
+                      <div>
+                        <div style={{ fontSize: '18px', marginBottom: '10px' }}>⚠️ Error loading orders</div>
+                        <div>{ordersError}</div>
                       </div>
-                    ))}
-                  </td>
-                  <td style={styles.td}>
-                    ${order.total?.toFixed(2) || '0.00'}
-                  </td>
-                  <td style={styles.td}>
-                    <span style={getOrderStatusStyle(order.status)}>
-                      {order.status}
-                    </span>
-                  </td>
-                  <td style={styles.td}>
-                    {order.status === 'yetToBeAccepted' && (
-                      <button
-                        onClick={() => updateOrderStatus(order.id, 'preparing')}
-                        style={{
-                          ...styles.button,
-                          backgroundColor: '#2ecc71',
-                          color: 'white',
-                          marginBottom: '5px',
-                          width: '100%',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '5px'
-                        }}
-                      >
-                        <FaCheck /> Accept Order
-                      </button>
-                    )}
-                    {order.status === 'preparing' && (
-                      <button
-                        onClick={() => updateOrderStatus(order.id, 'prepared')}
-                        style={{
-                          ...styles.button,
-                          backgroundColor: '#2ecc71',
-                          color: 'white',
-                          marginBottom: '5px',
-                          width: '100%',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '5px'
-                        }}
-                      >
-                        <FaCheck /> Mark as Prepared
-                      </button>
-                    )}
-                    {order.status === 'prepared' && (
-                      <button
-                        onClick={() => updateOrderStatus(order.id, 'dispatched')}
-                        style={{
-                          ...styles.button,
-                          backgroundColor: '#9b59b6',
-                          color: 'white',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '5px',
-                          width: '100%'
-                        }}
-                      >
-                        <FaMotorcycle /> Mark as Dispatched
-                      </button>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: '18px', marginBottom: '10px' }}>📋 No pending orders</div>
+                        <div>All orders have been processed or there are no new orders at the moment.</div>
+                      </div>
                     )}
                   </td>
                 </tr>
-              ))}
+              ) : (
+                incomingOrders.map((order, index) => (
+                  <tr key={`order-${order.id || index}`}>
+                    <td style={styles.td}>
+                      <div style={{ fontWeight: 'bold' }}>#{order.orderId || order.id}</div>
+                    </td>
+                    <td style={styles.td}>
+                      {order.userInfo?.displayName || order.userInfo?.name || 'N/A'}
+                    </td>
+                    <td style={styles.td}>
+                      {order.products && order.products.map((product, itemIndex) => (
+                        <div key={`${order.id}-item-${itemIndex}`} style={{ marginBottom: '5px' }}>
+                          {product.quantity || 1}x {product.name || 'Unknown Item'}
+                          {product.notes && (
+                            <div style={{ fontSize: '0.8em', color: '#666' }}>
+                              Note: {product.notes}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </td>
+                    <td style={styles.td}>
+                      ₹{order.orderValue?.toFixed(2) || '0.00'}
+                    </td>
+                    <td style={styles.td}>
+                      <div style={{ fontSize: '0.8em', color: '#666' }}>
+                        {order.order_Date ? new Date(order.order_Date.seconds * 1000).toLocaleDateString() : 'N/A'}
+                      </div>
+                    </td>
+                    <td style={styles.td}>
+                      <span style={getOrderStatusStyle(order.orderStatus)}>
+                        {order.orderStatus || 'N/A'}
+                      </span>
+                    </td>
+                    <td style={styles.td}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                        <button
+                          onClick={() => handleOrderStatusUpdate(order.id, 'accepted')}
+                          style={{
+                            ...styles.button,
+                            backgroundColor: '#2ecc71',
+                            color: 'white',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '5px',
+                            fontSize: '12px',
+                            padding: '6px 12px'
+                          }}
+                        >
+                          <FaCheck /> Accept
+                        </button>
+                        <button
+                          onClick={() => handleOrderStatusUpdate(order.id, 'declined')}
+                          style={{
+                            ...styles.button,
+                            backgroundColor: '#e74c3c',
+                            color: 'white',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '5px',
+                            fontSize: '12px',
+                            padding: '6px 12px'
+                          }}
+                        >
+                          <FaTimes /> Decline
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

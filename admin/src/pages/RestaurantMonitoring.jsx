@@ -245,8 +245,27 @@ const RestaurantMonitoring = () => {
   };
 
   // Handle order status update (static for now)
-  const handleOrderStatusUpdate = (orderId, newStatus) => {
-    toast.info(`Order ${orderId} would be ${newStatus} (static button)`);
+  const handleUpdateOrderStatus = async (orderId, newStatus) => {
+    try {
+      // Use the correct endpoint for updating order status
+      await api.patch(`/admin/orders/${orderId}/status`, { status: newStatus });
+  
+      // If the order is being accepted, move it to the 'preparing' state
+      if (newStatus === 'preparing') {
+        const acceptedOrder = incomingOrders.find(order => order.id === orderId);
+        if (acceptedOrder) {
+          setPreparingOrders(prev => [...prev, { ...acceptedOrder, orderStatus: 'preparing' }]);
+        }
+      }
+  
+      // Remove the order from the incoming list regardless of action
+      setIncomingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+  
+      toast.success(`Order status updated to ${newStatus}`);
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      toast.error('Failed to update order status');
+    }
   };
 
   // Fetch orders on component mount
@@ -254,268 +273,12 @@ const RestaurantMonitoring = () => {
     fetchYetToBeAcceptedOrders();
   }, []);
 
-
-  // Fetch menu items from the backend
-  const fetchMenuItems = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const token = localStorage.getItem('adminToken');
-      const response = await axios.get(`${API_BASE_URL}/menu-items`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      // Handle different response structures
-      let items = [];
-      if (Array.isArray(response.data)) {
-        items = response.data;
-      } else if (response.data && Array.isArray(response.data.data)) {
-        items = response.data.data;
-      } else if (response.data && response.data.items) {
-        items = Array.isArray(response.data.items) ? response.data.items : [];
-      }
-
-      setMenuItems(items || []);
-    } catch (err) {
-      console.error('Error fetching menu items:', err);
-      setError('Failed to load menu items');
-      setMenuItems([]);
-      toast.error('Failed to load menu items', {
-        position: "top-right",
-        autoClose: 3000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Call fetchMenuItems when the component mounts
-  useEffect(() => {
-    fetchMenuItems();
-  }, []);
-
-  // Handle input change for category form
-  const handleCategoryInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setNewCategory(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
-  };
-
-  // Add a function to handle subcategory input
-  const handleAddSubCategory = () => {
-    if (subCategoryInput.trim()) {
-      setNewCategory(prev => ({
-        ...prev,
-        subCategories: [...prev.subCategories, subCategoryInput.trim()]
-      }));
-      setSubCategoryInput('');
-    }
-  };
-
-  // Function to remove a subcategory
-  const handleRemoveSubCategory = (index) => {
-    setNewCategory(prev => ({
-      ...prev,
-      subCategories: prev.subCategories.filter((_, i) => i !== index)
-    }));
-  };
-
-  // Add new category
-  const handleAddCategory = async () => {
-    try {
-      setIsLoading(true);
-      setError('');
-  
-      // Format subcategories as an array of strings
-      const formattedSubCategories = newCategory.hasSubcategories
-        ? (Array.isArray(newCategory.subCategories)
-          ? newCategory.subCategories
-          : (newCategory.subCategories || '').split(',').map(s => s.trim()).filter(Boolean)
-        )
-        : [];
-  
-      const categoryData = {
-        name: newCategory.name,
-        isActive: newCategory.isActive,
-        hasSubcategories: newCategory.hasSubcategories,
-        subCategories: formattedSubCategories,
-        // Removed the image part to simplify, as the form doesn't handle image upload for categories
-      };
-  
-      const response = await axios.post(
-        `${API_BASE_URL}/menu-categories`,
-        categoryData,
-        {
-          headers: {
-            'Content-Type': 'application/json', // Change content type to application/json
-            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
-          }
-        }
-      );
-  
-      setCategories([...categories, response.data]);
-      setSuccess('Category added successfully!');
-      setCategoryModalOpen(false);
-      setNewCategory({
-        name: '',
-        isActive: true,
-        hasSubcategories: false,
-        subCategories: []
-      });
-    } catch (error) {
-      console.error('Error adding category:', error);
-      setError(error.response?.data?.message || 'Failed to add category');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Update category
-  const handleUpdateCategory = async () => {
-    if (!editingCategory) return;
-
-    try {
-      setIsLoading(true);
-      setError('');
-
-      // Format subcategories as an array of strings
-      const formattedSubCategories = newCategory.hasSubcategories
-        ? (Array.isArray(newCategory.subCategories)
-          ? newCategory.subCategories
-          : (newCategory.subCategories || '').split(',').map(s => s.trim()).filter(Boolean)
-        )
-        : [];
-
-      const response = await axios.put(
-        `${API_BASE_URL}/menu-categories/${editingCategory.id}`,
-        {
-          name: newCategory.name,
-          isActive: newCategory.isActive,
-          hasSubcategories: newCategory.hasSubcategories,
-          subCategories: formattedSubCategories,
-          // ... include image handling if needed
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
-          }
-        }
-      );
-
-      setCategories(categories.map(cat =>
-        cat.id === editingCategory.id ? response.data : cat
-      ));
-      setSuccess('Category updated successfully!');
-      setCategoryModalOpen(false);
-      setEditingCategory(null);
-    } catch (error) {
-      console.error('Error updating category:', error);
-      setError(error.response?.data?.message || 'Failed to update category');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Delete category
-  const handleDeleteCategory = async (categoryId) => {
-    if (window.confirm('Are you sure you want to delete this category? This action cannot be undone.')) {
-      try {
-        setIsLoading(true);
-        setError('');
-
-        await axios.delete(`${API_BASE_URL}/menu-categories/${categoryId}`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
-          }
-        });
-
-        // Remove the category from the local state
-        setCategories(categories.filter(cat => cat.id !== categoryId));
-        setSuccess('Category deleted successfully!');
-        setTimeout(() => setSuccess(''), 3000);
-      } catch (err) {
-        console.error('Error deleting category:', err);
-        setError(err.response?.data?.message || 'Failed to delete category. It might be in use by menu items.');
-      } finally {
-        setIsLoading(false);
-      }
-    }
-  };
-
-  // Open modal for editing a category
-  const handleEditCategory = (category) => {
-    setEditingCategory(category);
-    const hasSubs = category.subCategories && category.subCategories.length > 0;
-    setNewCategory({
-      name: category.name,
-      isActive: category.isActive,
-      hasSubcategories: hasSubs, // Set based on whether there are subcategories
-      subCategories: Array.isArray(category.subCategories)
-        ? [...category.subCategories]
-        : (category.subCategories || '').split(',').map(s => s.trim()).filter(Boolean),
-      // ... include image handling if needed
-    });
-    setCategoryModalOpen(true);
-  };
-
-  // Reset form and close modal
-  const handleCloseModal = () => {
-    setCategoryModalOpen(false);
-    setEditingCategory(null);
-    setNewCategory({ name: '', isActive: true, hasSubcategories: false, subCategories: [] });
-    setError('');
-  };
-
-  // --- Handlers ---
-  const handleDeleteMenuItem = (id) => {
-    if (window.confirm('Are you sure you want to delete this menu item?')) {
-      setMenuItems(menuItems.filter(item => item.id !== id));
-    }
-  };
-
   const handleSaveProfile = () => {
     alert('Profile changes saved!');
   };
 
   const handleSaveHours = () => {
     alert('Operational hours updated!');
-  };
-
-  const handleUpdateOrderStatus = async (orderId, newStatus) => {
-    try {
-      await axios.put(
-        `${API_BASE_URL}/ordered-products/${orderId}/status`,
-        { status: newStatus },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
-          }
-        }
-      );
-      
-      // Update the local state to reflect the change
-      setIncomingOrders(prevOrders => 
-        prevOrders.map(order => 
-          order.id === orderId 
-            ? { ...order, orderStatus: newStatus } 
-            : order
-        )
-      );
-      
-      toast.success(`Order status updated to ${newStatus}`);
-    } catch (error) {
-      console.error('Error updating order status:', error);
-      toast.error('Failed to update order status');
-    }
   };
 
   const getOrderStatusStyle = (status) => {
@@ -542,138 +305,6 @@ const RestaurantMonitoring = () => {
         return { ...baseStyle, backgroundColor: '#95a5a6', color: 'white' };
     }
   };
-
-  const renderIncomingOrders = () => (
-    <div style={{ ...styles.card, gridColumn: '1 / -1' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2 style={styles.cardTitle}>Incoming Orders</h2>
-        <button 
-          onClick={fetchYetToBeAcceptedOrders}
-          style={{
-            ...styles.button,
-            backgroundColor: '#3498db',
-            color: 'white',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px'
-          }}
-        >
-          <span>🔄</span> Refresh
-        </button>
-      </div>
-  
-      {isLoadingOrders ? (
-        <div style={{ textAlign: 'center', padding: '20px' }}>Loading orders...</div>
-      ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ ...styles.table, width: '100%' }}>
-            <thead>
-              <tr>
-                <th style={styles.th}>Order ID</th>
-                <th style={styles.th}>Customer</th>
-                <th style={styles.th}>Items</th>
-                <th style={styles.th}>Total</th>
-                <th style={styles.th}>Date</th>
-                <th style={styles.th}>Status</th>
-                <th style={styles.th}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {incomingOrders.length === 0 ? (
-                <tr>
-                  <td colSpan="7" style={{ ...styles.td, textAlign: 'center', padding: '40px', color: '#666' }}>
-                    {ordersError ? (
-                      <div>
-                        <div style={{ fontSize: '18px', marginBottom: '10px' }}>⚠️ Error loading orders</div>
-                        <div>{ordersError}</div>
-                      </div>
-                    ) : (
-                      <div>
-                        <div style={{ fontSize: '18px', marginBottom: '10px' }}>📋 No pending orders</div>
-                        <div>All orders have been processed or there are no new orders at the moment.</div>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ) : (
-                incomingOrders.map((order, index) => (
-                  <tr key={`order-${order.id || index}`}>
-                    <td style={styles.td}>
-                      <div style={{ fontWeight: 'bold' }}>#{order.orderId || order.id}</div>
-                    </td>
-                    <td style={styles.td}>
-                      {order.userInfo?.displayName || order.userInfo?.name || 'N/A'}
-                    </td>
-                    <td style={styles.td}>
-                      {order.products && order.products.map((product, itemIndex) => (
-                        <div key={`${order.id}-item-${itemIndex}`} style={{ marginBottom: '5px' }}>
-                          {product.quantity || 1}x {product.name || 'Unknown Item'}
-                          {product.notes && (
-                            <div style={{ fontSize: '0.8em', color: '#666' }}>
-                              Note: {product.notes}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </td>
-                    <td style={styles.td}>
-                      ₹{order.orderValue?.toFixed(2) || '0.00'}
-                    </td>
-                    <td style={styles.td}>
-                      <div style={{ fontSize: '0.8em', color: '#666' }}>
-                        {order.order_Date ? new Date(order.order_Date.seconds * 1000).toLocaleDateString() : 'N/A'}
-                      </div>
-                    </td>
-                    <td style={styles.td}>
-                      <span style={getOrderStatusStyle(order.orderStatus)}>
-                        {order.orderStatus || 'N/A'}
-                      </span>
-                    </td>
-                    <td style={styles.td}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                        <button
-                          onClick={() => handleOrderStatusUpdate(order.id, 'accepted')}
-                          style={{
-                            ...styles.button,
-                            backgroundColor: '#2ecc71',
-                            color: 'white',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '5px',
-                            fontSize: '12px',
-                            padding: '6px 12px'
-                          }}
-                        >
-                          <FaCheck /> Accept
-                        </button>
-                        <button
-                          onClick={() => handleOrderStatusUpdate(order.id, 'declined')}
-                          style={{
-                            ...styles.button,
-                            backgroundColor: '#e74c3c',
-                            color: 'white',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '5px',
-                            fontSize: '12px',
-                            padding: '6px 12px'
-                          }}
-                        >
-                          <FaTimes /> Decline
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
 
   const RECOMMENDATION_TAGS = {
     RECOMMENDED: 'Recommended',
@@ -1017,6 +648,349 @@ const RestaurantMonitoring = () => {
     }
   }, [editingItem, categories]);
 
+  // Fetch orders on component mount
+  useEffect(() => {
+    fetchYetToBeAcceptedOrders();
+  }, []);
+
+  // Handle input change for category form
+  const handleCategoryInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setNewCategory(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  // Add a function to handle subcategory input
+  const handleAddSubCategory = () => {
+    if (subCategoryInput.trim()) {
+      setNewCategory(prev => ({
+        ...prev,
+        subCategories: [...prev.subCategories, subCategoryInput.trim()]
+      }));
+      setSubCategoryInput('');
+    }
+  };
+
+  // Function to remove a subcategory
+  const handleRemoveSubCategory = (index) => {
+    setNewCategory(prev => ({
+      ...prev,
+      subCategories: prev.subCategories.filter((_, i) => i !== index)
+    }));
+  };
+
+  // Add new category
+  const handleAddCategory = async (e) => {
+    e.preventDefault();
+    try {
+      setIsLoading(true);
+      setError('');
+  
+      // Format subcategories as an array of strings
+      const formattedSubCategories = newCategory.hasSubcategories
+        ? (Array.isArray(newCategory.subCategories)
+          ? newCategory.subCategories
+          : (newCategory.subCategories || '').split(',').map(s => s.trim()).filter(Boolean)
+        )
+        : [];
+  
+      const categoryData = {
+        name: newCategory.name,
+        isActive: newCategory.isActive,
+        hasSubcategories: newCategory.hasSubcategories,
+        subCategories: formattedSubCategories,
+      };
+  
+      const response = await axios.post(
+        `${API_BASE_URL}/menu-categories`,
+        categoryData,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+          }
+        }
+      );
+  
+      setCategories([...categories, response.data]);
+      setSuccess('Category added successfully!');
+      setCategoryModalOpen(false);
+      setNewCategory({
+        name: '',
+        isActive: true,
+        hasSubcategories: false,
+        subCategories: []
+      });
+      toast.success('Category added successfully!');
+    } catch (error) {
+      console.error('Error adding category:', error);
+      setError(error.response?.data?.message || 'Failed to add category');
+      toast.error('Failed to add category');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Update category
+  const handleUpdateCategory = async (e) => {
+    e.preventDefault();
+    if (!editingCategory) return;
+
+    try {
+      setIsLoading(true);
+      setError('');
+
+      // Format subcategories as an array of strings
+      const formattedSubCategories = newCategory.hasSubcategories
+        ? (Array.isArray(newCategory.subCategories)
+          ? newCategory.subCategories
+          : (newCategory.subCategories || '').split(',').map(s => s.trim()).filter(Boolean)
+        )
+        : [];
+
+      const response = await axios.put(
+        `${API_BASE_URL}/menu-categories/${editingCategory.id}`,
+        {
+          name: newCategory.name,
+          isActive: newCategory.isActive,
+          hasSubcategories: newCategory.hasSubcategories,
+          subCategories: formattedSubCategories,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+          }
+        }
+      );
+
+      setCategories(categories.map(cat =>
+        cat.id === editingCategory.id ? response.data : cat
+      ));
+      setSuccess('Category updated successfully!');
+      setCategoryModalOpen(false);
+      setEditingCategory(null);
+      toast.success('Category updated successfully!');
+    } catch (error) {
+      console.error('Error updating category:', error);
+      setError(error.response?.data?.message || 'Failed to update category');
+      toast.error('Failed to update category');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fetch menu items from the backend
+  const fetchMenuItems = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('adminToken');
+      const response = await axios.get(`${API_BASE_URL}/menu-items`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      // Handle different response structures
+      let items = [];
+      if (Array.isArray(response.data)) {
+        items = response.data;
+      } else if (response.data && Array.isArray(response.data.data)) {
+        items = response.data.data;
+      } else if (response.data && response.data.items) {
+        items = Array.isArray(response.data.items) ? response.data.items : [];
+      }
+
+      setMenuItems(items || []);
+    } catch (err) {
+      console.error('Error fetching menu items:', err);
+      setError('Failed to load menu items');
+      setMenuItems([]);
+      toast.error('Failed to load menu items');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Call fetchMenuItems when the component mounts
+  useEffect(() => {
+    fetchMenuItems();
+  }, []);
+
+  const renderIncomingOrders = () => (
+    <div style={{ ...styles.card, gridColumn: '1 / -1' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2 style={styles.cardTitle}>Incoming Orders</h2>
+        <button 
+          onClick={fetchYetToBeAcceptedOrders}
+          style={{
+            ...styles.button,
+            backgroundColor: '#3498db',
+            color: 'white',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px'
+          }}
+        >
+          <span>🔄</span> Refresh
+        </button>
+      </div>
+  
+      {isLoadingOrders ? (
+        <div style={{ textAlign: 'center', padding: '20px' }}>Loading orders...</div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ ...styles.table, width: '100%' }}>
+            <thead>
+              <tr>
+                <th style={styles.th}>Order ID</th>
+                <th style={styles.th}>Customer</th>
+                <th style={styles.th}>Items</th>
+                <th style={styles.th}>Total</th>
+                <th style={styles.th}>Date</th>
+                <th style={styles.th}>Status</th>
+                <th style={styles.th}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {incomingOrders.length === 0 ? (
+                <tr>
+                  <td colSpan="7" style={{ ...styles.td, textAlign: 'center', padding: '40px', color: '#666' }}>
+                    {ordersError ? (
+                      <div>
+                        <div style={{ fontSize: '18px', marginBottom: '10px' }}>⚠️ Error loading orders</div>
+                        <div>{ordersError}</div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: '18px', marginBottom: '10px' }}>📋 No pending orders</div>
+                        <div>All orders have been processed or there are no new orders at the moment.</div>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ) : (
+                incomingOrders.map((order, index) => (
+                  <tr key={`order-${order.id || index}`}>
+                    <td style={styles.td}>
+                      <div style={{ fontWeight: 'bold' }}>#{order.orderId || order.id}</div>
+                    </td>
+                    <td style={styles.td}>
+                      {order.userInfo?.displayName || order.userInfo?.name || 'N/A'}
+                    </td>
+                    <td style={styles.td}>
+                      {order.products && order.products.map((product, itemIndex) => (
+                        <div key={`${order.id}-item-${itemIndex}`} style={{ marginBottom: '5px' }}>
+                          {product.quantity || 1}x {product.name || 'Unknown Item'}
+                          {product.notes && (
+                            <div style={{ fontSize: '0.8em', color: '#666' }}>
+                              Note: {product.notes}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </td>
+                    <td style={styles.td}>
+                      ₹{order.orderValue?.toFixed(2) || '0.00'}
+                    </td>
+                    <td style={styles.td}>
+                      <div style={{ fontSize: '0.8em', color: '#666' }}>
+                        {order.order_Date ? new Date(order.order_Date.seconds * 1000).toLocaleDateString() : 'N/A'}
+                      </div>
+                    </td>
+                    <td style={styles.td}>
+                      <span style={getOrderStatusStyle(order.orderStatus)}>
+                        {order.orderStatus || 'N/A'}
+                      </span>
+                    </td>
+                    <td style={styles.td}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                        {order.orderStatus === 'yetToBeAccepted' ? (
+                          <>
+                            <button
+                              onClick={() => handleUpdateOrderStatus(order.id, 'preparing')}
+                              style={{
+                                ...styles.button,
+                                backgroundColor: '#2ecc71',
+                                color: 'white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '5px',
+                                fontSize: '12px',
+                                padding: '6px 12px'
+                              }}
+                            >
+                              <FaCheck /> Accept
+                            </button>
+                            <button
+                              onClick={() => handleUpdateOrderStatus(order.id, 'declined')}
+                              style={{
+                                ...styles.button,
+                                backgroundColor: '#e74c3c',
+                                color: 'white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '5px',
+                                fontSize: '12px',
+                                padding: '6px 12px'
+                              }}
+                            >
+                              <FaTimes /> Decline
+                            </button>
+                          </>
+                        ) : order.orderStatus === 'preparing' ? (
+                          <>
+                            <button
+                              onClick={() => handleUpdateOrderStatus(order.id, 'prepared')}
+                              style={{
+                                ...styles.button,
+                                backgroundColor: '#3498db',
+                                color: 'white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '5px',
+                                fontSize: '12px',
+                                padding: '6px 12px'
+                              }}
+                            >
+                              <FaMotorcycle /> Mark as Prepared
+                            </button>
+                            <button
+                              onClick={() => handleUpdateOrderStatus(order.id, 'declined')}
+                              style={{
+                                ...styles.button,
+                                backgroundColor: '#e74c3c',
+                                color: 'white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '5px',
+                                fontSize: '12px',
+                                padding: '6px 12px'
+                              }}
+                            >
+                              <FaTimes /> Decline
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div style={styles.pageContainer}>
       <ResponsiveStyles />
@@ -1142,7 +1116,6 @@ const RestaurantMonitoring = () => {
                 )}
               </div>
             )}
-
             <div style={{ ...styles.formGroup, display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '6px', marginTop: '15px' }}>
               <input
                 type="checkbox"
@@ -1527,8 +1500,8 @@ const RestaurantMonitoring = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {menuItems.map((item) => (
-                        <tr key={item.id || Math.random().toString(36).substr(2, 9)}>
+                      {menuItems.map((item, index) => (
+                        <tr key={`menu-item-${index}`}>
                           <td style={styles.tableCell}>
                             <img
                               src={item.image || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+CiAgPHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlZWVlZWUiLz4KICA8dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBhbGlnbm1lbnQtYmFzZWxpbmU9Im1pZGRsZSIgZmlsbD0iIzk5OSI+Tm8gSW1hZ2U8L3RleHQ+Cjwvc3ZnPg=='}
@@ -1536,7 +1509,7 @@ const RestaurantMonitoring = () => {
                               style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px' }}
                               onError={(e) => {
                                 e.target.onerror = null;
-                                e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+CiAgPHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlZWVlZWUiLz4KICA8dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBhbGlnbm1lbnQtYmFzZWxpbmU9Im1pZGRsZSIgZmlsbD0iIzk5OSI+Tm8gSW1hZ2U8L3RleHQ+Cjwvc3ZnPg==';
+                                e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlZWVlZWUiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBhbGlnbm1lbnQtYmFzZWxpbmU9Im1pZGRsZSIgZmlsbD0iIzk5OSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+';
                               }}
                             />
                           </td>
@@ -1610,7 +1583,7 @@ const RestaurantMonitoring = () => {
                     }}
                     disabled={isLoading}
                   >
-                    <span>🔄</span> {isLoading ? 'Refreshing...' : 'Refresh'}
+                    <span>🔄</span> Refresh
                   </button>
                   <button
                     onClick={() => {
@@ -1932,13 +1905,13 @@ const RestaurantMonitoring = () => {
                 
                 <div className="flex space-x-2">
                   <button
-                    onClick={() => updateOrderStatus(order.id, 'preparing')}
+                    onClick={() => handleUpdateOrderStatus(order.id, 'preparing')}
                     className="flex-1 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
                   >
                     Accept Order
                   </button>
                   <button
-                    onClick={() => updateOrderStatus(order.id, 'declined')}
+                    onClick={() => handleUpdateOrderStatus(order.id, 'declined')}
                     className="flex-1 bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
                   >
                     Decline
@@ -1973,7 +1946,7 @@ const RestaurantMonitoring = () => {
                 </div>
                 
                 <button
-                  onClick={() => updateOrderStatus(order.id, 'prepared')}
+                  onClick={() => handleUpdateOrderStatus(order.id, 'prepared')}
                   className="w-full bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
                 >
                   Mark as Prepared

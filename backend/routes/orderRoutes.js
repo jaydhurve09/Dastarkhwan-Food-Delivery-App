@@ -14,14 +14,17 @@ import {
   deleteOrder,
   getOngoingOrders,
   updateOrderStatusInOrders,
-  testOrdersCollection
+  testOrdersCollection,
+  testGeoPoint
 } from '../controllers/orderController.js';
 import { isAuthenticated, isAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Test endpoint
+// Test endpoints
 router.get('/test', testOrdersCollection);
+router.get('/test-geopoint/:orderId', testGeoPoint);
+router.get('/test-geopoint', testGeoPoint);
 
 // Public/Admin routes for order management
 router.get('/', getAllOrders);

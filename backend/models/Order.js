@@ -129,16 +129,88 @@ export class Order extends BaseModel {
   }
 
   // Method to assign delivery partner
-  async assignDeliveryPartner(deliveryPartnerId, deliveryBoyName = '') {
+  async assignDeliveryPartner(deliveryPartnerId, deliveryBoyName = '', options = {}) {
     if (!deliveryPartnerId) {
       throw new Error('Delivery partner ID is required');
     }
     
+    const { admin } = await import('../config/firebase.js');
+    
+    // Set delivery partner details
     this.deliveryPartnerId = deliveryPartnerId;
     this.deliveryBoyName = deliveryBoyName;
+    
+    // Set static source coordinates as GeoPoint (restaurant location)
+    this.source = new admin.firestore.GeoPoint(21.1874, 79.056);
+    
+    // Set driver position - static for testing, can be made dynamic
+    const driverPosition = options.driverPosition || { lat: 21.169491, lng: 79.1134079 };
+    this.driverPositions = [new admin.firestore.GeoPoint(driverPosition.lat, driverPosition.lng)];
+    
+    // Extract destination from userRef's address (will be implemented when userRef is available)
+    if (this.userRef && this.deliveryAddress) {
+      // If delivery address has coordinates, use them
+      if (this.deliveryAddress.lat && this.deliveryAddress.lng) {
+        this.destination = new admin.firestore.GeoPoint(this.deliveryAddress.lat, this.deliveryAddress.lng);
+      }
+    }
+    
+    // Update order status
     this.orderStatus = Order.ORDER_STATUS.DISPATCHED;
+    this.updatedAt = new Date();
     
     return this.save();
+  }
+
+  // Method to extract payment details from orderedProduct
+  async extractPaymentFromOrderedProduct(orderedProductData) {
+    if (orderedProductData) {
+      // Extract payment status
+      if (orderedProductData.paymentStatus) {
+        this.paymentStatus = orderedProductData.paymentStatus;
+      }
+      
+      // Extract payment ID
+      if (orderedProductData.paymentId) {
+        this.paymentId = orderedProductData.paymentId;
+      }
+      
+      // Extract payment details if available
+      if (orderedProductData.paymentDetails) {
+        this.paymentDetails = orderedProductData.paymentDetails;
+      }
+    }
+    
+    return this;
+  }
+
+  // Method to extract destination from user's address
+  async extractDestinationFromUser(userDoc) {
+    if (userDoc && userDoc.exists) {
+      const userData = userDoc.data();
+      const { admin } = await import('../config/firebase.js');
+      
+      // Check for address in user data
+      if (userData.address) {
+        // If address has coordinates
+        if (userData.address.lat && userData.address.lng) {
+          this.destination = new admin.firestore.GeoPoint(userData.address.lat, userData.address.lng);
+        }
+        
+        // Set delivery address
+        this.deliveryAddress = userData.address;
+      }
+      
+      // Check for default delivery address
+      if (userData.deliveryAddress) {
+        if (userData.deliveryAddress.lat && userData.deliveryAddress.lng) {
+          this.destination = new admin.firestore.GeoPoint(userData.deliveryAddress.lat, userData.deliveryAddress.lng);
+        }
+        this.deliveryAddress = userData.deliveryAddress;
+      }
+    }
+    
+    return this;
   }
 
   // Static method to find orders by user

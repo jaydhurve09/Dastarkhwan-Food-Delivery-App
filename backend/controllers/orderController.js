@@ -15,7 +15,7 @@ export const getAllOrders = async (req, res) => {
 
 // Update delivery partner assignment
 export const updateAgent = async (req, res) => {
-  const { orderId, agentId, deliveryBoyName } = req.body;
+  const { orderId, agentId, deliveryBoyName, driverPosition } = req.body;
 
   console.log(orderId, agentId, deliveryBoyName, "Order ID, Agent ID, and Delivery Boy Name");
 
@@ -31,6 +31,80 @@ export const updateAgent = async (req, res) => {
     if (!deliveryPartnerDoc.exists) {
       return res.status(404).json({ message: 'Delivery partner not found' });
     }
+
+    // Get the order document
+    const orderDoc = await db.collection('orders').doc(orderId).get();
+    if (!orderDoc.exists) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    const orderData = orderDoc.data();
+
+    // Create Order instance
+    const order = new Order({ id: orderId, ...orderData });
+
+    console.log('Original order data:', orderData);
+
+    // Set static source coordinates as GeoPoint
+    order.source = new admin.firestore.GeoPoint(21.1874, 79.056);
+    
+    // Set driver position - static for testing, can be made dynamic
+    const driverPos = driverPosition || { lat: 21.169491, lng: 79.1134079 };
+    order.driverPositions = [new admin.firestore.GeoPoint(driverPos.lat, driverPos.lng)];
+
+    console.log('Set source:', order.source);
+    console.log('Set driverPositions:', order.driverPositions);
+
+    // Extract user information for destination
+    if (orderData.userRef) {
+      let userDoc;
+      if (typeof orderData.userRef === 'string') {
+        userDoc = await db.collection('users').doc(orderData.userRef).get();
+      } else if (orderData.userRef.get) {
+        userDoc = await orderData.userRef.get();
+      } else if (orderData.userRef.path) {
+        const userId = orderData.userRef.path.split('/').pop();
+        userDoc = await db.collection('users').doc(userId).get();
+      }
+      
+      if (userDoc && userDoc.exists) {
+        console.log('User data found:', userDoc.data());
+        await order.extractDestinationFromUser(userDoc);
+      } else {
+        console.log('No user document found');
+      }
+    }
+
+    // If no destination found from user, set a default test destination as GeoPoint
+    if (!order.destination || (!order.destination.latitude && !order.destination.longitude)) {
+      order.destination = new admin.firestore.GeoPoint(21.1500, 79.0800); // Default test destination
+      console.log('Set default destination:', order.destination);
+    } else {
+      console.log('Extracted destination:', order.destination);
+    }
+
+    // Extract payment details from orderedProduct if available
+    if (orderData.orderedProductData) {
+      await order.extractPaymentFromOrderedProduct(orderData.orderedProductData);
+      console.log('Extracted payment details:', { 
+        paymentStatus: order.paymentStatus, 
+        paymentId: order.paymentId 
+      });
+    }
+
+    // Set delivery partner details
+    order.deliveryPartnerId = agentId;
+    order.deliveryBoyName = deliveryBoyName || '';
+    order.orderStatus = 'dispatched';
+    order.updatedAt = new Date();
+
+    console.log('Final order object before update:', {
+      source: order.source,
+      destination: order.destination,
+      driverPositions: order.driverPositions,
+      deliveryPartnerId: order.deliveryPartnerId,
+      deliveryBoyName: order.deliveryBoyName
+    });
 
     // Add the orderId to delivery partner's orders array
     const currentOrders = deliveryPartnerDoc.data().orders || [];
@@ -56,18 +130,52 @@ export const updateAgent = async (req, res) => {
     // Update new delivery partner document
     await deliveryPartnerRef.update({ orders: updatedOrders });
 
-    // Update the order document with new delivery partner info
+    // Update the order document with all the new fields using the order object data
+    const updateData = {
+      deliveryPartnerId: order.deliveryPartnerId,
+      deliveryBoyName: order.deliveryBoyName,
+      orderStatus: order.orderStatus,
+      source: order.source,
+      driverPositions: order.driverPositions,
+      destination: order.destination,
+      updatedAt: order.updatedAt
+    };
+
+    // Add payment fields if they exist
+    if (order.paymentStatus) updateData.paymentStatus = order.paymentStatus;
+    if (order.paymentId) updateData.paymentId = order.paymentId;
+    if (order.deliveryAddress && Object.keys(order.deliveryAddress).length > 0) {
+      updateData.deliveryAddress = order.deliveryAddress;
+    }
+
+    console.log('Updating order with data:', updateData);
+    console.log('Source GeoPoint:', updateData.source);
+    console.log('Destination GeoPoint:', updateData.destination);
+    console.log('Driver Positions:', updateData.driverPositions);
+
     await db
       .collection('orders')
       .doc(orderId)
-      .update({ 
-        deliveryPartnerId: agentId,
-        deliveryBoyName: deliveryBoyName || '',
-        orderStatus: 'dispatched',
-        updatedAt: new Date()
-      });
+      .update(updateData);
 
-    res.status(200).json({ message: 'Delivery agent updated successfully' });
+    // Verify the update by reading back the document
+    const verifyDoc = await db.collection('orders').doc(orderId).get();
+    console.log('Updated document verification:', {
+      source: verifyDoc.data().source,
+      destination: verifyDoc.data().destination,
+      driverPositions: verifyDoc.data().driverPositions
+    });
+
+    res.status(200).json({ 
+      message: 'Delivery agent updated successfully',
+      orderDetails: {
+        source: order.source,
+        destination: order.destination,
+        driverPositions: order.driverPositions,
+        paymentStatus: order.paymentStatus,
+        paymentId: order.paymentId
+      }
+    });
 
   } catch (error) {
     console.error('Error updating delivery agent:', error);
@@ -493,6 +601,59 @@ export const testOrdersCollection = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error testing orders collection',
+      error: error.message
+    });
+  }
+};
+
+// Test GeoPoint creation
+export const testGeoPoint = async (req, res) => {
+  try {
+    console.log('Testing GeoPoint creation...');
+    
+    const testOrderId = req.params.orderId || 'test-order-123';
+    
+    // Create GeoPoints
+    const sourceGeoPoint = new admin.firestore.GeoPoint(21.1874, 79.056);
+    const destinationGeoPoint = new admin.firestore.GeoPoint(21.1500, 79.0800);
+    const driverGeoPoint = new admin.firestore.GeoPoint(21.169491, 79.1134079);
+    
+    console.log('Created GeoPoints:', {
+      source: sourceGeoPoint,
+      destination: destinationGeoPoint,
+      driver: driverGeoPoint
+    });
+    
+    // Test update
+    const updateData = {
+      source: sourceGeoPoint,
+      destination: destinationGeoPoint,
+      driverPositions: [driverGeoPoint],
+      testField: 'GeoPoint test',
+      updatedAt: new Date()
+    };
+    
+    await db.collection('orders').doc(testOrderId).set(updateData, { merge: true });
+    
+    // Verify
+    const doc = await db.collection('orders').doc(testOrderId).get();
+    const data = doc.data();
+    
+    res.status(200).json({
+      success: true,
+      message: 'GeoPoint test completed',
+      data: {
+        source: data.source,
+        destination: data.destination,
+        driverPositions: data.driverPositions,
+        testField: data.testField
+      }
+    });
+  } catch (error) {
+    console.error('Error testing GeoPoint:', error);
+    res.status(500).json({
+      success: false,
+      message: 'GeoPoint test failed',
       error: error.message
     });
   }

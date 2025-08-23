@@ -17,7 +17,8 @@ import { db, auth } from './config/firebase.js'; // Import Firebase services
 import deliveryPartnerRoutes from './routes/deliveryPartnerRoutes.js'; // Import delivery partner routes
 import promoCodeRoutes from './routes/promoCodeRoutes.js'; // Import promo code routes
 import feedbackRoutes from './routes/feedbackRoutes.js'; // Import feedback routes
-// Get current file pathimport feedbackRoutes from './routes/feedbackRoutes.js';
+import orderedProductRoutes from './routes/orderedProductRoutes.js'; // Import ordered product routes
+// Get current file path
 import complaintsRoutes from './routes/complaintsRoutes.js'; // Import complaints routes
 
 const __filename = fileURLToPath(import.meta.url);
@@ -46,6 +47,7 @@ app.use('/api/delivery-partners', deliveryPartnerRoutes);
 app.use('/api/promo-codes', promoCodeRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/complaints', complaintsRoutes);
+app.use('/api/ordered-products', orderedProductRoutes); // Use ordered product routes
 
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);

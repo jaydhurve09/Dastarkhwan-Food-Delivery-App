@@ -230,6 +230,8 @@ const RestaurantMonitoring = () => {
       const response = await api.get('/orders/yet-to-be-accepted');
       
       if (response.data) {
+        console.log('Orders fetched:', response.data);
+        console.log('First order structure:', response.data[0]);
         setIncomingOrders(response.data);
       } else {
         setIncomingOrders([]);
@@ -247,21 +249,31 @@ const RestaurantMonitoring = () => {
   // Handle order status update (static for now)
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
     try {
-      // Use the correct endpoint for updating order status
-      await api.patch(`/admin/orders/${orderId}/status`, { status: newStatus });
-  
-      // If the order is being accepted, move it to the 'preparing' state
+      console.log('Updating order status:', { orderId, newStatus });
+      // Use the correct endpoint for updating order status in Firebase orderedProducts subcollection
+      const response = await api.patch(`/ordered-products/admin/orders/${orderId}/status`, { status: newStatus });
+
+      // Update local state based on the status change
       if (newStatus === 'preparing') {
+        // Move order from incoming to preparing list
         const acceptedOrder = incomingOrders.find(order => order.id === orderId);
         if (acceptedOrder) {
           setPreparingOrders(prev => [...prev, { ...acceptedOrder, orderStatus: 'preparing' }]);
         }
+        // Remove from incoming orders
+        setIncomingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+        toast.success('Order accepted and moved to preparing');
+      } else if (newStatus === 'prepared') {
+        // Remove from preparing orders when marked as prepared
+        setPreparingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+        toast.success('Order marked as prepared');
+      } else if (newStatus === 'declined') {
+        // Remove from both incoming and preparing orders when declined
+        setIncomingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+        setPreparingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+        toast.success('Order declined');
       }
-  
-      // Remove the order from the incoming list regardless of action
-      setIncomingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
-  
-      toast.success(`Order status updated to ${newStatus}`);
+
     } catch (error) {
       console.error('Error updating order status:', error);
       toast.error('Failed to update order status');
@@ -876,10 +888,10 @@ const RestaurantMonitoring = () => {
                 incomingOrders.map((order, index) => (
                   <tr key={`order-${order.id || index}`}>
                     <td style={styles.td}>
-                      <div style={{ fontWeight: 'bold' }}>#{order.orderId || order.id}</div>
+                      <div style={{ fontWeight: 'bold' }}>#{order.id || order.orderId}</div>
                     </td>
                     <td style={styles.td}>
-                      {order.userInfo?.displayName || order.userInfo?.name || 'N/A'}
+                      {order.userInfo?.name || 'N/A'}
                     </td>
                     <td style={styles.td}>
                       {order.products && order.products.map((product, itemIndex) => (
@@ -1891,7 +1903,7 @@ const RestaurantMonitoring = () => {
             {incomingOrders.map((order) => (
               <div key={order.id} className="bg-white rounded-lg shadow-md p-6">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold">Order #{order.orderId}</h3>
+                  <h3 className="text-lg font-semibold">Order #{order.id}</h3>
                   <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
                     {order.orderStatus}
                   </span>
@@ -1933,7 +1945,7 @@ const RestaurantMonitoring = () => {
             {preparingOrders.map((order) => (
               <div key={order.id} className="bg-white rounded-lg shadow-md p-6">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold">Order #{order.orderId}</h3>
+                  <h3 className="text-lg font-semibold">Order #{order.id}</h3>
                   <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
                     {order.orderStatus}
                   </span>

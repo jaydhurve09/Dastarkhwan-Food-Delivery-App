@@ -1,9 +1,9 @@
-const { db } = require('../config/firebase');
-const { validationResult } = require('express-validator');
-const { v4: uuidv4 } = require('uuid');
+import { db } from '../config/firebase.js';
+import { validationResult } from 'express-validator';
+import { v4 as uuidv4 } from 'uuid';
 
 // Get all ordered products with specific status (for admin)
-exports.getOrderedProductsByStatus = async (req, res) => {
+export const getOrderedProductsByStatus = async (req, res) => {
   try {
     const { status } = req.query;
     
@@ -52,11 +52,12 @@ exports.getOrderedProductsByStatus = async (req, res) => {
 };
 
 // Update order status
-exports.updateOrderStatus = async (req, res) => {
+export const updateOrderStatus = async (req, res) => {
   try {
-    const { orderId } = req.params;
+    const { orderId } = req.params; // This is actually the document ID from frontend
     const { status } = req.body;
-    const userId = req.user.id; // Assuming you have user info in req.user from auth middleware
+
+    console.log('Received update request:', { orderId, status });
 
     // Validate status
     const validStatuses = ['yetToBeAccepted', 'preparing', 'prepared', 'dispatched', 'delivered', 'declined'];
@@ -68,20 +69,31 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
-    // Find the ordered product in any user's subcollection
-    const orderedProductsRef = db.collectionGroup('orderedProducts');
-    const snapshot = await orderedProductsRef.where('id', '==', orderId).limit(1).get();
+    // Find the ordered product in any user's subcollection using document ID
+    const orderedProductsRef = db.collectionGroup('orderedProduct');
+    const snapshot = await orderedProductsRef.get();
     
-    if (snapshot.empty) {
+    let docRef = null;
+    let foundDoc = null;
+
+    // Search for the document by ID
+    for (const doc of snapshot.docs) {
+      if (doc.id === orderId) {
+        docRef = doc.ref;
+        foundDoc = doc;
+        break;
+      }
+    }
+    
+    if (!docRef) {
+      console.log('Document not found with ID:', orderId);
       return res.status(404).json({
         success: false,
         message: 'Ordered product not found'
       });
     }
 
-    // Get the document reference
-    const doc = snapshot.docs[0];
-    const docRef = doc.ref;
+    console.log('Found document:', foundDoc.id, foundDoc.data());
 
     // Update the status
     await docRef.update({
@@ -91,6 +103,8 @@ exports.updateOrderStatus = async (req, res) => {
 
     // Get the updated document
     const updatedDoc = await docRef.get();
+
+    console.log('Updated document:', updatedDoc.data());
 
     res.status(200).json({
       success: true,
@@ -111,7 +125,7 @@ exports.updateOrderStatus = async (req, res) => {
 };
 
 // Get all ordered products for a specific user
-exports.getUserOrderedProducts = async (req, res) => {
+export const getUserOrderedProducts = async (req, res) => {
   try {
     const { userId } = req.params;
     const { status } = req.query;

@@ -113,7 +113,7 @@ export const updateOrderStatus = async (req, res) => {
         // Doc References
         deliveryPartnerId: orderData.deliveryPartnerId || null,
         restaurantId: orderData.restaurantId || null,
-        userRef: userId,
+        userRef: db.collection('users').doc(userId),
         
         // Data fields
         deliveryAddress: orderData.deliveryAddress || {},

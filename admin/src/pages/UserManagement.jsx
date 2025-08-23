@@ -266,7 +266,7 @@ const UserManagement = () => {
           return null;
         }
         
-        const displayName = user.name || user.fullName || 'No Name';
+        const displayName = user.display_name ||user.name || user.fullName || 'No Name';
         const userRole = user.role === 'delivery_agent' ? 'Delivery Agent' : 
                         user.role === 'admin' ? 'Admin' : 'User';
                         
@@ -274,7 +274,7 @@ const UserManagement = () => {
           id: user.uid || user.id,
           fullName: displayName,
           email: user.email || 'No Email',
-          phoneNumber: user.phone || user.phoneNumber || 'N/A',
+          phoneNumber: user.phone_number || user.phone || user.phoneNumber || 'N/A',
           role: userRole,
           status: (user.status || user.accountStatus || 'active').toLowerCase(),
           joinedDate: user.created_time 

@@ -30,6 +30,17 @@ export class User extends BaseModel {
     this.orderCount = data.orderCount || 0;
     this.totalSpent = data.totalSpent || 0;
     this.firebaseUid = data.firebaseUid || '';
+    
+    this.display_name = data.display_name || data.name || ''; // String
+    this.photo_url = data.photo_url || ''; // Image Path
+    this.created_time = data.created_time || data.accountCreated || new Date(); // DateTime
+    this.phone_number = data.phone_number || data.phone || ''; // String
+    this.gender = data.gender || ''; // String
+    this.dob = data.dob || null; // DateTime
+    this.favourites = data.favourites || []; // List < Doc Reference (menuItems) >
+    this.cart = data.cart || []; // List < Doc Reference (menuItems) >
+    this.isFavourite = data.isFavourite !== undefined ? data.isFavourite : false; // Boolean
+    this.uid = data.uid || data.firebaseUid || ''; // String
   }
 
   // Hash password before saving to Firestore
@@ -62,6 +73,16 @@ export class User extends BaseModel {
       orderCount: this.orderCount,
       totalSpent: this.totalSpent,
       firebaseUid: this.firebaseUid,
+      display_name: this.display_name,
+      photo_url: this.photo_url,
+      created_time: this.created_time,
+      phone_number: this.phone_number,
+      gender: this.gender,
+      dob: this.dob,
+      favourites: this.favourites,
+      cart: this.cart,
+      isFavourite: this.isFavourite,
+      uid: this.uid,
       updatedAt: new Date()
     };
   }

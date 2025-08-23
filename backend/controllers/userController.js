@@ -23,7 +23,19 @@ const createUser = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, email, phone, password, address } = req.body;
+    const { 
+      name, 
+      email, 
+      phone, 
+      password, 
+      address,
+      display_name,
+      photo_url,
+      phone_number,
+      gender,
+      dob,
+      uid
+    } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findByEmail(email);
@@ -34,13 +46,22 @@ const createUser = async (req, res) => {
     // Hash password
     const hashedPassword = await hashPassword(password);
 
-    // Create new user
+    // Create new user with FlutterFlow schema support
     const user = new User({
       name,
       email,
       phone,
       password: hashedPassword,
-      address
+      address,
+      display_name: display_name || name,
+      photo_url: photo_url || '',
+      phone_number: phone_number || phone,
+      gender: gender || '',
+      dob: dob ? new Date(dob) : null,
+      uid: uid || '',
+      favourites: [],
+      cart: [],
+      isFavourite: false
     });
 
     // Validate user data

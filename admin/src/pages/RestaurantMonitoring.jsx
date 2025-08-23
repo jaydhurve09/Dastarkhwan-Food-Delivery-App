@@ -950,7 +950,7 @@ const RestaurantMonitoring = () => {
                       <div style={{ fontWeight: 'bold' }}>#{order.orderId || order.id}</div>
                     </td>
                     <td style={styles.td}>
-                      {order.userInfo?.name || 'N/A'}
+                      {order.userInfo?.display_name || order.userInfo?.name || 'N/A'}
                     </td>
                     <td style={styles.td}>
                       {order.products && order.products.map((product, itemIndex) => (
@@ -1121,7 +1121,7 @@ const RestaurantMonitoring = () => {
                       <div style={{ fontWeight: 'bold' }}>#{order.orderId || order.id}</div>
                     </td>
                     <td style={styles.td}>
-                      {order.userInfo?.name || 'N/A'}
+                      {order.userInfo?.display_name || order.userInfo?.name || 'N/A'}
                     </td>
                     <td style={styles.td}>
                       {order.products && order.products.map((product, itemIndex) => (

@@ -92,6 +92,15 @@ export const registerUser = async (req, res) => {
       phone: phone || '',
       password, // Will be hashed in User model
       firebaseUid: firebaseUser.uid,
+      display_name: name,
+      photo_url: '',
+      phone_number: phone || '',
+      gender: '',
+      dob: null,
+      favourites: [],
+      cart: [],
+      isFavourite: false,
+      uid: firebaseUser.uid
     };
 
     const userRef = await User.getCollection().add(userData);

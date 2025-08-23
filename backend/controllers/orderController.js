@@ -418,14 +418,36 @@ export const getOngoingOrders = async (req, res) => {
       
       // Get user info if userRef exists
       let userInfo = null;
-      if (orderData.userRef || orderData.userId) {
+      if (orderData.userRef) {
         try {
-          const userDoc = await db.collection('users').doc(orderData.userRef || orderData.userId).get();
-          if (userDoc.exists) {
+          // Handle DocumentReference properly
+          let userDoc;
+          if (typeof orderData.userRef === 'string') {
+            // If it's a string, treat it as document ID
+            userDoc = await db.collection('users').doc(orderData.userRef).get();
+          } else if (orderData.userRef.get) {
+            // If it's a DocumentReference, call get() method
+            userDoc = await orderData.userRef.get();
+          } else if (orderData.userRef.path) {
+            // If it has a path property, extract the document ID
+            const userId = orderData.userRef.path.split('/').pop();
+            userDoc = await db.collection('users').doc(userId).get();
+          }
+          
+          if (userDoc && userDoc.exists) {
             userInfo = userDoc.data();
           }
         } catch (error) {
           console.log('Error fetching user info:', error.message);
+        }
+      } else if (orderData.userId) {
+        try {
+          const userDoc = await db.collection('users').doc(orderData.userId).get();
+          if (userDoc.exists) {
+            userInfo = userDoc.data();
+          }
+        } catch (error) {
+          console.log('Error fetching user info by userId:', error.message);
         }
       }
       

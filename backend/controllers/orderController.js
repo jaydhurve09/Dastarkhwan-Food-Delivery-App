@@ -342,12 +342,13 @@ export const getYetToBeAcceptedOrders = async (req, res) => {
     // Get all users
     const usersSnapshot = await db.collection('users').get();
     
-    // For each user, get their orderedProduct subcollection
+    // For each user, get their orderedProduct subcollection with status filter
     for (const userDoc of usersSnapshot.docs) {
       const orderedProductsSnapshot = await db
         .collection('users')
         .doc(userDoc.id)
         .collection('orderedProduct')
+        .where('orderStatus', '==', 'yetToBeAccepted')
         .get();
       
       orderedProductsSnapshot.docs.forEach(orderDoc => {
@@ -360,6 +361,7 @@ export const getYetToBeAcceptedOrders = async (req, res) => {
       });
     }
     
+    console.log(`Found ${orders.length} orders with status 'yetToBeAccepted'`);
     res.status(200).json(orders);
   } catch (error) {
     console.error('Error fetching orderedProduct documents:', error);

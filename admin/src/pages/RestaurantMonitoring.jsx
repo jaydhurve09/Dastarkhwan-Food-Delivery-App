@@ -1007,6 +1007,82 @@ const RestaurantMonitoring = () => {
     return docRef;
   };
 
+  const [menuItemNameCache, setMenuItemNameCache] = useState({});
+
+  const extractMenuItemId = (ref) => {
+    if (!ref) return null;
+    if (typeof ref === 'string') {
+      const parts = ref.split('/');
+      return parts[parts.length - 1] || null;
+    }
+    if (ref._path?.segments) {
+      const seg = ref._path.segments;
+      return seg[seg.length - 1] || null;
+    }
+    if (ref.path && typeof ref.path === 'string') {
+      const parts = ref.path.split('/');
+      return parts[parts.length - 1] || null;
+    }
+    if (ref.id) return ref.id;
+    return null;
+  };
+
+  const getMenuItemName = async (id) => {
+    if (!id) return null;
+    if (menuItemNameCache[id]) return menuItemNameCache[id];
+    try {
+      const res = await axios.get(`${API_BASE_URL}/menu-items/${id}`);
+      const name = res.data?.name || res.data?.data?.name;
+      if (name) {
+        setMenuItemNameCache((prev) => ({ ...prev, [id]: name }));
+      }
+      return name || null;
+    } catch (e) {
+      console.warn('Failed to resolve menu item name for', id, e?.message);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    const resolveProductNames = async () => {
+      const idsToFetch = new Set();
+      (incomingOrders || []).forEach((order) => {
+        const products = order?.products || [];
+        products.forEach((p) => {
+          const id = extractMenuItemId(
+            p?.menuItem || p?.menuItemRef || p?.itemRef || p?.itemId || p?.menuItemId || p?.productId
+          );
+          if (id && !menuItemNameCache[id]) idsToFetch.add(id);
+        });
+      });
+      if (idsToFetch.size > 0) {
+        await Promise.all([...idsToFetch].map((id) => getMenuItemName(id)));
+      }
+    };
+    resolveProductNames();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incomingOrders]);
+
+  useEffect(() => {
+    const resolveOngoingProductNames = async () => {
+      const idsToFetch = new Set();
+      (ongoingOrders || []).forEach((order) => {
+        const products = order?.products || [];
+        products.forEach((p) => {
+          const id = extractMenuItemId(
+            p?.menuItem || p?.menuItemRef || p?.itemRef || p?.itemId || p?.menuItemId || p?.productId
+          );
+          if (id && !menuItemNameCache[id]) idsToFetch.add(id);
+        });
+      });
+      if (idsToFetch.size > 0) {
+        await Promise.all([...idsToFetch].map((id) => getMenuItemName(id)));
+      }
+    };
+    resolveOngoingProductNames();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ongoingOrders]);
+
   const renderIncomingOrders = () => (
     <div style={{ ...styles.card, gridColumn: '1 / -1' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -1092,16 +1168,38 @@ const RestaurantMonitoring = () => {
                       {order.userInfo?.display_name || order.userInfo?.name || 'N/A'}
                     </td>
                     <td style={styles.td}>
-                      {order.products && order.products.map((product, itemIndex) => (
-                        <div key={`${order.id}-item-${itemIndex}`} style={{ marginBottom: '5px' }}>
-                          {product.quantity || 1}x {product.name || 'Unknown Item'}
-                          {product.notes && (
-                            <div style={{ fontSize: '0.8em', color: '#666' }}>
-                              Note: {product.notes}
-                            </div>
-                          )}
+                      {Array.isArray(order.products) && order.products.length > 0 ? (
+                        <div>
+                          <p className="font-medium">
+                            {order.products.map((p, idx) => {
+                              const id = extractMenuItemId(
+                                p?.menuItem || p?.menuItemRef || p?.itemRef || p?.itemId || p?.menuItemId || p?.productId
+                              );
+                              const name = p?.name || p?.itemName || p?.menuItemName || p?.item?.name || p?.product?.name || (id ? menuItemNameCache[id] : null) || 'Item';
+                              const qty = p?.quantity || p?.qty || 1;
+                              return (
+                                <span key={idx}>
+                                  {name} {qty ? `x${qty}` : ''}
+                                  {idx < order.products.length - 1 ? ', ' : ''}
+                                </span>
+                              );
+                            })}
+                          </p>
+                          {order.orderValue ? (
+                            <p className="text-gray-600">Total: ₹{order.orderValue}</p>
+                          ) : null}
                         </div>
-                      ))}
+                      ) : (
+                        <div>
+                          <p className="font-medium">{order.itemName}</p>
+                          {order.quantity ? (
+                            <p className="text-gray-600">Qty: {order.quantity}</p>
+                          ) : null}
+                          {order.price && order.quantity ? (
+                            <p className="text-gray-600">₹{order.price * order.quantity}</p>
+                          ) : null}
+                        </div>
+                      )}
                     </td>
                     <td style={styles.td}>
                       ₹{order.orderValue?.toFixed(2) || '0.00'}
@@ -1286,16 +1384,38 @@ const RestaurantMonitoring = () => {
                       {order.userInfo?.display_name || order.userInfo?.name || 'N/A'}
                     </td>
                     <td style={styles.td}>
-                      {order.products && order.products.map((product, itemIndex) => (
-                        <div key={`${order.id}-item-${itemIndex}`} style={{ marginBottom: '5px' }}>
-                          {product.quantity || 1}x {product.name || 'Unknown Item'}
-                          {product.notes && (
-                            <div style={{ fontSize: '0.8em', color: '#666' }}>
-                              Note: {product.notes}
-                            </div>
-                          )}
+                      {Array.isArray(order.products) && order.products.length > 0 ? (
+                        <div>
+                          <p className="font-medium">
+                            {order.products.map((p, idx) => {
+                              const id = extractMenuItemId(
+                                p?.menuItem || p?.menuItemRef || p?.itemRef || p?.itemId || p?.menuItemId || p?.productId
+                              );
+                              const name = p?.name || p?.itemName || p?.menuItemName || p?.item?.name || p?.product?.name || (id ? menuItemNameCache[id] : null) || 'Item';
+                              const qty = p?.quantity || p?.qty || 1;
+                              return (
+                                <span key={idx}>
+                                  {name} {qty ? `x${qty}` : ''}
+                                  {idx < order.products.length - 1 ? ', ' : ''}
+                                </span>
+                              );
+                            })}
+                          </p>
+                          {order.orderValue ? (
+                            <p className="text-gray-600">Total: ₹{order.orderValue}</p>
+                          ) : null}
                         </div>
-                      ))}
+                      ) : (
+                        <div>
+                          <p className="font-medium">{order.itemName}</p>
+                          {order.quantity ? (
+                            <p className="text-gray-600">Qty: {order.quantity}</p>
+                          ) : null}
+                          {order.price && order.quantity ? (
+                            <p className="text-gray-600">₹{order.price * order.quantity}</p>
+                          ) : null}
+                        </div>
+                      )}
                     </td>
                     <td style={styles.td}>
                       ₹{order.orderValue?.toFixed(2) || '0.00'}
@@ -1965,13 +2085,31 @@ const RestaurantMonitoring = () => {
                                   setSelectedRecommendationTags(new Set(item.tags || []));
                                   setMenuModalOpen(true);
                                 }}
-                                style={getButtonStyle('#3498db')}
+                                style={{
+                                  ...styles.button,
+                                  ...styles.editButton,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '5px',
+                                  fontSize: '12px',
+                                  padding: '6px 12px'
+                                }}
                               >
                                 <FaEdit />
                               </button>
                               <button
                                 onClick={() => handleDeleteMenuItem(item.id)}
-                                style={getButtonStyle('#e74c3c')}
+                                style={{
+                                  ...styles.button,
+                                  ...styles.deleteButton,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '5px',
+                                  fontSize: '12px',
+                                  padding: '6px 12px'
+                                }}
                               >
                                 <FaTrash />
                               </button>
@@ -2218,7 +2356,6 @@ const RestaurantMonitoring = () => {
                                     justifyContent: 'center',
                                     gap: '5px',
                                     fontSize: '12px',
-                                    padding: '6px 12px'
                                   }}
                                   disabled={isLoading}
                                 >
@@ -2235,7 +2372,6 @@ const RestaurantMonitoring = () => {
                                     justifyContent: 'center',
                                     gap: '5px',
                                     fontSize: '12px',
-                                    padding: '6px 12px'
                                   }}
                                   disabled={isLoading}
                                 >
@@ -2325,9 +2461,38 @@ const RestaurantMonitoring = () => {
                 </div>
                 
                 <div className="mb-4">
-                  <p className="font-medium">{order.itemName}</p>
-                  <p className="text-gray-600">Qty: {order.quantity}</p>
-                  <p className="text-gray-600">₹{order.price * order.quantity}</p>
+                  {Array.isArray(order.products) && order.products.length > 0 ? (
+                    <div>
+                      <p className="font-medium">
+                        {order.products.map((p, idx) => {
+                          const id = extractMenuItemId(
+                            p?.menuItem || p?.menuItemRef || p?.itemRef || p?.itemId || p?.menuItemId || p?.productId
+                          );
+                          const name = p?.name || p?.itemName || p?.menuItemName || p?.item?.name || p?.product?.name || (id ? menuItemNameCache[id] : null) || 'Item';
+                          const qty = p?.quantity || p?.qty || 1;
+                          return (
+                            <span key={idx}>
+                              {name} {qty ? `x${qty}` : ''}
+                              {idx < order.products.length - 1 ? ', ' : ''}
+                            </span>
+                          );
+                        })}
+                      </p>
+                      {order.orderValue ? (
+                        <p className="text-gray-600">Total: ₹{order.orderValue}</p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="font-medium">{order.itemName}</p>
+                      {order.quantity ? (
+                        <p className="text-gray-600">Qty: {order.quantity}</p>
+                      ) : null}
+                      {order.price && order.quantity ? (
+                        <p className="text-gray-600">₹{order.price * order.quantity}</p>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
                 
                 <div className="flex space-x-2">
@@ -2367,9 +2532,38 @@ const RestaurantMonitoring = () => {
                 </div>
                 
                 <div className="mb-4">
-                  <p className="font-medium">{order.itemName}</p>
-                  <p className="text-gray-600">Qty: {order.quantity}</p>
-                  <p className="text-gray-600">₹{order.price * order.quantity}</p>
+                  {Array.isArray(order.products) && order.products.length > 0 ? (
+                    <div>
+                      <p className="font-medium">
+                        {order.products.map((p, idx) => {
+                          const id = extractMenuItemId(
+                            p?.menuItem || p?.menuItemRef || p?.itemRef || p?.itemId || p?.menuItemId || p?.productId
+                          );
+                          const name = p?.name || p?.itemName || p?.menuItemName || p?.item?.name || p?.product?.name || (id ? menuItemNameCache[id] : null) || 'Item';
+                          const qty = p?.quantity || p?.qty || 1;
+                          return (
+                            <span key={idx}>
+                              {name} {qty ? `x${qty}` : ''}
+                              {idx < order.products.length - 1 ? ', ' : ''}
+                            </span>
+                          );
+                        })}
+                      </p>
+                      {order.orderValue ? (
+                        <p className="text-gray-600">Total: ₹{order.orderValue}</p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="font-medium">{order.itemName}</p>
+                      {order.quantity ? (
+                        <p className="text-gray-600">Qty: {order.quantity}</p>
+                      ) : null}
+                      {order.price && order.quantity ? (
+                        <p className="text-gray-600">₹{order.price * order.quantity}</p>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
                 
                 <button

@@ -218,7 +218,9 @@ const RestaurantMonitoring = () => {
 
   // Add these state variables near the top of your component with other state declarations
   const [incomingOrders, setIncomingOrders] = useState([]);
+  const [ongoingOrders, setOngoingOrders] = useState([]); // New state for ongoing orders
   const [isLoadingOrders, setIsLoadingOrders] = useState(true);
+  const [isLoadingOngoing, setIsLoadingOngoing] = useState(true); // New loading state
   const [ordersError, setOrdersError] = useState(null);
 
   // Fetch all orderedProduct documents from users subcollection
@@ -243,6 +245,30 @@ const RestaurantMonitoring = () => {
       toast.error('Failed to fetch orders');
     } finally {
       setIsLoadingOrders(false);
+    }
+  };
+
+  // Fetch ongoing orders from orders collection
+  const fetchOngoingOrders = async () => {
+    try {
+      setIsLoadingOngoing(true);
+      setOrdersError(null);
+      
+      const response = await api.get('/orders/ongoing');
+      
+      if (response.data) {
+        console.log('Ongoing orders fetched:', response.data);
+        setOngoingOrders(response.data);
+      } else {
+        setOngoingOrders([]);
+      }
+    } catch (error) {
+      console.error('Error fetching ongoing orders:', error);
+      setOrdersError('Failed to fetch ongoing orders');
+      setOngoingOrders([]);
+      toast.error('Failed to fetch ongoing orders');
+    } finally {
+      setIsLoadingOngoing(false);
     }
   };
 
@@ -280,9 +306,34 @@ const RestaurantMonitoring = () => {
     }
   };
 
+  // Handle order status update for ongoing orders (orders collection)
+  const handleOngoingOrderStatusUpdate = async (orderId, newStatus) => {
+    try {
+      console.log('Updating ongoing order status:', { orderId, newStatus });
+      
+      const response = await api.patch(`/orders/${orderId}/status`, { status: newStatus });
+
+      // Update local state based on the status change
+      if (newStatus === 'prepared') {
+        // Remove from ongoing orders when marked as prepared
+        setOngoingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+        toast.success('Order marked as prepared');
+      } else if (newStatus === 'declined') {
+        // Remove from ongoing orders when declined
+        setOngoingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+        toast.success('Order declined');
+      }
+
+    } catch (error) {
+      console.error('Error updating ongoing order status:', error);
+      toast.error('Failed to update order status');
+    }
+  };
+
   // Fetch orders on component mount
   useEffect(() => {
     fetchYetToBeAcceptedOrders();
+    fetchOngoingOrders();
   }, []);
 
   const handleSaveProfile = () => {
@@ -663,6 +714,7 @@ const RestaurantMonitoring = () => {
   // Fetch orders on component mount
   useEffect(() => {
     fetchYetToBeAcceptedOrders();
+    fetchOngoingOrders();
   }, []);
 
   // Handle input change for category form
@@ -975,6 +1027,177 @@ const RestaurantMonitoring = () => {
                             </button>
                             <button
                               onClick={() => handleUpdateOrderStatus(order.id, 'declined')}
+                              style={{
+                                ...styles.button,
+                                backgroundColor: '#e74c3c',
+                                color: 'white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '5px',
+                                fontSize: '12px',
+                                padding: '6px 12px'
+                              }}
+                            >
+                              <FaTimes /> Decline
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderOngoingOrders = () => (
+    <div style={{ ...styles.card, gridColumn: '1 / -1' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2 style={styles.cardTitle}>Ongoing Orders</h2>
+        <button 
+          onClick={fetchOngoingOrders}
+          style={{
+            ...styles.button,
+            backgroundColor: '#3498db',
+            color: 'white',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px'
+          }}
+        >
+          <span>🔄</span> Refresh
+        </button>
+      </div>
+  
+      {isLoadingOngoing ? (
+        <div style={{ textAlign: 'center', padding: '20px' }}>Loading orders...</div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ ...styles.table, width: '100%' }}>
+            <thead>
+              <tr>
+                <th style={styles.th}>Order ID</th>
+                <th style={styles.th}>Customer</th>
+                <th style={styles.th}>Items</th>
+                <th style={styles.th}>Total</th>
+                <th style={styles.th}>Date</th>
+                <th style={styles.th}>Status</th>
+                <th style={styles.th}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ongoingOrders.length === 0 ? (
+                <tr>
+                  <td colSpan="7" style={{ ...styles.td, textAlign: 'center', padding: '40px', color: '#666' }}>
+                    {ordersError ? (
+                      <div>
+                        <div style={{ fontSize: '18px', marginBottom: '10px' }}>⚠️ Error loading orders</div>
+                        <div>{ordersError}</div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: '18px', marginBottom: '10px' }}>📋 No ongoing orders</div>
+                        <div>All orders have been processed or there are no ongoing orders at the moment.</div>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ) : (
+                ongoingOrders.map((order, index) => (
+                  <tr key={`order-${order.id || index}`}>
+                    <td style={styles.td}>
+                      <div style={{ fontWeight: 'bold' }}>#{order.id || order.orderId}</div>
+                    </td>
+                    <td style={styles.td}>
+                      {order.userInfo?.name || 'N/A'}
+                    </td>
+                    <td style={styles.td}>
+                      {order.products && order.products.map((product, itemIndex) => (
+                        <div key={`${order.id}-item-${itemIndex}`} style={{ marginBottom: '5px' }}>
+                          {product.quantity || 1}x {product.name || 'Unknown Item'}
+                          {product.notes && (
+                            <div style={{ fontSize: '0.8em', color: '#666' }}>
+                              Note: {product.notes}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </td>
+                    <td style={styles.td}>
+                      ₹{order.orderValue?.toFixed(2) || '0.00'}
+                    </td>
+                    <td style={styles.td}>
+                      <div style={{ fontSize: '0.8em', color: '#666' }}>
+                        {order.order_Date ? new Date(order.order_Date.seconds * 1000).toLocaleDateString() : 'N/A'}
+                      </div>
+                    </td>
+                    <td style={styles.td}>
+                      <span style={getOrderStatusStyle(order.orderStatus)}>
+                        {order.orderStatus || 'N/A'}
+                      </span>
+                    </td>
+                    <td style={styles.td}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                        {order.orderStatus === 'yetToBeAccepted' ? (
+                          <>
+                            <button
+                              onClick={() => handleOngoingOrderStatusUpdate(order.id, 'preparing')}
+                              style={{
+                                ...styles.button,
+                                backgroundColor: '#2ecc71',
+                                color: 'white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '5px',
+                                fontSize: '12px',
+                                padding: '6px 12px'
+                              }}
+                            >
+                              <FaCheck /> Accept
+                            </button>
+                            <button
+                              onClick={() => handleOngoingOrderStatusUpdate(order.id, 'declined')}
+                              style={{
+                                ...styles.button,
+                                backgroundColor: '#e74c3c',
+                                color: 'white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '5px',
+                                fontSize: '12px',
+                                padding: '6px 12px'
+                              }}
+                            >
+                              <FaTimes /> Decline
+                            </button>
+                          </>
+                        ) : order.orderStatus === 'preparing' ? (
+                          <>
+                            <button
+                              onClick={() => handleOngoingOrderStatusUpdate(order.id, 'prepared')}
+                              style={{
+                                ...styles.button,
+                                backgroundColor: '#3498db',
+                                color: 'white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '5px',
+                                fontSize: '12px',
+                                padding: '6px 12px'
+                              }}
+                            >
+                              <FaMotorcycle /> Mark as Prepared
+                            </button>
+                            <button
+                              onClick={() => handleOngoingOrderStatusUpdate(order.id, 'declined')}
                               style={{
                                 ...styles.button,
                                 backgroundColor: '#e74c3c',
@@ -1461,6 +1684,9 @@ const RestaurantMonitoring = () => {
 
         {/* --- Incoming Orders Card (Replaces Offers) --- */}
         {renderIncomingOrders()}
+
+        {/* --- Ongoing Orders Card --- */}
+        {renderOngoingOrders()}
 
         {/* --- Menu Management Card --- */}
         <div style={{ ...styles.card, gridColumn: '1 / -1' }}>

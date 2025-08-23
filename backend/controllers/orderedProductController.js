@@ -75,12 +75,15 @@ export const updateOrderStatus = async (req, res) => {
     
     let docRef = null;
     let foundDoc = null;
+    let userId = null;
 
     // Search for the document by ID
     for (const doc of snapshot.docs) {
       if (doc.id === orderId) {
         docRef = doc.ref;
         foundDoc = doc;
+        // Extract userId from the document path
+        userId = doc.ref.parent.parent.id;
         break;
       }
     }
@@ -100,6 +103,60 @@ export const updateOrderStatus = async (req, res) => {
       orderStatus: status,
       updatedAt: new Date()
     });
+
+    // If status is 'preparing', create a document in orders collection
+    if (status === 'preparing') {
+      const orderData = foundDoc.data();
+      
+      // Create order document with FlutterFlow schema
+      const orderDoc = {
+        // Doc References
+        deliveryPartnerId: orderData.deliveryPartnerId || null,
+        restaurantId: orderData.restaurantId || null,
+        userRef: userId,
+        
+        // Data fields
+        deliveryAddress: orderData.deliveryAddress || {},
+        paymentDetails: orderData.paymentDetails || {},
+        
+        // Integer fields
+        deliveryFee: orderData.deliveryFee || 0,
+        orderTotal: orderData.orderTotal || orderData.orderValue || 0,
+        orderValue: orderData.orderValue || orderData.orderTotal || 0,
+        
+        // String fields
+        paymentStatus: orderData.paymentStatus || '',
+        paymentId: orderData.paymentId || '',
+        deliveryBoyName: orderData.deliveryBoyName || '',
+        orderId: orderData.orderId || foundDoc.id,
+        timeLeft: orderData.timeLeft || '',
+        distanceLeft: orderData.distanceLeft || '',
+        
+        // Order status
+        orderStatus: status, // 'preparing'
+        
+        // List fields
+        menuItems: orderData.menuItems || [],
+        products: orderData.products || [],
+        driverPositions: orderData.driverPositions || [],
+        
+        // Lat Lng fields
+        destination: orderData.destination || { lat: null, lng: null },
+        source: orderData.source || { lat: null, lng: null },
+        
+        // DateTime fields
+        createdAt: orderData.createdAt || orderData.order_Date || new Date(),
+        updatedAt: new Date(),
+        
+        // Additional fields from orderedProduct
+        originalOrderProductId: foundDoc.id, // Reference to original orderedProduct document
+        userId: userId
+      };
+
+      // Create document in orders collection
+      await db.collection('orders').add(orderDoc);
+      console.log('Created order document in orders collection for orderId:', orderData.orderId || foundDoc.id);
+    }
 
     // Get the updated document
     const updatedDoc = await docRef.get();

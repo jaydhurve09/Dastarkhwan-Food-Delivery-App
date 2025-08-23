@@ -6,6 +6,8 @@ export class MenuItem extends BaseModel {
 
   constructor(data = {}) {
     super();
+    // Preserve ID if provided so save() performs an update instead of create
+    this.id = data.id || null;
     this.name = data.name || ''; // Required
     this.image = data.image || ''; // Optional
     this.categoryId = data.categoryId || ''; // Reference to menuCategories document ID

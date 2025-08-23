@@ -1118,7 +1118,7 @@ const RestaurantMonitoring = () => {
                 ongoingOrders.map((order, index) => (
                   <tr key={`order-${order.id || index}`}>
                     <td style={styles.td}>
-                      <div style={{ fontWeight: 'bold' }}>#{order.id || order.orderId}</div>
+                      <div style={{ fontWeight: 'bold' }}>#{order.orderId || order.id}</div>
                     </td>
                     <td style={styles.td}>
                       {order.userInfo?.name || 'N/A'}

@@ -1,7 +1,7 @@
 import { BaseModel } from './BaseModel.js';
 
 export class OrderedProduct extends BaseModel {
-  static collectionName = 'orderedProducts';
+  static collectionName = 'orderedProduct';
   
   static ORDER_STATUS = {
     PREPARING: 'preparing',

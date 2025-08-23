@@ -300,6 +300,10 @@ const RestaurantMonitoring = () => {
         toast.success('Order declined');
       }
 
+      // Refresh both sections to ensure data consistency
+      await fetchYetToBeAcceptedOrders();
+      await fetchOngoingOrders();
+
     } catch (error) {
       console.error('Error updating order status:', error);
       toast.error('Failed to update order status');
@@ -323,6 +327,10 @@ const RestaurantMonitoring = () => {
         setOngoingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
         toast.success('Order declined');
       }
+
+      // Refresh both sections to ensure data consistency
+      await fetchYetToBeAcceptedOrders();
+      await fetchOngoingOrders();
 
     } catch (error) {
       console.error('Error updating ongoing order status:', error);
@@ -717,7 +725,6 @@ const RestaurantMonitoring = () => {
     fetchOngoingOrders();
   }, []);
 
-  // Handle input change for category form
   const handleCategoryInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     setNewCategory(prev => ({

@@ -403,9 +403,9 @@ export const getOngoingOrders = async (req, res) => {
       return res.status(200).json([]);
     }
     
-    // Now try to get orders with preparing status
+    // Get orders that are NOT 'yetToBeAccepted' (i.e., all ongoing orders)
     const ordersSnapshot = await db.collection('orders')
-      .where('orderStatus', '==', 'preparing')
+      .where('orderStatus', '!=', 'yetToBeAccepted')
       .get();
     
     console.log(`Found ${ordersSnapshot.docs.length} ongoing orders`);

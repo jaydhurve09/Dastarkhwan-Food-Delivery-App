@@ -406,14 +406,22 @@ const toggleBlockPartner = async (id) => {
               </tr>
             ) : deliveryPartners.map(p => (
               <tr key={p.id}>
-                <td style={styles.td}>{p.name}</td>
-                <td style={styles.td}>{p.phone}</td>
-                <td style={styles.td}>{p.vehicle.name} | {p.vehicle.number}</td>
+                <td style={styles.td}>{p.name || 'N/A'}</td>
+                <td style={styles.td}>{p.phone || p.mobile || 'N/A'}</td>
                 <td style={styles.td}>
-                  {p.online ? <span style={styles.online}>● Online</span> : <span style={styles.offline}>● Offline</span>}
+                  {p.vehicle ? 
+                    (typeof p.vehicle === 'string' ? 
+                      `${p.vehicle} | ${p.vehicleNo || p.vehicleNumber || 'N/A'}` :
+                      `${p.vehicle?.name || p.vehicle?.type || 'N/A'} | ${p.vehicle?.number || p.vehicleNo || p.vehicleNumber || 'N/A'}`
+                    ) : 
+                    'N/A'
+                  }
                 </td>
-                <td style={styles.td}>{p.totalDeliveries}</td>
-                <td style={styles.td}>{p.rating} ★</td>
+                <td style={styles.td}>
+                  {p.online || p.isOnline ? <span style={styles.online}>● Online</span> : <span style={styles.offline}>● Offline</span>}
+                </td>
+                <td style={styles.td}>{p.totalDeliveries || p.deliveries || 0}</td>
+                <td style={styles.td}>{p.rating || 0} ★</td>
                 <td style={{ ...styles.td, minWidth: 250 }}>
                   <div style={styles.actionRow}>
                     <button style={{...styles.btn, ...styles.btnView}} onClick={() => setPartnerDetail(p)}>View Profile</button>

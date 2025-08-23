@@ -3,245 +3,149 @@ import { BaseModel } from './BaseModel.js';
 export class Order extends BaseModel {
   static collectionName = 'orders';
 
-  // Order statuses
-  static STATUS = {
-    PENDING: 'pending',
-    CONFIRMED: 'confirmed',
+  // Order statuses enum
+  static ORDER_STATUS = {
+    YET_TO_BE_ACCEPTED: 'yetToBeAccepted',
     PREPARING: 'preparing',
-    READY_FOR_PICKUP: 'ready_for_pickup',
-    OUT_FOR_DELIVERY: 'out_for_delivery',
+    PREPARED: 'prepared',
+    DISPATCHED: 'dispatched',
     DELIVERED: 'delivered',
-    CANCELLED: 'cancelled',
-    REFUNDED: 'refunded'
-  };
-
-  // Payment statuses
-  static PAYMENT_STATUS = {
-    PENDING: 'pending',
-    AUTHORIZED: 'authorized',
-    PAID: 'paid',
-    FAILED: 'failed',
-    REFUNDED: 'refunded',
-    PARTIALLY_REFUNDED: 'partially_refunded'
-  };
-
-  // Delivery types
-  static DELIVERY_TYPE = {
-    DELIVERY: 'delivery',
-    PICKUP: 'pickup'
+    DECLINED: 'declined'
   };
 
   constructor(data = {}) {
     super();
-    this.orderNumber = data.orderNumber || ''; // Auto-generated
-    this.userId = data.userId || null; // Reference to User
-    this.restaurantId = data.restaurantId || null; // Reference to Restaurant
-    this.deliveryPartnerId = data.deliveryPartnerId || null; // Reference to DeliveryPartner
     
-    // Order items
-    this.items = (data.items || []).map(item => ({
-      menuItemId: item.menuItemId, // Reference to MenuItem
-      name: item.name || '',
-      quantity: item.quantity || 1,
-      price: item.price || 0,
-      specialInstructions: item.specialInstructions || '',
-      addOns: (item.addOns || []).map(addOn => ({
-        id: addOn.id,
-        name: addOn.name,
-        price: addOn.price || 0
-      }))
-    }));
+    // Doc References
+    this.deliveryPartnerId = data.deliveryPartnerId || null; // Doc Reference (deliveryPartners)
+    this.restaurantId = data.restaurantId || null; // Doc Reference (restaurants)
+    this.userRef = data.userRef || null; // Doc Reference (users)
     
-    // Pricing
-    this.orderTotal = data.orderTotal || 0;
+    // Address data
+    this.deliveryAddress = data.deliveryAddress || {};
+    
+    // Integer fields
     this.deliveryFee = data.deliveryFee || 0;
-    this.tax = data.tax || 0;
-    this.discount = data.discount || 0;
-    this.grandTotal = data.grandTotal || 0;
+    this.orderTotal = data.orderTotal || 0;
+    this.orderValue = data.orderValue || 0;
     
-    // Address
-    this.deliveryAddress = data.deliveryAddress || {
-      street: '',
-      city: '',
-      state: '',
-      pincode: '',
-      coordinates: {
-        lat: null,
-        lng: null
-      },
-      contactNumber: ''
-    };
-    
-    // Delivery info
-    this.deliveryType = data.deliveryType || Order.DELIVERY_TYPE.DELIVERY;
-    this.preferredDeliveryTime = data.preferredDeliveryTime || null;
-    this.estimatedDeliveryTime = data.estimatedDeliveryTime || null;
-    this.actualDeliveryTime = data.actualDeliveryTime || null;
-    
-    // Status
-    this.status = data.status || Order.STATUS.PENDING;
-    this.paymentStatus = data.paymentStatus || Order.PAYMENT_STATUS.PENDING;
-    this.prepareStatus = data.prepareStatus || 'Pending'; // Custom status for preparation
-    
-    // Payment info
-    this.paymentMethod = data.paymentMethod || '';
-    this.paymentId = data.paymentId || ''; // Reference to Payment
+    // Payment data
     this.paymentDetails = data.paymentDetails || {};
     
-    // Tracking
-    this.statusHistory = (data.statusHistory || []).map(history => ({
-      status: history.status,
-      timestamp: history.timestamp || new Date(),
-      notes: history.notes || ''
-    }));
+    // String fields
+    this.paymentStatus = data.paymentStatus || '';
+    this.paymentId = data.paymentId || '';
+    this.deliveryBoyName = data.deliveryBoyName || '';
+    this.orderId = data.orderId || '';
+    this.timeLeft = data.timeLeft || '';
+    this.distanceLeft = data.distanceLeft || '';
     
-    // Customer notes
-    this.specialInstructions = data.specialInstructions || '';
+    // Order status (enum)
+    this.orderStatus = data.orderStatus || Order.ORDER_STATUS.YET_TO_BE_ACCEPTED;
     
-    // Timestamps
-    this.createdAt = data.createdAt || new Date();
+    // List fields
+    this.menuItems = data.menuItems || []; // List < Doc Reference (menuItems) >
+    this.products = data.products || []; // List < Doc Reference (menuItems) >
+    this.driverPositions = data.driverPositions || []; // List < Lat Lng >
+    
+    // Lat Lng fields
+    this.destination = data.destination || { lat: null, lng: null };
+    this.source = data.source || { lat: null, lng: null };
+    
+    // DateTime fields
     this.updatedAt = data.updatedAt || new Date();
+    this.createdAt = data.createdAt || new Date();
   }
 
   // Convert to Firestore document format
   toFirestore() {
     const data = {
-      orderNumber: this.orderNumber,
-      userId: this.userId,
-      restaurantId: this.restaurantId,
       deliveryPartnerId: this.deliveryPartnerId,
-      items: this.items,
-      orderTotal: this.orderTotal,
-      deliveryFee: this.deliveryFee,
-      tax: this.tax,
-      discount: this.discount,
-      grandTotal: this.grandTotal,
+      restaurantId: this.restaurantId,
+      userRef: this.userRef,
       deliveryAddress: this.deliveryAddress,
-      deliveryType: this.deliveryType,
-      preferredDeliveryTime: this.preferredDeliveryTime,
-      estimatedDeliveryTime: this.estimatedDeliveryTime,
-      actualDeliveryTime: this.actualDeliveryTime,
-      status: this.status,
-      prepareStatus: this.prepareStatus,
-      paymentStatus: this.paymentStatus,
-      paymentMethod: this.paymentMethod,
-      paymentId: this.paymentId,
+      deliveryFee: this.deliveryFee,
+      orderTotal: this.orderTotal,
+      orderValue: this.orderValue,
       paymentDetails: this.paymentDetails,
-      statusHistory: this.statusHistory,
-      specialInstructions: this.specialInstructions,
+      paymentStatus: this.paymentStatus,
+      paymentId: this.paymentId,
+      deliveryBoyName: this.deliveryBoyName,
+      orderId: this.orderId,
+      timeLeft: this.timeLeft,
+      distanceLeft: this.distanceLeft,
+      orderStatus: this.orderStatus,
+      menuItems: this.menuItems,
+      products: this.products,
+      driverPositions: this.driverPositions,
+      destination: this.destination,
+      source: this.source,
       updatedAt: new Date()
     };
 
     // Only include createdAt for new documents
     if (!this.id) {
       data.createdAt = this.createdAt;
-      // Generate order number for new orders
-      if (!this.orderNumber) {
-        data.orderNumber = this.generateOrderNumber();
+      // Generate orderId for new orders if not provided
+      if (!this.orderId) {
+        data.orderId = this.generateOrderId();
       }
     }
 
     return data;
   }
 
-  // Generate a unique order number
-  generateOrderNumber() {
+  // Generate a unique order ID
+  generateOrderId() {
     const timestamp = Date.now().toString();
     const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-    return `ORD-${timestamp}-${random}`;
+    return `${timestamp}${random}`;
   }
 
   // Validation method
   validate() {
-    if (!this.userId) throw new Error('User ID is required');
+    if (!this.userRef) throw new Error('User reference is required');
     if (!this.restaurantId) throw new Error('Restaurant ID is required');
-    if (this.items.length === 0) throw new Error('At least one item is required');
-    if (this.grandTotal <= 0) throw new Error('Invalid grand total');
+    if (this.orderValue <= 0) throw new Error('Invalid order value');
     
-    // Validate status
-    if (!Object.values(Order.STATUS).includes(this.status)) {
-      throw new Error(`Invalid status. Must be one of: ${Object.values(Order.STATUS).join(', ')}`);
-    }
-    
-    // Validate payment status
-    if (!Object.values(Order.PAYMENT_STATUS).includes(this.paymentStatus)) {
-      throw new Error(`Invalid payment status. Must be one of: ${Object.values(Order.PAYMENT_STATUS).join(', ')}`);
+    // Validate order status
+    if (!Object.values(Order.ORDER_STATUS).includes(this.orderStatus)) {
+      throw new Error(`Invalid order status. Must be one of: ${Object.values(Order.ORDER_STATUS).join(', ')}`);
     }
     
     return true;
   }
 
-  // Method to update status
-  async updateStatus(newStatus, notes = '') {
-    if (!Object.values(Order.STATUS).includes(newStatus)) {
-      throw new Error(`Invalid status: ${newStatus}`);
+  // Method to update order status
+  async updateOrderStatus(newStatus, notes = '') {
+    if (!Object.values(Order.ORDER_STATUS).includes(newStatus)) {
+      throw new Error(`Invalid order status: ${newStatus}`);
     }
     
-    this.status = newStatus;
-    this.statusHistory.push({
-      status: newStatus,
-      timestamp: new Date(),
-      notes
-    });
-    
-    // Update timestamps based on status
-    const now = new Date();
-    switch (newStatus) {
-      case Order.STATUS.CONFIRMED:
-        this.confirmedAt = this.confirmedAt || now;
-        break;
-      case Order.STATUS.PREPARING:
-        this.preparingAt = this.preparingAt || now;
-        break;
-      case Order.STATUS.READY_FOR_PICKUP:
-        this.readyAt = this.readyAt || now;
-        break;
-      case Order.STATUS.OUT_FOR_DELIVERY:
-        this.outForDeliveryAt = this.outForDeliveryAt || now;
-        break;
-      case Order.STATUS.DELIVERED:
-        this.deliveredAt = this.deliveredAt || now;
-        this.actualDeliveryTime = now;
-        break;
-      case Order.STATUS.CANCELLED:
-        this.cancelledAt = this.cancelledAt || now;
-        break;
-    }
-    
-    return this.save();
-  }
-
-  // Method to update payment status
-  async updatePaymentStatus(newStatus, paymentDetails = {}) {
-    if (!Object.values(Order.PAYMENT_STATUS).includes(newStatus)) {
-      throw new Error(`Invalid payment status: ${newStatus}`);
-    }
-    
-    this.paymentStatus = newStatus;
-    this.paymentDetails = {
-      ...this.paymentDetails,
-      ...paymentDetails,
-      lastUpdated: new Date()
-    };
+    this.orderStatus = newStatus;
+    this.updatedAt = new Date();
     
     return this.save();
   }
 
   // Method to assign delivery partner
-  async assignDeliveryPartner(deliveryPartnerId) {
+  async assignDeliveryPartner(deliveryPartnerId, deliveryBoyName = '') {
     if (!deliveryPartnerId) {
       throw new Error('Delivery partner ID is required');
     }
     
     this.deliveryPartnerId = deliveryPartnerId;
-    return this.updateStatus(Order.STATUS.OUT_FOR_DELIVERY, 'Delivery partner assigned');
+    this.deliveryBoyName = deliveryBoyName;
+    this.orderStatus = Order.ORDER_STATUS.DISPATCHED;
+    
+    return this.save();
   }
 
   // Static method to find orders by user
   static async findByUserId(userId, options = {}) {
     if (!userId) return [];
     return this.find({
-      where: { userId },
+      where: { userRef: userId },
       orderBy: options.orderBy || { field: 'createdAt', direction: 'desc' },
       limit: options.limit,
       offset: options.offset
@@ -263,8 +167,19 @@ export class Order extends BaseModel {
   static async findByStatus(status, options = {}) {
     if (!status) return [];
     return this.find({
-      where: { status },
+      where: { orderStatus: status },
       orderBy: options.orderBy || { field: 'createdAt', direction: 'asc' },
+      limit: options.limit,
+      offset: options.offset
+    });
+  }
+
+  // Static method to find orders by delivery partner
+  static async findByDeliveryPartnerId(deliveryPartnerId, options = {}) {
+    if (!deliveryPartnerId) return [];
+    return this.find({
+      where: { deliveryPartnerId },
+      orderBy: options.orderBy || { field: 'createdAt', direction: 'desc' },
       limit: options.limit,
       offset: options.offset
     });

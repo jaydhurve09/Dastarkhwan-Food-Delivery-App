@@ -947,7 +947,7 @@ const RestaurantMonitoring = () => {
                 incomingOrders.map((order, index) => (
                   <tr key={`order-${order.id || index}`}>
                     <td style={styles.td}>
-                      <div style={{ fontWeight: 'bold' }}>#{order.id || order.orderId}</div>
+                      <div style={{ fontWeight: 'bold' }}>#{order.orderId || order.id}</div>
                     </td>
                     <td style={styles.td}>
                       {order.userInfo?.name || 'N/A'}
@@ -2136,7 +2136,7 @@ const RestaurantMonitoring = () => {
             {incomingOrders.map((order) => (
               <div key={order.id} className="bg-white rounded-lg shadow-md p-6">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold">Order #{order.id}</h3>
+                  <h3 className="text-lg font-semibold">Order #{order.orderId || order.id}</h3>
                   <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
                     {order.orderStatus}
                   </span>
@@ -2178,7 +2178,7 @@ const RestaurantMonitoring = () => {
             {preparingOrders.map((order) => (
               <div key={order.id} className="bg-white rounded-lg shadow-md p-6">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold">Order #{order.id}</h3>
+                  <h3 className="text-lg font-semibold">Order #{order.orderId || order.id}</h3>
                   <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
                     {order.orderStatus}
                   </span>

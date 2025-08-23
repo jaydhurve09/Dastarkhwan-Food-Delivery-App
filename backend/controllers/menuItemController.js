@@ -1,36 +1,74 @@
 import { MenuItem } from '../models/MenuItem.js';
 import ErrorResponse from '../utils/errorResponse.js';
-import { db } from '../config/firebase.js';
+import { db, storage } from '../config/firebase.js';
 import path from 'path';
-import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 
-// Helper to handle file upload
-const handleFileUpload = (file, oldImagePath = null) => {
-  // If there's an old image and it exists, delete it
-  if (oldImagePath && fs.existsSync(path.join(process.cwd(), 'uploads', oldImagePath))) {
-    try {
-      fs.unlinkSync(path.join(process.cwd(), 'uploads', oldImagePath));
-    } catch (error) {
-      console.error('Error deleting old image:', error);
-    }
-  }
-
-  // Return the new file path or null if no file
+// Helper to upload file to Firebase Storage
+const uploadToFirebaseStorage = async (file, folder = 'menu-items') => {
   if (!file) return null;
-  
-  const fileExt = path.extname(file.originalname);
-  const fileName = `${uuidv4()}${fileExt}`;
-  const filePath = path.join('menu-items', fileName);
-  
-  // Ensure uploads directory exists
-  const uploadDir = path.join(process.cwd(), 'uploads', 'menu-items');
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
+
+  try {
+    const bucket = storage.bucket();
+    const fileExt = path.extname(file.originalname);
+    const fileName = `${folder}/${uuidv4()}${fileExt}`;
+    
+    const fileUpload = bucket.file(fileName);
+    
+    const stream = fileUpload.createWriteStream({
+      metadata: {
+        contentType: file.mimetype,
+      },
+    });
+
+    return new Promise((resolve, reject) => {
+      stream.on('error', (error) => {
+        console.error('Firebase Storage upload error:', error);
+        reject(error);
+      });
+
+      stream.on('finish', async () => {
+        try {
+          // Make the file publicly accessible
+          await fileUpload.makePublic();
+          
+          // Get the public URL
+          const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+          resolve({
+            fileName,
+            publicUrl
+          });
+        } catch (error) {
+          console.error('Error making file public:', error);
+          reject(error);
+        }
+      });
+
+      stream.end(file.buffer);
+    });
+  } catch (error) {
+    console.error('Firebase Storage upload error:', error);
+    throw error;
   }
-  
-  fs.renameSync(file.path, path.join(uploadDir, fileName));
-  return filePath;
+};
+
+// Helper to delete file from Firebase Storage
+const deleteFromFirebaseStorage = async (fileName) => {
+  if (!fileName) return;
+
+  try {
+    const bucket = storage.bucket();
+    const file = bucket.file(fileName);
+    
+    const [exists] = await file.exists();
+    if (exists) {
+      await file.delete();
+      console.log(`File ${fileName} deleted from Firebase Storage`);
+    }
+  } catch (error) {
+    console.error('Error deleting file from Firebase Storage:', error);
+    // Don't throw error as this is cleanup operation
+  }
 };
 
 // @desc    Create a new menu item
@@ -51,7 +89,7 @@ export const createMenuItem = async (req, res, next) => {
     } = req.body;
     
     // Handle file upload
-    const imagePath = req.file ? handleFileUpload(req.file) : null;
+    const fileUploadResult = req.file ? await uploadToFirebaseStorage(req.file) : null;
 
     // Create menu item
     const menuItem = new MenuItem({
@@ -69,7 +107,10 @@ export const createMenuItem = async (req, res, next) => {
             price: typeof addOn.price === 'number' ? addOn.price : 0
           }))
         : [],
-      ...(imagePath && { image: imagePath })
+      ...(fileUploadResult && { 
+        image: fileUploadResult.publicUrl,
+        imageFileName: fileUploadResult.fileName
+      })
     });
 
     // Save with validation
@@ -82,77 +123,8 @@ export const createMenuItem = async (req, res, next) => {
   } catch (error) {
     // Clean up uploaded file if there was an error
     if (req.file?.path) {
-      fs.unlinkSync(req.file.path);
+      // fs.unlinkSync(req.file.path); // Not needed with Firebase Storage
     }
-    next(error);
-  }
-};
-
-// @desc    Get all menu items
-// @route   GET /api/menu-items
-// @access  Public
-export const getMenuItems = async (req, res, next) => {
-  try {
-    const { categoryId, subCategory, tag, isActive } = req.query;
-    let query = db.collection('menuItems');
-
-    // Apply filters
-    if (categoryId) query = query.where('categoryId', '==', categoryId);
-    if (subCategory) query = query.where('subCategory', '==', subCategory);
-    if (tag) query = query.where('tags', 'array-contains', tag);
-    if (isActive !== undefined) {
-      query = query.where('isActive', '==', isActive === 'true');
-    }
-
-    const snapshot = await query.get();
-    const menuItems = [];
-    
-    snapshot.forEach(doc => {
-      menuItems.push({
-        id: doc.id,
-        ...doc.data(),
-        // Generate full image URL if image exists
-        ...(doc.data().image && { 
-          image: `${process.env.BASE_URL || 'http://localhost:5000'}/uploads/${doc.data().image.replace(/\\/g, '/')}` 
-        })
-      });
-    });
-
-    res.status(200).json({
-      success: true,
-      count: menuItems.length,
-      data: menuItems
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    Get single menu item
-// @route   GET /api/menu-items/:id
-// @access  Public
-export const getMenuItem = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const doc = await db.collection('menuItems').doc(id).get();
-
-    if (!doc.exists) {
-      return next(new ErrorResponse(`Menu item not found with id of ${id}`, 404));
-    }
-
-    const menuItem = {
-      id: doc.id,
-      ...doc.data(),
-      ...(doc.data().image && { 
-        image: `${process.env.BASE_URL || 'http://localhost:5000'}/uploads/${doc.data().image.replace(/\\/g, '/')}` 
-      })
-    };
-
-    res.status(200).json({
-      success: true,
-      data: menuItem
-    });
-  } catch (error) {
     next(error);
   }
 };
@@ -183,59 +155,65 @@ export const updateMenuItem = async (req, res, next) => {
       return next(new ErrorResponse(`Menu item not found with id of ${id}`, 404));
     }
 
-    const existingItem = doc.data();
+    const existingData = doc.data();
     
     // Handle file upload if new file is provided
-    const imagePath = req.file 
-      ? handleFileUpload(req.file, existingItem.image) 
-      : existingItem.image;
+    const fileUploadResult = req.file 
+      ? await uploadToFirebaseStorage(req.file) 
+      : null;
 
-    // Prepare update data
-    const updateData = {
-      name: name !== undefined ? name : existingItem.name,
-      categoryId: categoryId || existingItem.categoryId,
-      subCategory: subCategory !== undefined ? subCategory : existingItem.subCategory,
-      price: price !== undefined ? parseFloat(price) : existingItem.price,
+    // Delete existing image if new file is provided
+    if (fileUploadResult && existingData.imageFileName) {
+      await deleteFromFirebaseStorage(existingData.imageFileName);
+    }
+
+    // Create updated MenuItem instance with existing data and new changes
+    const updatedMenuItem = new MenuItem({
+      id: id,
+      name: name !== undefined ? name : existingData.name,
+      categoryId: categoryId || (existingData.categoryId?.id || existingData.categoryId),
+      subCategory: subCategory !== undefined ? subCategory : existingData.subCategory,
+      price: price !== undefined ? parseFloat(price) : existingData.price,
       tags: tags !== undefined 
         ? (typeof tags === 'string' ? JSON.parse(tags) : tags) 
-        : existingItem.tags,
-      description: description !== undefined ? description : existingItem.description,
-      isActive: isActive !== undefined ? (isActive !== 'false') : existingItem.isActive,
-      isVeg: isVeg !== undefined ? (isVeg === 'true') : existingItem.isVeg,
+        : existingData.tags,
+      description: description !== undefined ? description : existingData.description,
+      isActive: isActive !== undefined ? (isActive !== 'false') : existingData.isActive,
+      isVeg: isVeg !== undefined ? (isVeg === 'true') : existingData.isVeg,
       addOns: addOns !== undefined 
         ? (Array.isArray(addOns) 
             ? addOns.map(addOn => ({
                 name: addOn.name || '',
-                price: typeof addOn.price === 'number' ? addOn.price : 0
+                price: typeof addOn.price === 'number' ? addOn.price : parseFloat(addOn.price) || 0
               }))
             : [])
-        : existingItem.addOns,
-      ...(imagePath !== undefined && { image: imagePath }),
+        : existingData.addOns,
+      image: fileUploadResult ? fileUploadResult.publicUrl : existingData.image,
+      imageFileName: fileUploadResult ? fileUploadResult.fileName : existingData.imageFileName,
+      createdAt: existingData.createdAt,
       updatedAt: new Date()
-    };
+    });
 
-    // Update the document in Firestore
-    await docRef.update(updateData);
+    // Save using model (includes validation)
+    await updatedMenuItem.save();
     
-    // Get the updated document
+    // Get the updated document to return
     const updatedDoc = await docRef.get();
-    const updatedItem = {
+    const responseData = updatedDoc.data();
+    
+    // Convert DocumentReference back to string for response
+    const menuItemResponse = {
       id: updatedDoc.id,
-      ...updatedDoc.data(),
-      ...(updatedDoc.data().image && { 
-        image: `${process.env.BASE_URL || 'http://localhost:5000'}/uploads/${updatedDoc.data().image.replace(/\\/g, '/')}` 
-      })
+      ...responseData,
+      categoryId: responseData.categoryId?.id || responseData.categoryId,
+      ...(responseData.image && { image: responseData.image })
     };
 
     res.status(200).json({
       success: true,
-      data: updatedItem
+      data: menuItemResponse
     });
   } catch (error) {
-    // Clean up uploaded file if there was an error
-    if (req.file?.path) {
-      fs.unlinkSync(req.file.path);
-    }
     next(error);
   }
 };
@@ -246,27 +224,95 @@ export const updateMenuItem = async (req, res, next) => {
 export const deleteMenuItem = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const docRef = db.collection('menuItems').doc(id);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return next(new ErrorResponse(`Menu item not found with id of ${id}`, 404));
+    }
+
+    const menuItemData = doc.data();
+    
+    // Delete image if exists
+    if (menuItemData.imageFileName) {
+      await deleteFromFirebaseStorage(menuItemData.imageFileName);
+    }
+
+    // Delete document using Firestore directly (model doesn't have delete method)
+    await docRef.delete();
+
+    res.status(200).json({
+      success: true,
+      data: {},
+      message: 'Menu item deleted successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get all menu items
+// @route   GET /api/menu-items
+// @access  Public
+export const getMenuItems = async (req, res, next) => {
+  try {
+    const { categoryId, subCategory, tag, isActive } = req.query;
+    let query = db.collection('menuItems');
+
+    // Apply filters
+    if (categoryId) query = query.where('categoryId', '==', categoryId);
+    if (subCategory) query = query.where('subCategory', '==', subCategory);
+    if (tag) query = query.where('tags', 'array-contains', tag);
+    if (isActive !== undefined) {
+      query = query.where('isActive', '==', isActive === 'true');
+    }
+
+    const snapshot = await query.get();
+    const menuItems = [];
+    
+    snapshot.forEach(doc => {
+      menuItems.push({
+        id: doc.id,
+        ...doc.data(),
+        ...(doc.data().image && { 
+          image: doc.data().image
+        })
+      });
+    });
+
+    res.status(200).json({
+      success: true,
+      count: menuItems.length,
+      data: menuItems
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get single menu item
+// @route   GET /api/menu-items/:id
+// @access  Public
+export const getMenuItem = async (req, res, next) => {
+  try {
+    const { id } = req.params;
     const doc = await db.collection('menuItems').doc(id).get();
 
     if (!doc.exists) {
       return next(new ErrorResponse(`Menu item not found with id of ${id}`, 404));
     }
 
-    // Delete image if exists
-    const menuItem = doc.data();
-    if (menuItem.image) {
-      const imagePath = path.join(process.cwd(), 'uploads', menuItem.image);
-      if (fs.existsSync(imagePath)) {
-        fs.unlinkSync(imagePath);
-      }
-    }
-
-    // Delete document
-    await db.collection('menuItems').doc(id).delete();
+    const menuItem = {
+      id: doc.id,
+      ...doc.data(),
+      ...(doc.data().image && { 
+        image: doc.data().image
+      })
+    };
 
     res.status(200).json({
       success: true,
-      data: {}
+      data: menuItem
     });
   } catch (error) {
     next(error);
@@ -296,7 +342,7 @@ export const getItemsByCategory = async (req, res, next) => {
         id: doc.id,
         ...doc.data(),
         ...(doc.data().image && { 
-          image: `${process.env.BASE_URL || 'http://localhost:5000'}/uploads/${doc.data().image.replace(/\\/g, '/')}` 
+          image: doc.data().image
         })
       });
     });
@@ -344,7 +390,7 @@ export const getItemsBySubCategory = async (req, res, next) => {
         id: doc.id,
         ...doc.data(),
         ...(doc.data().image && { 
-          image: `${process.env.BASE_URL || 'http://localhost:5000'}/uploads/${doc.data().image.replace(/\\/g, '/')}` 
+          image: doc.data().image
         })
       });
     });
@@ -382,7 +428,7 @@ export const getItemsByTag = async (req, res, next) => {
         id: doc.id,
         ...doc.data(),
         ...(doc.data().image && { 
-          image: `${process.env.BASE_URL || 'http://localhost:5000'}/uploads/${doc.data().image.replace(/\\/g, '/')}` 
+          image: doc.data().image
         })
       });
     });

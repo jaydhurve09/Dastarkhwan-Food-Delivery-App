@@ -359,7 +359,7 @@ const toggleBlockPartner = async (id) => {
                 <tr key={p.id}>
                   <td style={styles.td}>{p.name}</td>
                   <td style={styles.td}>{p.phone}</td>
-                  <td style={styles.td}>{p.vehicle.name} | {p.vehicle.number}</td>
+                  <td style={styles.td}>{p.vehicle?.name || 'N/A'} | {p.vehicle?.number || 'N/A'}</td>
                   <td style={styles.td}>{p.appliedDate}</td>
                   <td style={{ ...styles.td, color: "#2563eb" }}>
                     <button style={{...styles.btn, ...styles.btnView}} onClick={() => setPendingDetail(p)}>View</button>

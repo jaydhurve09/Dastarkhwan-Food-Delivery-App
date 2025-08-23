@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
+import { getStorage } from 'firebase-admin/storage';
 import dotenv from 'dotenv';
 
 // Load environment variables
@@ -35,6 +36,7 @@ try {
     firebaseApp = initializeApp({
       credential: cert(serviceAccount),
       databaseURL: process.env.FIREBASE_DATABASE_URL,
+      storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${serviceAccount.project_id}.appspot.com`,
     });
 
     console.log('✅ Firebase Admin initialized successfully');
@@ -68,5 +70,8 @@ testFirestoreConnection().catch(console.error);
 const auth = getAuth(firebaseApp);
 console.log('✅ Firebase Auth initialized');
 
+const storage = getStorage(firebaseApp);
+console.log('✅ Firebase Storage initialized');
+
 // Export initialized services
-export { firebaseApp as admin, db, auth, auth as adminAuth };
+export { firebaseApp as admin, db, auth, auth as adminAuth, storage };

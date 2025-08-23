@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { FaStar, FaEdit, FaTrash, FaPlus, FaUpload, FaCheck, FaTimes, FaMotorcycle } from 'react-icons/fa';
+import { MdOutlineRefresh } from "react-icons/md";
 import axios from 'axios';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -222,6 +223,49 @@ const RestaurantMonitoring = () => {
   const [isLoadingOrders, setIsLoadingOrders] = useState(true);
   const [isLoadingOngoing, setIsLoadingOngoing] = useState(true); // New loading state
   const [ordersError, setOrdersError] = useState(null);
+  
+  // Search state variables
+  const [incomingOrdersSearch, setIncomingOrdersSearch] = useState('');
+  const [ongoingOrdersSearch, setOngoingOrdersSearch] = useState('');
+
+  // Filter functions for search
+  const filteredIncomingOrders = incomingOrders.filter(order => {
+    if (!incomingOrdersSearch.trim()) return true;
+    
+    const searchTerm = incomingOrdersSearch.toLowerCase();
+    const orderId = (order.orderId || order.id || '').toString().toLowerCase();
+    const customerName = (order.userInfo?.display_name || order.userInfo?.name || '').toLowerCase();
+    const status = (order.orderStatus || '').toLowerCase();
+    const total = (order.orderValue || 0).toString();
+    const date = order.order_Date ? new Date(order.order_Date.seconds * 1000).toLocaleDateString().toLowerCase() : '';
+    const items = order.products ? order.products.map(p => (p.name || '').toLowerCase()).join(' ') : '';
+    
+    return orderId.includes(searchTerm) || 
+           customerName.includes(searchTerm) || 
+           status.includes(searchTerm) || 
+           total.includes(searchTerm) || 
+           date.includes(searchTerm) || 
+           items.includes(searchTerm);
+  });
+
+  const filteredOngoingOrders = ongoingOrders.filter(order => {
+    if (!ongoingOrdersSearch.trim()) return true;
+    
+    const searchTerm = ongoingOrdersSearch.toLowerCase();
+    const orderId = (order.orderId || order.id || '').toString().toLowerCase();
+    const customerName = (order.userInfo?.display_name || order.userInfo?.name || '').toLowerCase();
+    const status = (order.orderStatus || '').toLowerCase();
+    const total = (order.orderValue || 0).toString();
+    const date = order.order_Date ? new Date(order.order_Date.seconds * 1000).toLocaleDateString().toLowerCase() : '';
+    const items = order.products ? order.products.map(p => (p.name || '').toLowerCase()).join(' ') : '';
+    
+    return orderId.includes(searchTerm) || 
+           customerName.includes(searchTerm) || 
+           status.includes(searchTerm) || 
+           total.includes(searchTerm) || 
+           date.includes(searchTerm) || 
+           items.includes(searchTerm);
+  });
 
   // Fetch all orderedProduct documents from users subcollection
   const fetchYetToBeAcceptedOrders = async () => {
@@ -424,19 +468,6 @@ const RestaurantMonitoring = () => {
       return tag;
     });
 
-    // Prepare the request data
-    const menuItemData = {
-      name: formData.get('name'),
-      categoryId: formData.get('category'),
-      subCategory: subCategory,
-      isVeg: foodType === 'Veg' ? 'true' : 'false',
-      price: parseFloat(price) || 0, // Send price as a single number
-      description: formData.get('description') || '',
-      tags: formattedTags,
-      isActive: true,
-      addOns: hasSubDishes && currentSubDishes.length > 0 ? currentSubDishes : []
-    };
-
     // If category has subcategories but none is selected, show error
     if (selectedCategory?.subCategories?.length > 0 && !selectedSubCategory) {
       toast.error('Please select a subcategory', {
@@ -450,37 +481,51 @@ const RestaurantMonitoring = () => {
       return;
     }
 
+    // Prepare the request data
+    const requestFormData = new FormData();
+    requestFormData.append('name', formData.get('name'));
+    requestFormData.append('categoryId', formData.get('category'));
+    requestFormData.append('subCategory', subCategory);
+    requestFormData.append('isVeg', foodType === 'Veg' ? 'true' : 'false');
+    requestFormData.append('price', parseFloat(price) || 0);
+    requestFormData.append('description', formData.get('description') || '');
+    requestFormData.append('tags', JSON.stringify(formattedTags));
+    requestFormData.append('isActive', 'true');
+    
+    // Handle addOns properly - send as individual entries for FormData
+    const addOnsArray = hasSubDishes && currentSubDishes.length > 0 ? currentSubDishes : [];
+    addOnsArray.forEach((addOn, index) => {
+      requestFormData.append(`addOns[${index}][name]`, addOn.name);
+      requestFormData.append(`addOns[${index}][price]`, addOn.price);
+    });
+    
+    // Add image file if selected
+    const imageFile = formData.get('image');
+    if (imageFile && imageFile.size > 0) {
+      requestFormData.append('image', imageFile);
+    }
+
     try {
       let response;
       const headers = {
-        'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
+        // Don't set Content-Type - let browser set it with boundary for multipart/form-data
       };
 
       if (editingItem && editingItem.id) {
         // Update existing menu item
         response = await axios.put(
           `${API_BASE_URL}/menu-items/${editingItem.id}`,
-          menuItemData,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            }
-          }
+          requestFormData,
+          { headers }
         );
         toast.success('Menu item updated successfully!', { /* ... */ });
       } else {
         // Create new menu item
         response = await axios.post(
           `${API_BASE_URL}/menu-items`,
-          menuItemData,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            }
-          }
+          requestFormData,
+          { headers }
         );
 
         toast.success('Menu item added successfully!', {
@@ -660,28 +705,28 @@ const RestaurantMonitoring = () => {
   const [subDishPrice, setSubDishPrice] = useState('');
   const [foodType, setFoodType] = useState('Veg');
 
-  useEffect(() => {
-    if (editingItem) {
-      // Set the current subcategories based on the selected category
-      const selectedCategory = categories.find(cat => cat.id === editingItem.categoryId);
-      if (selectedCategory) {
-        setCurrentSubCategories(selectedCategory.subCategories || []);
+  // useEffect(() => {
+  //   if (editingItem) {
+  //     // Set the current subcategories based on the selected category
+  //     const selectedCategory = categories.find(cat => cat.id === editingItem.categoryId);
+  //     if (selectedCategory) {
+  //       setCurrentSubCategories(selectedCategory.subCategories || []);
         
-        // If the category has subcategories and the editing item has a subcategory, select it
-        if (selectedCategory.subCategories && selectedCategory.subCategories.length > 0 && editingItem.subCategory) {
-          setSelectedSubCategory(editingItem.subCategory);
-        }
-      } else {
-        // If no category is found (e.g., new item), ensure subcategories are reset
-        setCurrentSubCategories([]);
-        setSelectedSubCategory('');
-      }
-    } else {
-      // Reset when not editing
-      setCurrentSubCategories([]);
-      setSelectedSubCategory('');
-    }
-  }, [editingItem, categories]);
+  //       // If the category has subcategories and the editing item has a subcategory, select it
+  //       if (selectedCategory.subCategories && selectedCategory.subCategories.length > 0 && editingItem.subCategory) {
+  //         setSelectedSubCategory(editingItem.subCategory);
+  //       }
+  //     } else {
+  //       // If no category is found (e.g., new item), ensure subcategories are reset
+  //       setCurrentSubCategories([]);
+  //       setSelectedSubCategory('');
+  //     }
+  //   } else {
+  //     // Reset when not editing
+  //     setCurrentSubCategories([]);
+  //     setSelectedSubCategory('');
+  //   }
+  // }, [editingItem, categories]);
 
   useEffect(() => {
     if (editingItem) {
@@ -717,7 +762,7 @@ const RestaurantMonitoring = () => {
       setCurrentSubCategories([]);
       setSelectedSubCategory('');
     }
-  }, [editingItem, categories]);
+  }, [editingItem]);
 
   // Fetch orders on component mount
   useEffect(() => {
@@ -875,6 +920,17 @@ const RestaurantMonitoring = () => {
         items = Array.isArray(response.data.items) ? response.data.items : [];
       }
 
+      console.log('Fetched menu items:', items);
+      console.log('Available categories:', categories);
+      
+      // Log category matching for debugging
+      items.forEach(item => {
+        const matchedCategory = categories.find(cat => cat.id === item.categoryId);
+        if (!matchedCategory && item.categoryId) {
+          console.warn(`No category found for item "${item.name}" with categoryId: ${item.categoryId}`);
+        }
+      });
+
       setMenuItems(items || []);
     } catch (err) {
       console.error('Error fetching menu items:', err);
@@ -891,6 +947,65 @@ const RestaurantMonitoring = () => {
     fetchMenuItems();
   }, []);
 
+  const handleDeleteMenuItem = async (id) => {
+    try {
+      // Extract string ID from Firestore DocumentReference if needed
+      const itemId = typeof id === 'object' && id._path ? id._path.segments[id._path.segments.length - 1] : id;
+      console.log('Deleting menu item with ID:', itemId);
+      const token = localStorage.getItem('adminToken');
+      
+      if (!token) {
+        toast.error('Authentication token not found. Please login again.');
+        return;
+      }
+      
+      const response = await axios.delete(`${API_BASE_URL}/menu-items/${itemId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      console.log('Menu item deleted:', response);
+      toast.success('Menu item deleted successfully!');
+      setMenuItems(prevItems => prevItems.filter(item => {
+        const currentItemId = typeof item.id === 'object' && item.id._path ? item.id._path.segments[item.id._path.segments.length - 1] : item.id;
+        return currentItemId !== itemId;
+      }));
+    } catch (error) {
+      console.error('Error deleting menu item:', error);
+      console.error('Error response:', error.response?.data);
+      
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Failed to delete menu item';
+      toast.error(errorMessage);
+    }
+  };
+
+  const handleDeleteCategory = async (id) => {
+    try {
+      const response = await axios.delete(`${API_BASE_URL}/menu-categories/${id}`);
+      console.log('Category deleted:', response);
+      toast.success('Category deleted successfully!');
+      setCategories(prevCategories => prevCategories.filter(category => category.id !== id));
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      toast.error('Failed to delete category');
+    }
+  };
+
+  const handleEditCategory = (category) => {
+    setEditingCategory(category);
+    setNewCategory(category);
+    setCategoryModalOpen(true);
+  };
+
+  // Helper function to extract string ID from Firestore DocumentReference
+  const extractIdFromDocRef = (docRef) => {
+    if (typeof docRef === 'object' && docRef._path) {
+      return docRef._path.segments[docRef._path.segments.length - 1];
+    }
+    return docRef;
+  };
+
   const renderIncomingOrders = () => (
     <div style={{ ...styles.card, gridColumn: '1 / -1' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -903,11 +1018,34 @@ const RestaurantMonitoring = () => {
             color: 'white',
             display: 'flex',
             alignItems: 'center',
-            gap: '5px'
+            gap: '2px',
+            borderRadius: '60px',
           }}
         >
-          <span>🔄</span> Refresh
+          <MdOutlineRefresh size={20}/>
         </button>
+      </div>
+
+      {/* Search bar for incoming orders */}
+      <div style={{ marginBottom: '20px' }}>
+        <input
+          type="text"
+          placeholder="Search orders by ID, customer, items, total, date, or status..."
+          value={incomingOrdersSearch}
+          onChange={(e) => setIncomingOrdersSearch(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '12px 16px',
+            border: '1px solid #ddd',
+            borderRadius: '8px',
+            fontSize: '14px',
+            outline: 'none',
+            transition: 'border-color 0.3s',
+            boxSizing: 'border-box'
+          }}
+          onFocus={(e) => e.target.style.borderColor = '#3498db'}
+          onBlur={(e) => e.target.style.borderColor = '#ddd'}
+        />
       </div>
   
       {isLoadingOrders ? (
@@ -927,7 +1065,7 @@ const RestaurantMonitoring = () => {
               </tr>
             </thead>
             <tbody>
-              {incomingOrders.length === 0 ? (
+              {filteredIncomingOrders.length === 0 ? (
                 <tr>
                   <td colSpan="7" style={{ ...styles.td, textAlign: 'center', padding: '40px', color: '#666' }}>
                     {ordersError ? (
@@ -944,7 +1082,7 @@ const RestaurantMonitoring = () => {
                   </td>
                 </tr>
               ) : (
-                incomingOrders.map((order, index) => (
+                filteredIncomingOrders.map((order, index) => (
                   <tr key={`order-${order.id || index}`}>
                     <td style={styles.td}>
                       <div style={{ fontWeight: 'bold' }}>#{order.orderId || order.id}</div>
@@ -1074,11 +1212,34 @@ const RestaurantMonitoring = () => {
             color: 'white',
             display: 'flex',
             alignItems: 'center',
-            gap: '5px'
+            gap: '5px',
+            borderRadius: '60px',
           }}
         >
-          <span>🔄</span> Refresh
+          <MdOutlineRefresh size={20}/>
         </button>
+      </div>
+
+      {/* Search bar for ongoing orders */}
+      <div style={{ marginBottom: '20px' }}>
+        <input
+          type="text"
+          placeholder="Search orders by ID, customer, items, total, date, or status..."
+          value={ongoingOrdersSearch}
+          onChange={(e) => setOngoingOrdersSearch(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '12px 16px',
+            border: '1px solid #ddd',
+            borderRadius: '8px',
+            fontSize: '14px',
+            outline: 'none',
+            transition: 'border-color 0.3s',
+            boxSizing: 'border-box'
+          }}
+          onFocus={(e) => e.target.style.borderColor = '#3498db'}
+          onBlur={(e) => e.target.style.borderColor = '#ddd'}
+        />
       </div>
   
       {isLoadingOngoing ? (
@@ -1098,7 +1259,7 @@ const RestaurantMonitoring = () => {
               </tr>
             </thead>
             <tbody>
-              {ongoingOrders.length === 0 ? (
+              {filteredOngoingOrders.length === 0 ? (
                 <tr>
                   <td colSpan="7" style={{ ...styles.td, textAlign: 'center', padding: '40px', color: '#666' }}>
                     {ordersError ? (
@@ -1115,7 +1276,7 @@ const RestaurantMonitoring = () => {
                   </td>
                 </tr>
               ) : (
-                ongoingOrders.map((order, index) => (
+                filteredOngoingOrders.map((order, index) => (
                   <tr key={`order-${order.id || index}`}>
                     <td style={styles.td}>
                       <div style={{ fontWeight: 'bold' }}>#{order.orderId || order.id}</div>
@@ -1669,7 +1830,7 @@ const RestaurantMonitoring = () => {
               <div style={{ marginTop: '15px' }}>
                 {currentSubDishes.map((dish, index) => (
                   <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px', backgroundColor: '#f9f9f9', borderRadius: '4px', marginBottom: '5px' }}>
-                    <span>{dish.name} - ₹{dish.price.toFixed(2)}</span>
+                    <span>{dish.name} - ₹{(Number(dish.price) || 0).toFixed(2)}</span>
                     <button type="button" onClick={() => handleRemoveSubDish(index)} style={{ background: 'none', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: '1rem' }}>&times;</button>
                   </div>
                 ))}
@@ -1763,7 +1924,14 @@ const RestaurantMonitoring = () => {
                             <div style={{ fontSize: '0.8em', color: '#666' }}>{item.description || 'No description'}</div>
                           </td>
                           <td style={styles.tableCell}>
-                            {categories.find(cat => cat.id === item.categoryId)?.name || 'N/A'}
+                            {(() => {
+                              const category = categories.find(cat => cat.id === item.categoryId);
+                              if (category) {
+                                return category.name;
+                              }
+                              // Fallback: if categoryId doesn't match, show the categoryId or categoryName if available
+                              return item.categoryName || item.categoryId || 'Unknown Category';
+                            })()}
                           </td>
                           <td style={styles.tableCell}>₹{item.price ? parseFloat(item.price).toFixed(2) : '0.00'}</td>
                           <td style={styles.tableCell}>
@@ -1780,13 +1948,20 @@ const RestaurantMonitoring = () => {
                             <div style={{ display: 'flex', gap: '8px' }}>
                               <button
                                 onClick={() => {
-                                  setEditingItem(item);
+                                  // Extract string ID from DocumentReference if needed
+                                  const categoryId = extractIdFromDocRef(item.categoryId);
+                                  const category = categories.find(c => c.id === categoryId);
+                                  
+                                  setEditingItem({
+                                    ...item,
+                                    categoryId: categoryId // Store as string ID for form compatibility
+                                  });
                                   setImagePreview(item.image);
                                   setSelectedSubCategory(item.subCategory || '');
-                                  setCurrentSubCategories(categories.find(c => c.id === item.categoryId)?.subCategories || []);
-                                  setHasSubDishes(item.subDishes && item.subDishes.length > 0);
-                                  setCurrentSubDishes(item.subDishes || []);
-                                  setSelectedRecommendationTags(new Set(item.recommendation || []));
+                                  setCurrentSubCategories(category?.subCategories || []);
+                                  setHasSubDishes(item.addOns && item.addOns.length > 0);
+                                  setCurrentSubDishes(item.addOns || []);
+                                  setSelectedRecommendationTags(new Set(item.tags || []));
                                   setMenuModalOpen(true);
                                 }}
                                 style={getButtonStyle('#3498db')}
@@ -2039,7 +2214,10 @@ const RestaurantMonitoring = () => {
                                     padding: '6px 12px',
                                     display: 'inline-flex',
                                     alignItems: 'center',
-                                    gap: '5px'
+                                    justifyContent: 'center',
+                                    gap: '5px',
+                                    fontSize: '12px',
+                                    padding: '6px 12px'
                                   }}
                                   disabled={isLoading}
                                 >
@@ -2053,7 +2231,10 @@ const RestaurantMonitoring = () => {
                                     padding: '6px 12px',
                                     display: 'inline-flex',
                                     alignItems: 'center',
-                                    gap: '5px'
+                                    justifyContent: 'center',
+                                    gap: '5px',
+                                    fontSize: '12px',
+                                    padding: '6px 12px'
                                   }}
                                   disabled={isLoading}
                                 >

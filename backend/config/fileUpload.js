@@ -1,16 +1,8 @@
 import multer from 'multer';
 import path from 'path';
 
-// Configure storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/categories/');
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, 'category-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
+// Configure memory storage for Firebase Storage upload
+const storage = multer.memoryStorage();
 
 // File filter for images only
 const fileFilter = (req, file, cb) => {

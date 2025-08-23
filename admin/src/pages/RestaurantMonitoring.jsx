@@ -514,8 +514,9 @@ const RestaurantMonitoring = () => {
 
       if (editingItem && editingItem.id) {
         // Update existing menu item
+        const editingId = extractIdFromDocRef(editingItem.id);
         response = await axios.put(
-          `${API_BASE_URL}/menu-items/${editingItem.id}`,
+          `${API_BASE_URL}/menu-items/${editingId}`,
           requestFormData,
           { headers }
         );

@@ -43,14 +43,13 @@ const menuItemValidation = [
     .withMessage('addOns must be an array')
     .custom((addOns) => {
       if (!Array.isArray(addOns)) return false;
-      return addOns.every(addOn => 
-        addOn && 
-        typeof addOn === 'object' &&
-        typeof addOn.name === 'string' &&
-        addOn.name.trim() !== '' &&
-        typeof addOn.price === 'number' &&
-        addOn.price >= 0
-      );
+      return addOns.every(addOn => {
+        const hasValidName = addOn && typeof addOn === 'object' && typeof addOn.name === 'string' && addOn.name.trim() !== '';
+        const price = addOn?.price;
+        const parsed = typeof price === 'number' ? price : parseFloat(price);
+        const hasValidPrice = !Number.isNaN(parsed) && parsed >= 0;
+        return hasValidName && hasValidPrice;
+      });
     })
     .withMessage('Each add-on must have a name (string) and price (non-negative number)'),
     

@@ -23,118 +23,98 @@ app.get("/hello", (req, res) => {
 exports.autoAssignDeliveryPartner = functions.firestore
   .document('orders/{orderId}')
   .onUpdate(async (change, context) => {
-    const before = change.before.data();
-    const after = change.after.data();
-    const orderId = context.params.orderId;
+    try {
+      const beforeData = change.before.data();
+      const afterData = change.after.data();
+      const orderId = context.params.orderId;
 
-    // Check if the order status changed to "prepared"
-    if (before.orderStatus !== 'prepared' && after.orderStatus === 'prepared') {
-      console.log(`Order ${orderId} status changed to prepared. Starting auto-assignment...`);
-
-      try {
-        // Set assigningPartner to true to show loading state
-        await change.after.ref.update({
-          assigningPartner: true,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
+      // Check if order status changed to "prepared"
+      if (beforeData.orderStatus !== 'prepared' && afterData.orderStatus === 'prepared') {
+        console.log(`Order ${orderId} marked as prepared, starting auto-assignment...`);
 
         // Query for active delivery partners
-        const activePartnersSnapshot = await db.collection('deliveryPartners')
+        const partnersSnapshot = await admin.firestore()
+          .collection('deliveryPartners')
           .where('isActive', '==', true)
-          .limit(10) // Get up to 10 active partners
+          .limit(1)
           .get();
 
-        if (activePartnersSnapshot.empty) {
-          console.log(`No active delivery partners found for order ${orderId}`);
+        if (partnersSnapshot.empty) {
+          console.log('No active delivery partners found');
           
-          // Update order to indicate no partner available
+          // Update order to indicate no partners available
           await change.after.ref.update({
-            assigningPartner: false,
             assignmentError: 'No active delivery partners available',
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            updatedAt: new Date()
           });
-
+          
           return null;
         }
 
-        // For now, just pick the first available partner
-        // In a real system, you might want to implement logic for:
-        // - Partner location proximity
-        // - Partner current workload
-        // - Partner availability
-        const partners = activePartnersSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+        // Get the first available partner
+        const partnerDoc = partnersSnapshot.docs[0];
+        const partnerData = partnerDoc.data();
+        const partnerId = partnerDoc.id;
 
-        const selectedPartner = partners[0];
-        console.log(`Selected partner ${selectedPartner.id} (${selectedPartner.name || selectedPartner.displayName}) for order ${orderId}`);
+        console.log(`Assigning partner ${partnerId} (${partnerData.displayName || partnerData.name}) to order ${orderId}`);
 
-        // Update the order with assigned partner
-        const partnerAssignment = {
-          partnerId: selectedPartner.id,
-          name: selectedPartner.name || selectedPartner.displayName || 'Unknown',
-          phone: selectedPartner.phone || 'No phone'
-        };
+        // Create delivery partner reference
+        const deliveryPartnerRef = admin.firestore().collection('deliveryPartners').doc(partnerId);
 
+        // Update order with partner assignment
         await change.after.ref.update({
-          assigningPartner: false,
-          partnerAssigned: partnerAssignment,
+          deliveryPartnerRef: deliveryPartnerRef,
           orderStatus: 'partnerAssigned',
-          assignmentError: admin.firestore.FieldValue.delete(), // Remove any previous error
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          assignmentError: admin.firestore.FieldValue.delete(), // Remove any previous errors
+          updatedAt: new Date()
         });
 
-        console.log(`Successfully assigned partner ${selectedPartner.id} to order ${orderId}`);
-
         // Send FCM notification to the assigned partner
-        if (selectedPartner.fcmToken) {
-          try {
-            const notificationPayload = {
+        try {
+          if (partnerData.fcmToken) {
+            const message = {
               notification: {
                 title: 'New Order Assignment',
-                body: `You have been assigned order #${after.orderId || orderId}. Order value: ₹${after.orderValue || 'N/A'}`,
-                icon: 'https://your-app-icon-url.com/icon.png'
+                body: `You have been assigned order #${afterData.orderId || orderId}. Please check the app for details.`,
               },
               data: {
+                type: 'order_assignment',
                 orderId: orderId,
-                orderValue: String(after.orderValue || 0),
-                customerAddress: JSON.stringify(after.deliveryAddress || {}),
-                type: 'order_assignment'
-              }
+                orderNumber: afterData.orderId || orderId,
+                orderValue: (afterData.orderValue || 0).toString(),
+              },
+              token: partnerData.fcmToken,
             };
 
-            await admin.messaging().sendToDevice(selectedPartner.fcmToken, notificationPayload);
-            console.log(`FCM notification sent to partner ${selectedPartner.id} for order ${orderId}`);
-          } catch (fcmError) {
-            console.error(`Failed to send FCM notification to partner ${selectedPartner.id}:`, fcmError);
-            // Don't fail the assignment if notification fails
+            await admin.messaging().send(message);
+            console.log(`FCM notification sent to partner ${partnerId}`);
+          } else {
+            console.log(`No FCM token found for partner ${partnerId}`);
           }
-        } else {
-          console.log(`Partner ${selectedPartner.id} has no FCM token. Skipping notification.`);
+        } catch (notificationError) {
+          console.error('Error sending FCM notification:', notificationError);
+          // Don't fail the assignment if notification fails
         }
 
-        return null;
-
-      } catch (error) {
-        console.error(`Error auto-assigning delivery partner for order ${orderId}:`, error);
-        
-        // Reset assigningPartner flag and set error
-        try {
-          await change.after.ref.update({
-            assigningPartner: false,
-            assignmentError: `Assignment failed: ${error.message}`,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          });
-        } catch (updateError) {
-          console.error(`Failed to update order ${orderId} with error state:`, updateError);
-        }
-
-        return null;
+        console.log(`Successfully assigned partner ${partnerId} to order ${orderId}`);
       }
-    }
 
-    return null;
+      return null;
+    } catch (error) {
+      console.error('Error in autoAssignDeliveryPartner:', error);
+      
+      // Update order with error status
+      try {
+        await change.after.ref.update({
+          assignmentError: 'Failed to assign delivery partner automatically',
+          updatedAt: new Date()
+        });
+      } catch (updateError) {
+        console.error('Error updating order with assignment error:', updateError);
+      }
+      
+      return null;
+    }
   });
 
 // Cloud Function to log all order status changes for debugging

@@ -811,3 +811,73 @@ export const assignDeliveryPartnerToOrder = async (req, res) => {
     });
   }
 };
+
+const assignDeliveryPartner = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { partnerId } = req.body;
+
+    if (!partnerId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Delivery partner ID is required'
+      });
+    }
+
+    // Get order document
+    const orderDoc = await db.collection('orders').doc(orderId).get();
+    
+    if (!orderDoc.exists) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    // Verify delivery partner exists and is active
+    const partnerDoc = await db.collection('deliveryPartners').doc(partnerId).get();
+    
+    if (!partnerDoc.exists) {
+      return res.status(404).json({
+        success: false,
+        message: 'Delivery partner not found'
+      });
+    }
+
+    const partnerData = partnerDoc.data();
+    if (!partnerData.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: 'Delivery partner is not active'
+      });
+    }
+
+    // Create delivery partner reference
+    const deliveryPartnerRef = db.collection('deliveryPartners').doc(partnerId);
+
+    // Update order with delivery partner reference
+    await db.collection('orders').doc(orderId).update({
+      deliveryPartnerRef: deliveryPartnerRef,
+      orderStatus: 'partnerAssigned',
+      updatedAt: new Date()
+    });
+
+    res.json({
+      success: true,
+      message: 'Delivery partner assigned successfully',
+      data: {
+        orderId,
+        deliveryPartnerRef: partnerId,
+        orderStatus: 'partnerAssigned'
+      }
+    });
+
+  } catch (error) {
+    console.error('Error assigning delivery partner:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to assign delivery partner',
+      error: error.message
+    });
+  }
+};

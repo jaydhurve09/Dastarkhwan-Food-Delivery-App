@@ -1,0 +1,3148 @@
+import React, { useState, useEffect, useContext } from 'react';
+import { FaStar, FaEdit, FaTrash, FaPlus, FaUpload, FaCheck, FaTimes, FaMotorcycle } from 'react-icons/fa';
+import { MdOutlineRefresh } from "react-icons/md";
+import axios from 'axios';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { AdminContext } from '../contexts/adminContext';
+import api from '../config/axios';
+
+const API_BASE_URL = 'http://localhost:5000/api';
+
+// --- MOCK DATA ---
+const initialMenuItems = [
+  {
+    id: 1,
+    name: 'Margherita Pizza',
+    price: { full: 12.99 },
+    subCategory: 'Veg',
+    subDishes: [{ name: 'Extra Cheese', price: 120 }, { name: 'Olives', price: 60 }],
+    available: true,
+    category: 'Pizzas',
+    description: 'Classic pizza with mozzarella cheese and fresh basil.',
+    image: 'https://via.placeholder.com/150',
+    recommendation: ['recommended'] // Changed to array
+  },
+  {
+    id: 2,
+    name: 'Pepperoni Pizza',
+    price: { full: 14.99 },
+    tags: ['non-veg', 'spicy'],
+    available: true,
+    category: 'Pizzas',
+    description: 'Spicy pepperoni on a cheesy base.',
+    image: 'https://via.placeholder.com/150',
+    recommendation: ['mostLoved'] // Changed to array
+  },
+  {
+    id: 3,
+    name: 'Caesar Salad',
+    price: { full: 8.99 },
+    tags: ['veg', 'healthy'],
+    available: false,
+    category: 'Starters',
+    description: 'Fresh romaine lettuce with Caesar dressing.',
+    image: 'https://via.placeholder.com/150',
+    recommendation: [] // Changed to array (empty if none)
+  },
+  {
+    id: 4,
+    name: 'Chicken Biryani',
+    price: { full: 18.99 },
+    subCategory: 'Chicken',
+    available: true,
+    category: 'Biryani',
+    description: 'Fragrant basmati rice cooked with succulent chicken.',
+    image: 'https://via.placeholder.com/150',
+    recommendation: ['recommended', 'mostLoved'] // Both selected
+  },
+];
+
+const initialOrders = [
+  { id: '#1024', cartPrice: 1250, dishes: [{ name: 'Chicken Biryani', qty: 2 }, { name: 'Coke', qty: 2 }], location: '123 Main St, Anytown', status: 'Pending' },
+  { id: '#1025', cartPrice: 800, dishes: [{ name: 'Veg Pizza', qty: 1 }, { name: 'Garlic Bread', qty: 1 }], location: '456 Oak Ave, Sometown', status: 'Pending' },
+];
+
+const initialReviews = [
+  { id: 1, user: 'John Doe', rating: 4, comment: 'Great pizza, fast delivery!', date: '2024-07-20' },
+  { id: 2, user: 'Jane Smith', rating: 5, comment: 'The best pasta in town.', date: '2024-07-18' },
+];
+
+const initialHours = {
+  Monday: { open: '09:00', close: '22:00' },
+  Tuesday: { open: '09:00', close: '22:00' },
+  Wednesday: { open: '09:00', close: '22:00' },
+  Thursday: { open: '09:00', close: '22:00' },
+  Friday: { open: '09:00', close: '23:00' },
+  Saturday: { open: '10:00', close: '23:00' },
+  Sunday: { open: '10:00', close: '21:00' },
+};
+// --- END MOCK DATA ---
+
+// This component injects a <style> block to handle responsive design,
+// as media queries are not supported in React's inline styles.
+const ResponsiveStyles = () => (
+  <style>
+    {`
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+
+      .spin {
+        animation: spin 1s linear infinite;
+      }
+
+      @media (max-width: 768px) {
+        .responsive-grid-container {
+          grid-template-columns: 1fr !important;
+        }
+
+        .responsive-table thead {
+          display: none;
+        }
+
+        .responsive-table tbody {
+          display: block;
+        }
+
+        .responsive-table tr {
+          display: block;
+          margin-bottom: 1em;
+          border: 1px solid #ddd;
+          border-radius: 8px;
+          padding: 1em;
+        }
+
+        .responsive-table td {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          text-align: right;
+          border-bottom: 1px solid #eee;
+          padding: 12px 0;
+        }
+
+        .responsive-table td:last-child {
+          border-bottom: none;
+        }
+
+        .responsive-table .action-cell-container {
+          justify-content: flex-end;
+        }
+      }
+    `}
+  </style>
+);
+
+// Reusable Modal Component
+const Modal = ({ children, isOpen, onClose }) => {
+  if (!isOpen) return null;
+  const styles = {
+    overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' },
+    content: { backgroundColor: 'white', padding: '30px', borderRadius: '8px', width: '90%', maxWidth: '600px', position: 'relative', maxHeight: '90vh', overflowY: 'auto' },
+    closeButton: { position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', zIndex: 1 }
+  };
+  return (
+    <div style={styles.overlay} onClick={onClose}>
+      <div style={styles.content} onClick={e => e.stopPropagation()}>
+        <button style={styles.closeButton} onClick={onClose}>&times;</button>
+        {children}
+      </div>
+    </div>
+  );
+};
+
+const DEFAULT_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlZWVlZWUiLz48dGV4dCB4PSI1MCIgeT0iNTAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzk5OSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+';
+
+const RestaurantMonitoring = () => {
+  const { deliveryPartners, orders, users, fetchOrders, activeDeliveryPartners, fetchActiveDeliveryPartners } = useContext(AdminContext);
+  const [menuItems, setMenuItems] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [reviews] = useState(initialReviews);
+  const [operatingHours, setOperatingHours] = useState(initialHours);
+  const [isOnline, setIsOnline] = useState(true);
+
+  const [preparingOrders, setPreparingOrders] = useState([]);
+ 
+  const [profile, setProfile] = useState({
+    name: 'Dastarkhwan Restaurant',
+    deliveryTime: '30-45 min',
+    logo: null,
+  });
+
+  // State for delivery partner assignment
+  const [selectedPartners, setSelectedPartners] = useState({});
+  const [assigningOrders, setAssigningOrders] = useState(new Set());
+
+  // State for modals and forms
+  const [isMenuModalOpen, setMenuModalOpen] = useState(false);
+  const [isCategoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [newCategory, setNewCategory] = useState({
+    name: '',
+    isActive: true,
+    hasSubcategories: false,
+    subCategories: []
+  });
+  const [subCategoryInput, setSubCategoryInput] = useState('');
+  const [success, setSuccess] = useState('');
+
+  // Add state to track active section
+  const [activeSection, setActiveSection] = useState('menu'); // 'menu' or 'categories'
+
+  // Fetch categories on component mount
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  // Fetch all categories
+  const fetchCategories = async () => {
+    try {
+      setIsLoading(true);
+      setError('');
+      const token = localStorage.getItem('adminToken');
+      console.log('Fetching categories with token:', token);
+
+      const response = await axios.get(`${API_BASE_URL}/menu-categories`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
+      });
+
+      console.log('Categories API response:', response);
+
+      if (response.data && response.data.data) {
+        console.log('Setting categories:', response.data.data);
+        setCategories(response.data.data);
+      } else {
+        console.warn('Unexpected response format:', response.data);
+        setCategories([]);
+      }
+    } catch (err) {
+      console.error('Error in fetchCategories:', err);
+      console.error('Error response:', err.response);
+      setError('Failed to load categories. Please try again.');
+      setCategories([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Add these state variables near the top of your component with other state declarations
+  const [incomingOrders, setIncomingOrders] = useState([]);
+  const [ongoingOrders, setOngoingOrders] = useState([]); // New state for ongoing orders
+  const [isLoadingOrders, setIsLoadingOrders] = useState(true);
+  const [isLoadingOngoing, setIsLoadingOngoing] = useState(true); // New loading state
+  const [ordersError, setOrdersError] = useState(null);
+  
+  // Search state variables
+  const [incomingOrdersSearch, setIncomingOrdersSearch] = useState('');
+  const [ongoingOrdersSearch, setOngoingOrdersSearch] = useState('');
+  const [deliveryPartnerFilter, setDeliveryPartnerFilter] = useState('all'); // 'all', 'assigned', 'unassigned'
+
+  // Filter functions for search
+  const filteredIncomingOrders = incomingOrders.filter(order => {
+    if (!incomingOrdersSearch.trim()) return true;
+    
+    const searchTerm = incomingOrdersSearch.toLowerCase();
+    const orderId = (order.orderId || order.id || '').toString().toLowerCase();
+    const customerName = (order.userInfo?.display_name || order.userInfo?.name || '').toLowerCase();
+    const status = (order.orderStatus || '').toLowerCase();
+    const total = (order.orderValue || 0).toString();
+    const date = order.order_Date ? new Date(order.order_Date.seconds * 1000).toLocaleDateString().toLowerCase() : '';
+    const items = order.products ? order.products.map(p => (p.name || '').toLowerCase()).join(' ') : '';
+    
+    return orderId.includes(searchTerm) || 
+           customerName.includes(searchTerm) || 
+           status.includes(searchTerm) || 
+           total.includes(searchTerm) || 
+           date.includes(searchTerm) || 
+           items.includes(searchTerm);
+  });
+
+  const filteredOngoingOrders = ongoingOrders.filter(order => {
+    // Filter by delivery partner status
+    if (deliveryPartnerFilter === 'assigned' && !order.partnerAssigned) {
+      return false;
+    }
+    if (deliveryPartnerFilter === 'unassigned' && order.partnerAssigned) {
+      return false;
+    }
+    
+    // Filter by search term
+    if (!ongoingOrdersSearch.trim()) return true;
+    
+    const searchTerm = ongoingOrdersSearch.toLowerCase();
+    const orderId = (order.orderId || order.id || '').toString().toLowerCase();
+    const customerName = (order.userInfo?.display_name || order.userInfo?.name || '').toLowerCase();
+    const status = (order.orderStatus || '').toLowerCase();
+    const total = (order.orderValue || 0).toString();
+    const date = order.order_Date ? new Date(order.order_Date.seconds * 1000).toLocaleDateString().toLowerCase() : '';
+    const items = order.products ? order.products.map(p => (p.name || '').toLowerCase()).join(' ') : '';
+    const partnerName = order.partnerAssigned?.partnerName?.toLowerCase() || '';
+    
+    return orderId.includes(searchTerm) || 
+           customerName.includes(searchTerm) || 
+           status.includes(searchTerm) || 
+           total.includes(searchTerm) || 
+           date.includes(searchTerm) || 
+           items.includes(searchTerm) ||
+           partnerName.includes(searchTerm);
+  });
+
+  // Fetch all orderedProduct documents from users subcollection
+  const fetchYetToBeAcceptedOrders = async () => {
+    try {
+      setIsLoadingOrders(true);
+      setOrdersError(null);
+      
+      const response = await api.get('/orders/yet-to-be-accepted');
+      
+      if (response.data) {
+        console.log('Orders fetched:', response.data);
+        console.log('First order structure:', response.data[0]);
+        setIncomingOrders(response.data);
+      } else {
+        setIncomingOrders([]);
+      }
+    } catch (error) {
+      console.error('Error fetching orderedProduct documents:', error);
+      setOrdersError('Failed to fetch orders');
+      setIncomingOrders([]);
+      toast.error('Failed to fetch orders');
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  };
+
+  // Fetch ongoing orders from orders collection
+  const fetchOngoingOrders = async () => {
+    try {
+      setIsLoadingOngoing(true);
+      setOrdersError(null);
+      
+      const response = await api.get('/orders/ongoing');
+      
+      if (response.data) {
+        console.log('Ongoing orders fetched:', response.data);
+        setOngoingOrders(response.data);
+      } else {
+        setOngoingOrders([]);
+      }
+    } catch (error) {
+      console.error('Error fetching ongoing orders:', error);
+      setOrdersError('Failed to fetch ongoing orders');
+      setOngoingOrders([]);
+      toast.error('Failed to fetch ongoing orders');
+    } finally {
+      setIsLoadingOngoing(false);
+    }
+  };
+
+  // Handle order status update (static for now)
+  const handleUpdateOrderStatus = async (orderId, newStatus) => {
+    try {
+      console.log('Updating order status:', { orderId, newStatus });
+      // Use the correct endpoint for updating order status in Firebase orderedProducts subcollection
+      const response = await api.patch(`/ordered-products/admin/orders/${orderId}/status`, { status: newStatus });
+
+      // Update local state based on the status change
+      if (newStatus === 'preparing') {
+        // Move order from incoming to preparing list
+        const acceptedOrder = incomingOrders.find(order => order.id === orderId);
+        if (acceptedOrder) {
+          setPreparingOrders(prev => [...prev, { ...acceptedOrder, orderStatus: 'preparing' }]);
+        }
+        // Remove from incoming orders
+        setIncomingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+        toast.success('Order accepted and moved to preparing');
+      } else if (newStatus === 'prepared') {
+        // Remove from preparing orders when marked as prepared
+        setPreparingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+        toast.success('Order marked as prepared');
+      } else if (newStatus === 'declined') {
+        // Remove from both incoming and preparing orders when declined
+        setIncomingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+        setPreparingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+        toast.success('Order declined');
+      }
+
+      // Refresh both sections to ensure data consistency
+      await fetchYetToBeAcceptedOrders();
+      await fetchOngoingOrders();
+
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      toast.error('Failed to update order status');
+    }
+  };
+
+  // Handle order status update for ongoing orders (orders collection)
+  const handleOngoingOrderStatusUpdate = async (orderId, newStatus) => {
+    try {
+      console.log('Updating ongoing order status:', { orderId, newStatus });
+      
+      const response = await api.patch(`/orders/${orderId}/status`, { status: newStatus });
+
+      // Update local state based on the status change
+      if (newStatus === 'prepared') {
+        // Remove from ongoing orders when marked as prepared
+        setOngoingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+        toast.success('Order marked as prepared');
+      } else if (newStatus === 'declined') {
+        // Remove from ongoing orders when declined
+        setOngoingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+        toast.success('Order declined');
+      }
+
+      // Refresh both sections to ensure data consistency
+      await fetchYetToBeAcceptedOrders();
+      await fetchOngoingOrders();
+
+    } catch (error) {
+      console.error('Error updating ongoing order status:', error);
+      toast.error('Failed to update order status');
+    }
+  };
+
+  // Fetch orders on component mount
+  useEffect(() => {
+    fetchYetToBeAcceptedOrders();
+    fetchOngoingOrders();
+    fetchActiveDeliveryPartners();
+  }, []);
+
+  const handleSaveProfile = () => {
+    alert('Profile changes saved!');
+  };
+
+  // Handle delivery partner selection
+  const handlePartnerSelection = (orderId, partnerId) => {
+    setSelectedPartners(prev => ({
+      ...prev,
+      [orderId]: partnerId
+    }));
+  };
+
+  // Handle delivery partner assignment
+  const handleAssignPartner = async (orderId) => {
+    const partnerId = selectedPartners[orderId];
+    
+    if (!partnerId) {
+      toast.error('Please select a delivery partner first');
+      return;
+    }
+
+    const selectedPartner = activeDeliveryPartners.find(p => p.id === partnerId);
+    if (!selectedPartner) {
+      toast.error('Selected delivery partner not found');
+      return;
+    }
+
+    try {
+      setAssigningOrders(prev => new Set([...prev, orderId]));
+
+      const response = await api.patch(`/orders/${orderId}/assign-partner`, {
+        partnerId: partnerId
+      });
+
+      if (response.data.success) {
+        toast.success('Delivery partner assigned successfully');
+        // Refresh the orders to show updated status
+        await fetchOngoingOrders();
+        // Clear the selected partner for this order
+        setSelectedPartners(prev => {
+          const updated = { ...prev };
+          delete updated[orderId];
+          return updated;
+        });
+      } else {
+        throw new Error(response.data.message || 'Failed to assign partner');
+      }
+    } catch (error) {
+      console.error('Error assigning delivery partner:', error);
+      toast.error(error.response?.data?.message || 'Failed to assign delivery partner');
+    } finally {
+      setAssigningOrders(prev => {
+        const updated = new Set(prev);
+        updated.delete(orderId);
+        return updated;
+      });
+    }
+  };
+
+  // Enhanced component to display delivery partner info
+  const DeliveryPartnerDisplay = ({ order }) => {
+    const [partnerInfo, setPartnerInfo] = useState(null);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+      // Check if order has partnerAssigned status or deliveryPartnerRef
+      if (order.orderStatus === 'partnerAssigned' || order.deliveryPartnerRef) {
+        setLoading(true);
+        resolveDeliveryPartner(order.deliveryPartnerRef)
+          .then(info => {
+            setPartnerInfo(info);
+            setLoading(false);
+          })
+          .catch(() => {
+            setLoading(false);
+          });
+      }
+    }, [order.deliveryPartnerRef, order.orderStatus]);
+
+    if (loading) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#f8f9fa', 
+          borderRadius: '6px',
+          border: '1px solid #dee2e6'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="spinner" style={{ 
+              width: '16px', 
+              height: '16px', 
+              border: '2px solid #f3f3f3',
+              borderTop: '2px solid #3498db',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }}></div>
+            <span style={{ fontSize: '0.9em', color: '#6c757d' }}>
+              Loading partner info...
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    // If order status is partnerAssigned and we have partner info
+    if ((order.orderStatus === 'partnerAssigned' || order.deliveryPartnerRef) && partnerInfo) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#e8f5e8', 
+          borderRadius: '6px',
+          border: '1px solid #c3e6c3'
+        }}>
+          <div style={{ fontWeight: 'bold', fontSize: '0.9em', color: '#2d5f2d' }}>
+            {partnerInfo.displayName || partnerInfo.name || 'Unknown Partner'}
+          </div>
+          {partnerInfo.phone && (
+            <div style={{ fontSize: '0.8em', color: '#666', marginTop: '2px' }}>
+              📞 {partnerInfo.phone}
+            </div>
+          )}
+          {partnerInfo.vehicleInfo && (
+            <div style={{ fontSize: '0.8em', color: '#666', marginTop: '2px' }}>
+              🏍️ {partnerInfo.vehicleInfo.type || 'Vehicle'}: {partnerInfo.vehicleInfo.number || 'N/A'}
+            </div>
+          )}
+          <div style={{ fontSize: '0.75em', color: '#2d5f2d', marginTop: '4px' }}>
+            ✅ {order.orderStatus === 'partnerAssigned' ? 'Assigned' : 'Auto-assigned'}
+          </div>
+        </div>
+      );
+    }
+
+    // If order status is partnerAssigned but we couldn't load partner info
+    if (order.orderStatus === 'partnerAssigned' && !partnerInfo && !loading) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#fff3cd', 
+          borderRadius: '6px',
+          border: '1px solid #ffeaa7'
+        }}>
+          <div style={{ fontSize: '0.9em', color: '#856404', fontWeight: 'bold' }}>
+            ⚠️ Partner Assigned
+          </div>
+          <div style={{ fontSize: '0.8em', color: '#856404', marginTop: '2px' }}>
+            Unable to load partner details
+          </div>
+          <button
+            onClick={() => {
+              setLoading(true);
+              resolveDeliveryPartner(order.deliveryPartnerRef)
+                .then(info => {
+                  setPartnerInfo(info);
+                  setLoading(false);
+                })
+                .catch(() => {
+                  setLoading(false);
+                });
+            }}
+            style={{
+              marginTop: '4px',
+              padding: '2px 6px',
+              fontSize: '0.7em',
+              backgroundColor: '#f39c12',
+              color: 'white',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer'
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+
+    if (order.assignmentError) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#f8d7da', 
+          borderRadius: '6px',
+          border: '1px solid #f5c6cb'
+        }}>
+          <div style={{ fontSize: '0.9em', color: '#721c24', fontWeight: 'bold' }}>
+            Assignment Failed
+          </div>
+          <div style={{ fontSize: '0.8em', color: '#721c24', marginTop: '2px' }}>
+            {order.assignmentError}
+          </div>
+          {activeDeliveryPartners.length > 0 && (
+            <div style={{ marginTop: '8px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <select
+                value={selectedPartners[order.id] || ''}
+                onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '4px 6px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '0.8em',
+                  backgroundColor: 'white'
+                }}
+                disabled={assigningOrders.has(order.id)}
+              >
+                <option value="">Manual Assignment</option>
+                {activeDeliveryPartners.map(partner => (
+                  <option key={partner.id} value={partner.id}>
+                    {partner.displayName || partner.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => handleAssignPartner(order.id)}
+                disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
+                style={{
+                  padding: '4px 8px',
+                  backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '0.75em',
+                  cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (order.orderStatus === 'prepared') {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#d1ecf1', 
+          borderRadius: '6px',
+          border: '1px solid #bee5eb'
+        }}>
+          <div style={{ fontSize: '0.9em', color: '#0c5460', fontWeight: 'bold' }}>
+            ⏳ Awaiting Auto-Assignment
+          </div>
+          <div style={{ fontSize: '0.8em', color: '#0c5460', marginTop: '2px' }}>
+            Partner will be assigned automatically
+          </div>
+        </div>
+      );
+    }
+
+    // No partner assigned and manual assignment available
+    if (activeDeliveryPartners.length > 0) {
+      return (
+        <div>
+          <div style={{ 
+            padding: '6px 10px', 
+            backgroundColor: '#f8f9fa', 
+            borderRadius: '4px',
+            border: '1px solid #dee2e6',
+            marginBottom: '8px'
+          }}>
+            <span style={{ fontSize: '0.9em', color: '#6c757d' }}>
+              Not Assigned
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+            <select
+              value={selectedPartners[order.id] || ''}
+              onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+              style={{
+                flex: 1,
+                padding: '6px 8px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '0.85em',
+                backgroundColor: 'white'
+              }}
+              disabled={assigningOrders.has(order.id)}
+            >
+              <option value="">Select Partner</option>
+              {activeDeliveryPartners.map(partner => (
+                <option key={partner.id} value={partner.id}>
+                  {partner.displayName || partner.name} - {partner.phone || 'No phone'}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => handleAssignPartner(order.id)}
+              disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '0.8em',
+                cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ 
+        padding: '8px 12px', 
+        backgroundColor: '#fff3cd', 
+        borderRadius: '6px',
+        border: '1px solid #ffeaa7',
+        fontSize: '0.85em',
+        color: '#856404'
+      }}>
+        No Active Partners Available
+      </div>
+    );
+  };
+
+  // Function to resolve delivery partner info from reference - enhanced version
+  const resolveDeliveryPartner = async (deliveryPartnerRef) => {
+    if (!deliveryPartnerRef) return null;
+    
+    // Extract partner ID from reference
+    let partnerId;
+    if (typeof deliveryPartnerRef === 'string') {
+      // Handle string path like "deliveryPartners/partnerId"
+      const parts = deliveryPartnerRef.split('/');
+      partnerId = parts[parts.length - 1];
+    } else if (deliveryPartnerRef._path?.segments) {
+      // Handle Firestore DocumentReference object
+      const segments = deliveryPartnerRef._path.segments;
+      partnerId = segments[segments.length - 1];
+    } else if (deliveryPartnerRef.id) {
+      // Handle object with id property
+      partnerId = deliveryPartnerRef.id;
+    } else {
+      console.warn('Unable to extract partner ID from reference:', deliveryPartnerRef);
+      return null;
+    }
+
+    // Check cache first
+    if (deliveryPartnerCache[partnerId]) {
+      return deliveryPartnerCache[partnerId];
+    }
+
+    try {
+      const response = await api.get(`/delivery-partners/${partnerId}`);
+      
+      if (response.data.success && response.data.data) {
+        const partnerData = response.data.data;
+        
+        // Cache the result
+        setDeliveryPartnerCache(prev => ({
+          ...prev,
+          [partnerId]: partnerData
+        }));
+        
+        return partnerData;
+      } else {
+        console.warn('Partner data not found in API response:', response.data);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error resolving delivery partner:', error);
+      
+      // If API fails, try to find in activeDeliveryPartners cache
+      const cachedPartner = activeDeliveryPartners.find(p => p.id === partnerId);
+      if (cachedPartner) {
+        setDeliveryPartnerCache(prev => ({
+          ...prev,
+          [partnerId]: cachedPartner
+        }));
+        return cachedPartner;
+      }
+      
+      return null;
+    }
+  };
+
+  // Enhanced component to display delivery partner info
+  const DeliveryPartnerDisplay = ({ order }) => {
+    const [partnerInfo, setPartnerInfo] = useState(null);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+      // Check if order has partnerAssigned status or deliveryPartnerRef
+      if (order.orderStatus === 'partnerAssigned' || order.deliveryPartnerRef) {
+        setLoading(true);
+        resolveDeliveryPartner(order.deliveryPartnerRef)
+          .then(info => {
+            setPartnerInfo(info);
+            setLoading(false);
+          })
+          .catch(() => {
+            setLoading(false);
+          });
+      }
+    }, [order.deliveryPartnerRef, order.orderStatus]);
+
+    if (loading) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#f8f9fa', 
+          borderRadius: '6px',
+          border: '1px solid #dee2e6'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="spinner" style={{ 
+              width: '16px', 
+              height: '16px', 
+              border: '2px solid #f3f3f3',
+              borderTop: '2px solid #3498db',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }}></div>
+            <span style={{ fontSize: '0.9em', color: '#6c757d' }}>
+              Loading partner info...
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    // If order status is partnerAssigned and we have partner info
+    if ((order.orderStatus === 'partnerAssigned' || order.deliveryPartnerRef) && partnerInfo) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#e8f5e8', 
+          borderRadius: '6px',
+          border: '1px solid #c3e6c3'
+        }}>
+          <div style={{ fontWeight: 'bold', fontSize: '0.9em', color: '#2d5f2d' }}>
+            {partnerInfo.displayName || partnerInfo.name || 'Unknown Partner'}
+          </div>
+          {partnerInfo.phone && (
+            <div style={{ fontSize: '0.8em', color: '#666', marginTop: '2px' }}>
+              📞 {partnerInfo.phone}
+            </div>
+          )}
+          {partnerInfo.vehicleInfo && (
+            <div style={{ fontSize: '0.8em', color: '#666', marginTop: '2px' }}>
+              🏍️ {partnerInfo.vehicleInfo.type || 'Vehicle'}: {partnerInfo.vehicleInfo.number || 'N/A'}
+            </div>
+          )}
+          <div style={{ fontSize: '0.75em', color: '#2d5f2d', marginTop: '4px' }}>
+            ✅ {order.orderStatus === 'partnerAssigned' ? 'Assigned' : 'Auto-assigned'}
+          </div>
+        </div>
+      );
+    }
+
+    // If order status is partnerAssigned but we couldn't load partner info
+    if (order.orderStatus === 'partnerAssigned' && !partnerInfo && !loading) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#fff3cd', 
+          borderRadius: '6px',
+          border: '1px solid #ffeaa7'
+        }}>
+          <div style={{ fontSize: '0.9em', color: '#856404', fontWeight: 'bold' }}>
+            ⚠️ Partner Assigned
+          </div>
+          <div style={{ fontSize: '0.8em', color: '#856404', marginTop: '2px' }}>
+            Unable to load partner details
+          </div>
+          <button
+            onClick={() => {
+              setLoading(true);
+              resolveDeliveryPartner(order.deliveryPartnerRef)
+                .then(info => {
+                  setPartnerInfo(info);
+                  setLoading(false);
+                })
+                .catch(() => {
+                  setLoading(false);
+                });
+            }}
+            style={{
+              marginTop: '4px',
+              padding: '2px 6px',
+              fontSize: '0.7em',
+              backgroundColor: '#f39c12',
+              color: 'white',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer'
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+
+    if (order.assignmentError) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#f8d7da', 
+          borderRadius: '6px',
+          border: '1px solid #f5c6cb'
+        }}>
+          <div style={{ fontSize: '0.9em', color: '#721c24', fontWeight: 'bold' }}>
+            Assignment Failed
+          </div>
+          <div style={{ fontSize: '0.8em', color: '#721c24', marginTop: '2px' }}>
+            {order.assignmentError}
+          </div>
+          {activeDeliveryPartners.length > 0 && (
+            <div style={{ marginTop: '8px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <select
+                value={selectedPartners[order.id] || ''}
+                onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '4px 6px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '0.8em',
+                  backgroundColor: 'white'
+                }}
+                disabled={assigningOrders.has(order.id)}
+              >
+                <option value="">Manual Assignment</option>
+                {activeDeliveryPartners.map(partner => (
+                  <option key={partner.id} value={partner.id}>
+                    {partner.displayName || partner.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => handleAssignPartner(order.id)}
+                disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
+                style={{
+                  padding: '4px 8px',
+                  backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '0.75em',
+                  cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (order.orderStatus === 'prepared') {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#d1ecf1', 
+          borderRadius: '6px',
+          border: '1px solid #bee5eb'
+        }}>
+          <div style={{ fontSize: '0.9em', color: '#0c5460', fontWeight: 'bold' }}>
+            ⏳ Awaiting Auto-Assignment
+          </div>
+          <div style={{ fontSize: '0.8em', color: '#0c5460', marginTop: '2px' }}>
+            Partner will be assigned automatically
+          </div>
+        </div>
+      );
+    }
+
+    // No partner assigned and manual assignment available
+    if (activeDeliveryPartners.length > 0) {
+      return (
+        <div>
+          <div style={{ 
+            padding: '6px 10px', 
+            backgroundColor: '#f8f9fa', 
+            borderRadius: '4px',
+            border: '1px solid #dee2e6',
+            marginBottom: '8px'
+          }}>
+            <span style={{ fontSize: '0.9em', color: '#6c757d' }}>
+              Not Assigned
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+            <select
+              value={selectedPartners[order.id] || ''}
+              onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+              style={{
+                flex: 1,
+                padding: '6px 8px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '0.85em',
+                backgroundColor: 'white'
+              }}
+              disabled={assigningOrders.has(order.id)}
+            >
+              <option value="">Select Partner</option>
+              {activeDeliveryPartners.map(partner => (
+                <option key={partner.id} value={partner.id}>
+                  {partner.displayName || partner.name} - {partner.phone || 'No phone'}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => handleAssignPartner(order.id)}
+              disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '0.8em',
+                cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ 
+        padding: '8px 12px', 
+        backgroundColor: '#fff3cd', 
+        borderRadius: '6px',
+        border: '1px solid #ffeaa7',
+        fontSize: '0.85em',
+        color: '#856404'
+      }}>
+        No Active Partners Available
+      </div>
+    );
+  };
+
+  // Function to resolve delivery partner info from reference - enhanced version
+  const resolveDeliveryPartner = async (deliveryPartnerRef) => {
+    if (!deliveryPartnerRef) return null;
+    
+    // Extract partner ID from reference
+    let partnerId;
+    if (typeof deliveryPartnerRef === 'string') {
+      // Handle string path like "deliveryPartners/partnerId"
+      const parts = deliveryPartnerRef.split('/');
+      partnerId = parts[parts.length - 1];
+    } else if (deliveryPartnerRef._path?.segments) {
+      // Handle Firestore DocumentReference object
+      const segments = deliveryPartnerRef._path.segments;
+      partnerId = segments[segments.length - 1];
+    } else if (deliveryPartnerRef.id) {
+      // Handle object with id property
+      partnerId = deliveryPartnerRef.id;
+    } else {
+      console.warn('Unable to extract partner ID from reference:', deliveryPartnerRef);
+      return null;
+    }
+
+    // Check cache first
+    if (deliveryPartnerCache[partnerId]) {
+      return deliveryPartnerCache[partnerId];
+    }
+
+    try {
+      const response = await api.get(`/delivery-partners/${partnerId}`);
+      
+      if (response.data.success && response.data.data) {
+        const partnerData = response.data.data;
+        
+        // Cache the result
+        setDeliveryPartnerCache(prev => ({
+          ...prev,
+          [partnerId]: partnerData
+        }));
+        
+        return partnerData;
+      } else {
+        console.warn('Partner data not found in API response:', response.data);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error resolving delivery partner:', error);
+      
+      // If API fails, try to find in activeDeliveryPartners cache
+      const cachedPartner = activeDeliveryPartners.find(p => p.id === partnerId);
+      if (cachedPartner) {
+        setDeliveryPartnerCache(prev => ({
+          ...prev,
+          [partnerId]: cachedPartner
+        }));
+        return cachedPartner;
+      }
+      
+      return null;
+    }
+  };
+
+  // Enhanced component to display delivery partner info
+  const DeliveryPartnerDisplay = ({ order }) => {
+    const [partnerInfo, setPartnerInfo] = useState(null);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+      // Check if order has partnerAssigned status or deliveryPartnerRef
+      if (order.orderStatus === 'partnerAssigned' || order.deliveryPartnerRef) {
+        setLoading(true);
+        resolveDeliveryPartner(order.deliveryPartnerRef)
+          .then(info => {
+            setPartnerInfo(info);
+            setLoading(false);
+          })
+          .catch(() => {
+            setLoading(false);
+          });
+      }
+    }, [order.deliveryPartnerRef, order.orderStatus]);
+
+    if (loading) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#f8f9fa', 
+          borderRadius: '6px',
+          border: '1px solid #dee2e6'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="spinner" style={{ 
+              width: '16px', 
+              height: '16px', 
+              border: '2px solid #f3f3f3',
+              borderTop: '2px solid #3498db',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }}></div>
+            <span style={{ fontSize: '0.9em', color: '#6c757d' }}>
+              Loading partner info...
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    // If order status is partnerAssigned and we have partner info
+    if ((order.orderStatus === 'partnerAssigned' || order.deliveryPartnerRef) && partnerInfo) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#e8f5e8', 
+          borderRadius: '6px',
+          border: '1px solid #c3e6c3'
+        }}>
+          <div style={{ fontWeight: 'bold', fontSize: '0.9em', color: '#2d5f2d' }}>
+            {partnerInfo.displayName || partnerInfo.name || 'Unknown Partner'}
+          </div>
+          {partnerInfo.phone && (
+            <div style={{ fontSize: '0.8em', color: '#666', marginTop: '2px' }}>
+              📞 {partnerInfo.phone}
+            </div>
+          )}
+          {partnerInfo.vehicleInfo && (
+            <div style={{ fontSize: '0.8em', color: '#666', marginTop: '2px' }}>
+              🏍️ {partnerInfo.vehicleInfo.type || 'Vehicle'}: {partnerInfo.vehicleInfo.number || 'N/A'}
+            </div>
+          )}
+          <div style={{ fontSize: '0.75em', color: '#2d5f2d', marginTop: '4px' }}>
+            ✅ {order.orderStatus === 'partnerAssigned' ? 'Assigned' : 'Auto-assigned'}
+          </div>
+        </div>
+      );
+    }
+
+    // If order status is partnerAssigned but we couldn't load partner info
+    if (order.orderStatus === 'partnerAssigned' && !partnerInfo && !loading) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#fff3cd', 
+          borderRadius: '6px',
+          border: '1px solid #ffeaa7'
+        }}>
+          <div style={{ fontSize: '0.9em', color: '#856404', fontWeight: 'bold' }}>
+            ⚠️ Partner Assigned
+          </div>
+          <div style={{ fontSize: '0.8em', color: '#856404', marginTop: '2px' }}>
+            Unable to load partner details
+          </div>
+          <button
+            onClick={() => {
+              setLoading(true);
+              resolveDeliveryPartner(order.deliveryPartnerRef)
+                .then(info => {
+                  setPartnerInfo(info);
+                  setLoading(false);
+                })
+                .catch(() => {
+                  setLoading(false);
+                });
+            }}
+            style={{
+              marginTop: '4px',
+              padding: '2px 6px',
+              fontSize: '0.7em',
+              backgroundColor: '#f39c12',
+              color: 'white',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer'
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+
+    if (order.assignmentError) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#f8d7da', 
+          borderRadius: '6px',
+          border: '1px solid #f5c6cb'
+        }}>
+          <div style={{ fontSize: '0.9em', color: '#721c24', fontWeight: 'bold' }}>
+            Assignment Failed
+          </div>
+          <div style={{ fontSize: '0.8em', color: '#721c24', marginTop: '2px' }}>
+            {order.assignmentError}
+          </div>
+          {activeDeliveryPartners.length > 0 && (
+            <div style={{ marginTop: '8px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <select
+                value={selectedPartners[order.id] || ''}
+                onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '4px 6px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '0.8em',
+                  backgroundColor: 'white'
+                }}
+                disabled={assigningOrders.has(order.id)}
+              >
+                <option value="">Manual Assignment</option>
+                {activeDeliveryPartners.map(partner => (
+                  <option key={partner.id} value={partner.id}>
+                    {partner.displayName || partner.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => handleAssignPartner(order.id)}
+                disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
+                style={{
+                  padding: '4px 8px',
+                  backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '0.75em',
+                  cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (order.orderStatus === 'prepared') {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#d1ecf1', 
+          borderRadius: '6px',
+          border: '1px solid #bee5eb'
+        }}>
+          <div style={{ fontSize: '0.9em', color: '#0c5460', fontWeight: 'bold' }}>
+            ⏳ Awaiting Auto-Assignment
+          </div>
+          <div style={{ fontSize: '0.8em', color: '#0c5460', marginTop: '2px' }}>
+            Partner will be assigned automatically
+          </div>
+        </div>
+      );
+    }
+
+    // No partner assigned and manual assignment available
+    if (activeDeliveryPartners.length > 0) {
+      return (
+        <div>
+          <div style={{ 
+            padding: '6px 10px', 
+            backgroundColor: '#f8f9fa', 
+            borderRadius: '4px',
+            border: '1px solid #dee2e6',
+            marginBottom: '8px'
+          }}>
+            <span style={{ fontSize: '0.9em', color: '#6c757d' }}>
+              Not Assigned
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+            <select
+              value={selectedPartners[order.id] || ''}
+              onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+              style={{
+                flex: 1,
+                padding: '6px 8px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '0.85em',
+                backgroundColor: 'white'
+              }}
+              disabled={assigningOrders.has(order.id)}
+            >
+              <option value="">Select Partner</option>
+              {activeDeliveryPartners.map(partner => (
+                <option key={partner.id} value={partner.id}>
+                  {partner.displayName || partner.name} - {partner.phone || 'No phone'}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => handleAssignPartner(order.id)}
+              disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '0.8em',
+                cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ 
+        padding: '8px 12px', 
+        backgroundColor: '#fff3cd', 
+        borderRadius: '6px',
+        border: '1px solid #ffeaa7',
+        fontSize: '0.85em',
+        color: '#856404'
+      }}>
+        No Active Partners Available
+      </div>
+    );
+  };
+
+  // Function to resolve delivery partner info from reference - enhanced version
+  const resolveDeliveryPartner = async (deliveryPartnerRef) => {
+    if (!deliveryPartnerRef) return null;
+    
+    // Extract partner ID from reference
+    let partnerId;
+    if (typeof deliveryPartnerRef === 'string') {
+      // Handle string path like "deliveryPartners/partnerId"
+      const parts = deliveryPartnerRef.split('/');
+      partnerId = parts[parts.length - 1];
+    } else if (deliveryPartnerRef._path?.segments) {
+      // Handle Firestore DocumentReference object
+      const segments = deliveryPartnerRef._path.segments;
+      partnerId = segments[segments.length - 1];
+    } else if (deliveryPartnerRef.id) {
+      // Handle object with id property
+      partnerId = deliveryPartnerRef.id;
+    } else {
+      console.warn('Unable to extract partner ID from reference:', deliveryPartnerRef);
+      return null;
+    }
+
+    // Check cache first
+    if (deliveryPartnerCache[partnerId]) {
+      return deliveryPartnerCache[partnerId];
+    }
+
+    try {
+      const response = await api.get(`/delivery-partners/${partnerId}`);
+      
+      if (response.data.success && response.data.data) {
+        const partnerData = response.data.data;
+        
+        // Cache the result
+        setDeliveryPartnerCache(prev => ({
+          ...prev,
+          [partnerId]: partnerData
+        }));
+        
+        return partnerData;
+      } else {
+        console.warn('Partner data not found in API response:', response.data);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error resolving delivery partner:', error);
+      
+      // If API fails, try to find in activeDeliveryPartners cache
+      const cachedPartner = activeDeliveryPartners.find(p => p.id === partnerId);
+      if (cachedPartner) {
+        setDeliveryPartnerCache(prev => ({
+          ...prev,
+          [partnerId]: cachedPartner
+        }));
+        return cachedPartner;
+      }
+      
+      return null;
+    }
+  };
+
+  // Enhanced component to display delivery partner info
+  const DeliveryPartnerDisplay = ({ order }) => {
+    const [partnerInfo, setPartnerInfo] = useState(null);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+      // Check if order has partnerAssigned status or deliveryPartnerRef
+      if (order.orderStatus === 'partnerAssigned' || order.deliveryPartnerRef) {
+        setLoading(true);
+        resolveDeliveryPartner(order.deliveryPartnerRef)
+          .then(info => {
+            setPartnerInfo(info);
+            setLoading(false);
+          })
+          .catch(() => {
+            setLoading(false);
+          });
+      }
+    }, [order.deliveryPartnerRef, order.orderStatus]);
+
+    if (loading) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#f8f9fa', 
+          borderRadius: '6px',
+          border: '1px solid #dee2e6'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="spinner" style={{ 
+              width: '16px', 
+              height: '16px', 
+              border: '2px solid #f3f3f3',
+              borderTop: '2px solid #3498db',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }}></div>
+            <span style={{ fontSize: '0.9em', color: '#6c757d' }}>
+              Loading partner info...
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    // If order status is partnerAssigned and we have partner info
+    if ((order.orderStatus === 'partnerAssigned' || order.deliveryPartnerRef) && partnerInfo) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#e8f5e8', 
+          borderRadius: '6px',
+          border: '1px solid #c3e6c3'
+        }}>
+          <div style={{ fontWeight: 'bold', fontSize: '0.9em', color: '#2d5f2d' }}>
+            {partnerInfo.displayName || partnerInfo.name || 'Unknown Partner'}
+          </div>
+          {partnerInfo.phone && (
+            <div style={{ fontSize: '0.8em', color: '#666', marginTop: '2px' }}>
+              📞 {partnerInfo.phone}
+            </div>
+          )}
+          {partnerInfo.vehicleInfo && (
+            <div style={{ fontSize: '0.8em', color: '#666', marginTop: '2px' }}>
+              🏍️ {partnerInfo.vehicleInfo.type || 'Vehicle'}: {partnerInfo.vehicleInfo.number || 'N/A'}
+            </div>
+          )}
+          <div style={{ fontSize: '0.75em', color: '#2d5f2d', marginTop: '4px' }}>
+            ✅ {order.orderStatus === 'partnerAssigned' ? 'Assigned' : 'Auto-assigned'}
+          </div>
+        </div>
+      );
+    }
+
+    // If order status is partnerAssigned but we couldn't load partner info
+    if (order.orderStatus === 'partnerAssigned' && !partnerInfo && !loading) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#fff3cd', 
+          borderRadius: '6px',
+          border: '1px solid #ffeaa7'
+        }}>
+          <div style={{ fontSize: '0.9em', color: '#856404', fontWeight: 'bold' }}>
+            ⚠️ Partner Assigned
+          </div>
+          <div style={{ fontSize: '0.8em', color: '#856404', marginTop: '2px' }}>
+            Unable to load partner details
+          </div>
+          <button
+            onClick={() => {
+              setLoading(true);
+              resolveDeliveryPartner(order.deliveryPartnerRef)
+                .then(info => {
+                  setPartnerInfo(info);
+                  setLoading(false);
+                })
+                .catch(() => {
+                  setLoading(false);
+                });
+            }}
+            style={{
+              marginTop: '4px',
+              padding: '2px 6px',
+              fontSize: '0.7em',
+              backgroundColor: '#f39c12',
+              color: 'white',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer'
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+
+    if (order.assignmentError) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#f8d7da', 
+          borderRadius: '6px',
+          border: '1px solid #f5c6cb'
+        }}>
+          <div style={{ fontSize: '0.9em', color: '#721c24', fontWeight: 'bold' }}>
+            Assignment Failed
+          </div>
+          <div style={{ fontSize: '0.8em', color: '#721c24', marginTop: '2px' }}>
+            {order.assignmentError}
+          </div>
+          {activeDeliveryPartners.length > 0 && (
+            <div style={{ marginTop: '8px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <select
+                value={selectedPartners[order.id] || ''}
+                onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '4px 6px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '0.8em',
+                  backgroundColor: 'white'
+                }}
+                disabled={assigningOrders.has(order.id)}
+              >
+                <option value="">Manual Assignment</option>
+                {activeDeliveryPartners.map(partner => (
+                  <option key={partner.id} value={partner.id}>
+                    {partner.displayName || partner.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => handleAssignPartner(order.id)}
+                disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
+                style={{
+                  padding: '4px 8px',
+                  backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '0.75em',
+                  cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (order.orderStatus === 'prepared') {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#d1ecf1', 
+          borderRadius: '6px',
+          border: '1px solid #bee5eb'
+        }}>
+          <div style={{ fontSize: '0.9em', color: '#0c5460', fontWeight: 'bold' }}>
+            ⏳ Awaiting Auto-Assignment
+          </div>
+          <div style={{ fontSize: '0.8em', color: '#0c5460', marginTop: '2px' }}>
+            Partner will be assigned automatically
+          </div>
+        </div>
+      );
+    }
+
+    // No partner assigned and manual assignment available
+    if (activeDeliveryPartners.length > 0) {
+      return (
+        <div>
+          <div style={{ 
+            padding: '6px 10px', 
+            backgroundColor: '#f8f9fa', 
+            borderRadius: '4px',
+            border: '1px solid #dee2e6',
+            marginBottom: '8px'
+          }}>
+            <span style={{ fontSize: '0.9em', color: '#6c757d' }}>
+              Not Assigned
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+            <select
+              value={selectedPartners[order.id] || ''}
+              onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+              style={{
+                flex: 1,
+                padding: '6px 8px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '0.85em',
+                backgroundColor: 'white'
+              }}
+              disabled={assigningOrders.has(order.id)}
+            >
+              <option value="">Select Partner</option>
+              {activeDeliveryPartners.map(partner => (
+                <option key={partner.id} value={partner.id}>
+                  {partner.displayName || partner.name} - {partner.phone || 'No phone'}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => handleAssignPartner(order.id)}
+              disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '0.8em',
+                cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ 
+        padding: '8px 12px', 
+        backgroundColor: '#fff3cd', 
+        borderRadius: '6px',
+        border: '1px solid #ffeaa7',
+        fontSize: '0.85em',
+        color: '#856404'
+      }}>
+        No Active Partners Available
+      </div>
+    );
+  };
+
+  // Function to resolve delivery partner info from reference - enhanced version
+  const resolveDeliveryPartner = async (deliveryPartnerRef) => {
+    if (!deliveryPartnerRef) return null;
+    
+    // Extract partner ID from reference
+    let partnerId;
+    if (typeof deliveryPartnerRef === 'string') {
+      // Handle string path like "deliveryPartners/partnerId"
+      const parts = deliveryPartnerRef.split('/');
+      partnerId = parts[parts.length - 1];
+    } else if (deliveryPartnerRef._path?.segments) {
+      // Handle Firestore DocumentReference object
+      const segments = deliveryPartnerRef._path.segments;
+      partnerId = segments[segments.length - 1];
+    } else if (deliveryPartnerRef.id) {
+      // Handle object with id property
+      partnerId = deliveryPartnerRef.id;
+    } else {
+      console.warn('Unable to extract partner ID from reference:', deliveryPartnerRef);
+      return null;
+    }
+
+    // Check cache first
+    if (deliveryPartnerCache[partnerId]) {
+      return deliveryPartnerCache[partnerId];
+    }
+
+    try {
+      const response = await api.get(`/delivery-partners/${partnerId}`);
+      
+      if (response.data.success && response.data.data) {
+        const partnerData = response.data.data;
+        
+        // Cache the result
+        setDeliveryPartnerCache(prev => ({
+          ...prev,
+          [partnerId]: partnerData
+        }));
+        
+        return partnerData;
+      } else {
+        console.warn('Partner data not found in API response:', response.data);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error resolving delivery partner:', error);
+      
+      // If API fails, try to find in activeDeliveryPartners cache
+      const cachedPartner = activeDeliveryPartners.find(p => p.id === partnerId);
+      if (cachedPartner) {
+        setDeliveryPartnerCache(prev => ({
+          ...prev,
+          [partnerId]: cachedPartner
+        }));
+        return cachedPartner;
+      }
+      
+      return null;
+    }
+  };
+
+  // Enhanced component to display delivery partner info
+  const DeliveryPartnerDisplay = ({ order }) => {
+    const [partnerInfo, setPartnerInfo] = useState(null);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+      // Check if order has partnerAssigned status or deliveryPartnerRef
+      if (order.orderStatus === 'partnerAssigned' || order.deliveryPartnerRef) {
+        setLoading(true);
+        resolveDeliveryPartner(order.deliveryPartnerRef)
+          .then(info => {
+            setPartnerInfo(info);
+            setLoading(false);
+          })
+          .catch(() => {
+            setLoading(false);
+          });
+      }
+    }, [order.deliveryPartnerRef, order.orderStatus]);
+
+    if (loading) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#f8f9fa', 
+          borderRadius: '6px',
+          border: '1px solid #dee2e6'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="spinner" style={{ 
+              width: '16px', 
+              height: '16px', 
+              border: '2px solid #f3f3f3',
+              borderTop: '2px solid #3498db',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }}></div>
+            <span style={{ fontSize: '0.9em', color: '#6c757d' }}>
+              Loading partner info...
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    // If order status is partnerAssigned and we have partner info
+    if ((order.orderStatus === 'partnerAssigned' || order.deliveryPartnerRef) && partnerInfo) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#e8f5e8', 
+          borderRadius: '6px',
+          border: '1px solid #c3e6c3'
+        }}>
+          <div style={{ fontWeight: 'bold', fontSize: '0.9em', color: '#2d5f2d' }}>
+            {partnerInfo.displayName || partnerInfo.name || 'Unknown Partner'}
+          </div>
+          {partnerInfo.phone && (
+            <div style={{ fontSize: '0.8em', color: '#666', marginTop: '2px' }}>
+              📞 {partnerInfo.phone}
+            </div>
+          )}
+          {partnerInfo.vehicleInfo && (
+            <div style={{ fontSize: '0.8em', color: '#666', marginTop: '2px' }}>
+              🏍️ {partnerInfo.vehicleInfo.type || 'Vehicle'}: {partnerInfo.vehicleInfo.number || 'N/A'}
+            </div>
+          )}
+          <div style={{ fontSize: '0.75em', color: '#2d5f2d', marginTop: '4px' }}>
+            ✅ {order.orderStatus === 'partnerAssigned' ? 'Assigned' : 'Auto-assigned'}
+          </div>
+        </div>
+      );
+    }
+
+    // If order status is partnerAssigned but we couldn't load partner info
+    if (order.orderStatus === 'partnerAssigned' && !partnerInfo && !loading) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#fff3cd', 
+          borderRadius: '6px',
+          border: '1px solid #ffeaa7'
+        }}>
+          <div style={{ fontSize: '0.9em', color: '#856404', fontWeight: 'bold' }}>
+            ⚠️ Partner Assigned
+          </div>
+          <div style={{ fontSize: '0.8em', color: '#856404', marginTop: '2px' }}>
+            Unable to load partner details
+          </div>
+          <button
+            onClick={() => {
+              setLoading(true);
+              resolveDeliveryPartner(order.deliveryPartnerRef)
+                .then(info => {
+                  setPartnerInfo(info);
+                  setLoading(false);
+                })
+                .catch(() => {
+                  setLoading(false);
+                });
+            }}
+            style={{
+              marginTop: '4px',
+              padding: '2px 6px',
+              fontSize: '0.7em',
+              backgroundColor: '#f39c12',
+              color: 'white',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer'
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+
+    if (order.assignmentError) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#f8d7da', 
+          borderRadius: '6px',
+          border: '1px solid #f5c6cb'
+        }}>
+          <div style={{ fontSize: '0.9em', color: '#721c24', fontWeight: 'bold' }}>
+            Assignment Failed
+          </div>
+          <div style={{ fontSize: '0.8em', color: '#721c24', marginTop: '2px' }}>
+            {order.assignmentError}
+          </div>
+          {activeDeliveryPartners.length > 0 && (
+            <div style={{ marginTop: '8px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <select
+                value={selectedPartners[order.id] || ''}
+                onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '4px 6px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '0.8em',
+                  backgroundColor: 'white'
+                }}
+                disabled={assigningOrders.has(order.id)}
+              >
+                <option value="">Manual Assignment</option>
+                {activeDeliveryPartners.map(partner => (
+                  <option key={partner.id} value={partner.id}>
+                    {partner.displayName || partner.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => handleAssignPartner(order.id)}
+                disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
+                style={{
+                  padding: '4px 8px',
+                  backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '0.75em',
+                  cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (order.orderStatus === 'prepared') {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#d1ecf1', 
+          borderRadius: '6px',
+          border: '1px solid #bee5eb'
+        }}>
+          <div style={{ fontSize: '0.9em', color: '#0c5460', fontWeight: 'bold' }}>
+            ⏳ Awaiting Auto-Assignment
+          </div>
+          <div style={{ fontSize: '0.8em', color: '#0c5460', marginTop: '2px' }}>
+            Partner will be assigned automatically
+          </div>
+        </div>
+      );
+    }
+
+    // No partner assigned and manual assignment available
+    if (activeDeliveryPartners.length > 0) {
+      return (
+        <div>
+          <div style={{ 
+            padding: '6px 10px', 
+            backgroundColor: '#f8f9fa', 
+            borderRadius: '4px',
+            border: '1px solid #dee2e6',
+            marginBottom: '8px'
+          }}>
+            <span style={{ fontSize: '0.9em', color: '#6c757d' }}>
+              Not Assigned
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+            <select
+              value={selectedPartners[order.id] || ''}
+              onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+              style={{
+                flex: 1,
+                padding: '6px 8px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '0.85em',
+                backgroundColor: 'white'
+              }}
+              disabled={assigningOrders.has(order.id)}
+            >
+              <option value="">Select Partner</option>
+              {activeDeliveryPartners.map(partner => (
+                <option key={partner.id} value={partner.id}>
+                  {partner.displayName || partner.name} - {partner.phone || 'No phone'}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => handleAssignPartner(order.id)}
+              disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '0.8em',
+                cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ 
+        padding: '8px 12px', 
+        backgroundColor: '#fff3cd', 
+        borderRadius: '6px',
+        border: '1px solid #ffeaa7',
+        fontSize: '0.85em',
+        color: '#856404'
+      }}>
+        No Active Partners Available
+      </div>
+    );
+  };
+
+  // Function to resolve delivery partner info from reference - enhanced version
+  const resolveDeliveryPartner = async (deliveryPartnerRef) => {
+    if (!deliveryPartnerRef) return null;
+    
+    // Extract partner ID from reference
+    let partnerId;
+    if (typeof deliveryPartnerRef === 'string') {
+      // Handle string path like "deliveryPartners/partnerId"
+      const parts = deliveryPartnerRef.split('/');
+      partnerId = parts[parts.length - 1];
+    } else if (deliveryPartnerRef._path?.segments) {
+      // Handle Firestore DocumentReference object
+      const segments = deliveryPartnerRef._path.segments;
+      partnerId = segments[segments.length - 1];
+    } else if (deliveryPartnerRef.id) {
+      // Handle object with id property
+      partnerId = deliveryPartnerRef.id;
+    } else {
+      console.warn('Unable to extract partner ID from reference:', deliveryPartnerRef);
+      return null;
+    }
+
+    // Check cache first
+    if (deliveryPartnerCache[partnerId]) {
+      return deliveryPartnerCache[partnerId];
+    }
+
+    try {
+      const response = await api.get(`/delivery-partners/${partnerId}`);
+      
+      if (response.data.success && response.data.data) {
+        const partnerData = response.data.data;
+        
+        // Cache the result
+        setDeliveryPartnerCache(prev => ({
+          ...prev,
+          [partnerId]: partnerData
+        }));
+        
+        return partnerData;
+      } else {
+        console.warn('Partner data not found in API response:', response.data);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error resolving delivery partner:', error);
+      
+      // If API fails, try to find in activeDeliveryPartners cache
+      const cachedPartner = activeDeliveryPartners.find(p => p.id === partnerId);
+      if (cachedPartner) {
+        setDeliveryPartnerCache(prev => ({
+          ...prev,
+          [partnerId]: cachedPartner
+        }));
+        return cachedPartner;
+      }
+      
+      return null;
+    }
+  };
+
+  // Enhanced component to display delivery partner info
+  const DeliveryPartnerDisplay = ({ order }) => {
+    const [partnerInfo, setPartnerInfo] = useState(null);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+      // Check if order has partnerAssigned status or deliveryPartnerRef
+      if (order.orderStatus === 'partnerAssigned' || order.deliveryPartnerRef) {
+        setLoading(true);
+        resolveDeliveryPartner(order.deliveryPartnerRef)
+          .then(info => {
+            setPartnerInfo(info);
+            setLoading(false);
+          })
+          .catch(() => {
+            setLoading(false);
+          });
+      }
+    }, [order.deliveryPartnerRef, order.orderStatus]);
+
+    if (loading) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#f8f9fa', 
+          borderRadius: '6px',
+          border: '1px solid #dee2e6'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="spinner" style={{ 
+              width: '16px', 
+              height: '16px', 
+              border: '2px solid #f3f3f3',
+              borderTop: '2px solid #3498db',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }}></div>
+            <span style={{ fontSize: '0.9em', color: '#6c757d' }}>
+              Loading partner info...
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    // If order status is partnerAssigned and we have partner info
+    if ((order.orderStatus === 'partnerAssigned' || order.deliveryPartnerRef) && partnerInfo) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#e8f5e8', 
+          borderRadius: '6px',
+          border: '1px solid #c3e6c3'
+        }}>
+          <div style={{ fontWeight: 'bold', fontSize: '0.9em', color: '#2d5f2d' }}>
+            {partnerInfo.displayName || partnerInfo.name || 'Unknown Partner'}
+          </div>
+          {partnerInfo.phone && (
+            <div style={{ fontSize: '0.8em', color: '#666', marginTop: '2px' }}>
+              📞 {partnerInfo.phone}
+            </div>
+          )}
+          {partnerInfo.vehicleInfo && (
+            <div style={{ fontSize: '0.8em', color: '#666', marginTop: '2px' }}>
+              🏍️ {partnerInfo.vehicleInfo.type || 'Vehicle'}: {partnerInfo.vehicleInfo.number || 'N/A'}
+            </div>
+          )}
+          <div style={{ fontSize: '0.75em', color: '#2d5f2d', marginTop: '4px' }}>
+            ✅ {order.orderStatus === 'partnerAssigned' ? 'Assigned' : 'Auto-assigned'}
+          </div>
+        </div>
+      );
+    }
+
+    // If order status is partnerAssigned but we couldn't load partner info
+    if (order.orderStatus === 'partnerAssigned' && !partnerInfo && !loading) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#fff3cd', 
+          borderRadius: '6px',
+          border: '1px solid #ffeaa7'
+        }}>
+          <div style={{ fontSize: '0.9em', color: '#856404', fontWeight: 'bold' }}>
+            ⚠️ Partner Assigned
+          </div>
+          <div style={{ fontSize: '0.8em', color: '#856404', marginTop: '2px' }}>
+            Unable to load partner details
+          </div>
+          <button
+            onClick={() => {
+              setLoading(true);
+              resolveDeliveryPartner(order.deliveryPartnerRef)
+                .then(info => {
+                  setPartnerInfo(info);
+                  setLoading(false);
+                })
+                .catch(() => {
+                  setLoading(false);
+                });
+            }}
+            style={{
+              marginTop: '4px',
+              padding: '2px 6px',
+              fontSize: '0.7em',
+              backgroundColor: '#f39c12',
+              color: 'white',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer'
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+
+    if (order.assignmentError) {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#f8d7da', 
+          borderRadius: '6px',
+          border: '1px solid #f5c6cb'
+        }}>
+          <div style={{ fontSize: '0.9em', color: '#721c24', fontWeight: 'bold' }}>
+            Assignment Failed
+          </div>
+          <div style={{ fontSize: '0.8em', color: '#721c24', marginTop: '2px' }}>
+            {order.assignmentError}
+          </div>
+          {activeDeliveryPartners.length > 0 && (
+            <div style={{ marginTop: '8px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <select
+                value={selectedPartners[order.id] || ''}
+                onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '4px 6px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '0.8em',
+                  backgroundColor: 'white'
+                }}
+                disabled={assigningOrders.has(order.id)}
+              >
+                <option value="">Manual Assignment</option>
+                {activeDeliveryPartners.map(partner => (
+                  <option key={partner.id} value={partner.id}>
+                    {partner.displayName || partner.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => handleAssignPartner(order.id)}
+                disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
+                style={{
+                  padding: '4px 8px',
+                  backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '0.75em',
+                  cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (order.orderStatus === 'prepared') {
+      return (
+        <div style={{ 
+          padding: '8px 12px', 
+          backgroundColor: '#d1ecf1', 
+          borderRadius: '6px',
+          border: '1px solid #bee5eb'
+        }}>
+          <div style={{ fontSize: '0.9em', color: '#0c5460', fontWeight: 'bold' }}>
+            ⏳ Awaiting Auto-Assignment
+          </div>
+          <div style={{ fontSize: '0.8em', color: '#0c5460', marginTop: '2px' }}>
+            Partner will be assigned automatically
+          </div>
+        </div>
+      );
+    }
+
+    // No partner assigned and manual assignment available
+    if (activeDeliveryPartners.length > 0) {
+      return (
+        <div>
+          <div style={{ 
+            padding: '6px 10px', 
+            backgroundColor: '#f8f9fa', 
+            borderRadius: '4px',
+            border: '1px solid #dee2e6',
+            marginBottom: '8px'
+          }}>
+            <span style={{ fontSize: '0.9em', color: '#6c757d' }}>
+              Not Assigned
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+            <select
+              value={selectedPartners[order.id] || ''}
+              onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+              style={{
+                flex: 1,
+                padding: '6px 8px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '0.85em',
+                backgroundColor: 'white'
+              }}
+              disabled={assigningOrders.has(order.id)}
+            >
+              <option value="">Select Partner</option>
+              {activeDeliveryPartners.map(partner => (
+                <option key={partner.id} value={partner.id}>
+                  {partner.displayName || partner.name} - {partner.phone || 'No phone'}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => handleAssignPartner(order.id)}
+              disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '0.8em',
+                cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ 
+        padding: '8px 12px', 
+        backgroundColor: '#fff3cd', 
+        borderRadius: '6px',
+        border: '1px solid #ffeaa7',
+        fontSize: '0.85em',
+        color: '#856404'
+      }}>
+        No Active Partners Available
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <ResponsiveStyles />
+      <ToastContainer />
+      <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+        <h1 style={{ fontSize: '2.5rem', marginBottom: '20px', textAlign: 'center' }}>Restaurant Monitoring</h1>
+        
+        {/* Profile Section */}
+        <div style={{ 
+          backgroundColor: 'white', 
+          borderRadius: '8px', 
+          padding: '20px', 
+          boxShadow: '0 4px 8px rgba(0,0,0,0.1)', 
+          marginBottom: '30px' 
+        }}>
+          <h2 style={{ fontSize: '1.8rem', marginBottom: '15px' }}>Profile</h2>
+          <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: '0.9rem', marginBottom: '8px', display: 'block' }}>Restaurant Name</label>
+              <input 
+                type="text" 
+                value={profile.name} 
+                onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                style={{ 
+                  width: '100%', 
+                  padding: '10px', 
+                  borderRadius: '4px', 
+                  border: '1px solid #ddd', 
+                  fontSize: '1rem' 
+                }}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: '0.9rem', marginBottom: '8px', display: 'block' }}>Delivery Time</label>
+              <input 
+                type="text" 
+                value={profile.deliveryTime} 
+                onChange={(e) => setProfile({ ...profile, deliveryTime: e.target.value })}
+                style={{ 
+                  width: '100%', 
+                  padding: '10px', 
+                  borderRadius: '4px', 
+                  border: '1px solid #ddd', 
+                  fontSize: '1rem' 
+                }}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: '0.9rem', marginBottom: '8px', display: 'block' }}>Logo</label>
+              <input 
+                type="file" 
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                      setProfile({ ...profile, logo: reader.result });
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }}
+                style={{ 
+                  width: '100%', 
+                  padding: '10px', 
+                  borderRadius: '4px', 
+                  border: '1px solid #ddd', 
+                  fontSize: '1rem' 
+                }}
+              />
+            </div>
+          </div>
+          
+          {profile.logo && (
+            <div style={{ 
+              marginTop: '15px', 
+              padding: '10px', 
+              borderRadius: '4px', 
+              backgroundColor: '#f8f9fa', 
+              border: '1px solid #ddd',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px'
+            }}>
+              <img 
+                src={profile.logo} 
+                alt="Logo Preview" 
+                style={{ width: '50px', height: '50px', borderRadius: '4px' }}
+              />
+              <span style={{ fontSize: '0.9rem', color: '#333' }}>
+                Logo selected
+              </span>
+            </div>
+          )}
+          
+          <div style={{ marginTop: '20px', textAlign: 'right' }}>
+            <button 
+              onClick={handleSaveProfile} 
+              style={{ 
+                padding: '10px 20px', 
+                backgroundColor: '#007bff', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '4px', 
+                fontSize: '1rem',
+                cursor: 'pointer',
+                transition: 'background-color 0.3s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = '#0056b3'}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = '#007bff'}
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
+
+        {/* Orders Section */}
+        <div style={{ 
+          backgroundColor: 'white', 
+          borderRadius: '8px', 
+          padding: '20px', 
+          boxShadow: '0 4px 8px rgba(0,0,0,0.1)', 
+          marginBottom: '30px' 
+        }}>
+          <h2 style={{ fontSize: '1.8rem', marginBottom: '15px' }}>Orders</h2>
+          
+          {/* Incoming Orders */}
+          <div style={{ marginBottom: '30px' }}>
+            <h3 style={{ fontSize: '1.5rem', marginBottom: '10px' }}>Incoming Orders</h3>
+            
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', 
+              gap: '15px' 
+            }}>
+              {isLoadingOrders ? (
+                <div style={{ 
+                  gridColumn: '1 / -1', 
+                  padding: '20px', 
+                  textAlign: 'center', 
+                  color: '#666' 
+                }}>
+                  Loading orders...
+                </div>
+              ) : ordersError ? (
+                <div style={{ 
+                  gridColumn: '1 / -1', 
+                  padding: '20px', 
+                  textAlign: 'center', 
+                  color: '#d9534f' 
+                }}>
+                  {ordersError}
+                </div>
+              ) : filteredIncomingOrders.length === 0 ? (
+                <div style={{ 
+                  gridColumn: '1 / -1', 
+                  padding: '20px', 
+                  textAlign: 'center', 
+                  color: '#666' 
+                }}>
+                  No new orders
+                </div>
+              ) : (
+                filteredIncomingOrders.map(order => (
+                  <div key={order.id} style={{ 
+                    backgroundColor: '#f9f9f9', 
+                    borderRadius: '8px', 
+                    padding: '15px', 
+                    border: '1px solid #ddd',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}>
+                    <div style={{ 
+                      position: 'absolute', 
+                      top: '10px', 
+                      right: '10px', 
+                      backgroundColor: order.orderStatus === 'pending' ? '#007bff' : '#28a745',
+                      color: 'white',
+                      padding: '5px 10px',
+                      borderRadius: '4px',
+                      fontSize: '0.8rem',
+                      fontWeight: 'bold',
+                      textTransform: 'uppercase'
+                    }}>
+                      {order.orderStatus}
+                    </div>
+                    
+                    <div style={{ 
+                      fontSize: '1.1rem', 
+                      fontWeight: 'bold', 
+                      color: '#333' 
+                    }}>
+                      Order ID: {order.id}
+                    </div>
+                    <div style={{ 
+                      fontSize: '0.9rem', 
+                      color: '#555' 
+                    }}>
+                      Location: {order.location}
+                    </div>
+                    <div style={{ 
+                      fontSize: '0.9rem', 
+                      color: '#555' 
+                    }}>
+                      Total: ${order.cartPrice.toFixed(2)}
+                    </div>
+                    
+                    <div style={{ 
+                      marginTop: '10px', 
+                      display: 'flex', 
+                      gap: '10px', 
+                      flexWrap: 'wrap' 
+                    }}>
+                      <button
+                        onClick={() => handleUpdateOrderStatus(order.id, 'preparing')}
+                        style={{
+                          flex: 1,
+                          padding: '10px',
+                          backgroundColor: '#007bff',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '0.9rem',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.3s',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '5px'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#0056b3'}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = '#007bff'}
+                      >
+                        <FaMotorcycle />
+                        Accept Order
+                      </button>
+                      <button
+                        onClick={() => handleUpdateOrderStatus(order.id, 'declined')}
+                        style={{
+                          flex: 1,
+                          padding: '10px',
+                          backgroundColor: '#dc3545',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '0.9rem',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.3s',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '5px'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#c82333'}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = '#dc3545'}
+                      >
+                        <FaTimes />
+                        Decline Order
+                      </button>
+                    </div>
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+          
+          {/* Ongoing Orders */}
+          <div>
+            <h3 style={{ fontSize: '1.5rem', marginBottom: '10px' }}>Ongoing Orders</h3>
+            
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', 
+              gap: '15px' 
+            }}>
+              {isLoadingOngoing ? (
+                <div style={{ 
+                  gridColumn: '1 / -1', 
+                  padding: '20px', 
+                  textAlign: 'center', 
+                  color: '#666' 
+                }}>
+                  Loading ongoing orders...
+                </div>
+              ) : ordersError ? (
+                <div style={{ 
+                  gridColumn: '1 / -1', 
+                  padding: '20px', 
+                  textAlign: 'center', 
+                  color: '#d9534f' 
+                }}>
+                  {ordersError}
+                </div>
+              ) : filteredOngoingOrders.length === 0 ? (
+                <div style={{ 
+                  gridColumn: '1 / -1', 
+                  padding: '20px', 
+                  textAlign: 'center', 
+                  color: '#666' 
+                }}>
+                  No ongoing orders
+                </div>
+              ) : (
+                filteredOngoingOrders.map(order => (
+                  <div key={order.id} style={{ 
+                    backgroundColor: '#f9f9f9', 
+                    borderRadius: '8px', 
+                    padding: '15px', 
+                    border: '1px solid #ddd',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}>
+                    <div style={{ 
+                      position: 'absolute', 
+                      top: '10px', 
+                      right: '10px', 
+                      backgroundColor: order.orderStatus === 'ongoing' ? '#28a745' : '#ffc107',
+                      color: 'white',
+                      padding: '5px 10px',
+                      borderRadius: '4px',
+                      fontSize: '0.8rem',
+                      fontWeight: 'bold',
+                      textTransform: 'uppercase'
+                    }}>
+                      {order.orderStatus}
+                    </div>
+                    
+                    <div style={{ 
+                      fontSize: '1.1rem', 
+                      fontWeight: 'bold', 
+                      color: '#333' 
+                    }}>
+                      Order ID: {order.id}
+                    </div>
+                    <div style={{ 
+                      fontSize: '0.9rem', 
+                      color: '#555' 
+                    }}>
+                      Location: {order.location}
+                    </div>
+                    <div style={{ 
+                      fontSize: '0.9rem', 
+                      color: '#555' 
+                    }}>
+                      Total: ${order.cartPrice.toFixed(2)}
+                    </div>
+                    
+                    <div style={{ 
+                      marginTop: '10px', 
+                      display: 'flex', 
+                      gap: '10px', 
+                      flexWrap: 'wrap' 
+                    }}>
+                      <button
+                        onClick={() => handleOngoingOrderStatusUpdate(order.id, 'prepared')}
+                        style={{
+                          flex: 1,
+                          padding: '10px',
+                          backgroundColor: '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '0.9rem',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.3s',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '5px'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#218838'}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = '#28a745'}
+                      >
+                        <FaCheck />
+                        Mark as Prepared
+                      </button>
+                      <button
+                        onClick={() => handleOngoingOrderStatusUpdate(order.id, 'declined')}
+                        style={{
+                          flex: 1,
+                          padding: '10px',
+                          backgroundColor: '#dc3545',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '0.9rem',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.3s',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '5px'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#c82333'}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = '#dc3545'}
+                      >
+                        <FaTimes />
+                        Decline Order
+                      </button>
+                    </div>
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+        </div>
+        
+        {/* Menu and Categories Section */}
+        <div style={{ 
+          backgroundColor: 'white', 
+          borderRadius: '8px', 
+          padding: '20px', 
+          boxShadow: '0 4px 8px rgba(0,0,0,0.1)' 
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            marginBottom: '20px' 
+          }}>
+            <h2 style={{ fontSize: '1.8rem', marginBottom: '0' }}>Menu & Categories</h2>
+            <div>
+              <button
+                onClick={() => setActiveSection('menu')}
+                style={{
+                  padding: '10px 15px',
+                  backgroundColor: activeSection === 'menu' ? '#007bff' : '#f1f1f1',
+                  color: activeSection === 'menu' ? 'white' : '#333',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '0.9rem',
+                  cursor: 'pointer',
+                  marginRight: '10px',
+                  transition: 'background-color 0.3s'
+                }}
+              >
+                Menu
+              </button>
+              <button
+                onClick={() => setActiveSection('categories')}
+                style={{
+                  padding: '10px 15px',
+                  backgroundColor: activeSection === 'categories' ? '#007bff' : '#f1f1f1',
+                  color: activeSection === 'categories' ? 'white' : '#333',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '0.9rem',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.3s'
+                }}
+              >
+                Categories
+              </button>
+            </div>
+          </div>
+          
+          {activeSection === 'menu' ? (
+            <div>
+              <h3 style={{ fontSize: '1.5rem', marginBottom: '15px' }}>Menu Items</h3>
+              
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', 
+                gap: '15px' 
+              }}>
+                {isLoading ? (
+                  <div style={{ 
+                    gridColumn: '1 / -1', 
+                    padding: '20px', 
+                    textAlign: 'center', 
+                    color: '#666' 
+                  }}>
+                    Loading menu items...
+                  </div>
+                ) : error ? (
+                  <div style={{ 
+                    gridColumn: '1 / -1', 
+                    padding: '20px', 
+                    textAlign: 'center', 
+                    color: '#d9534f' 
+                  }}>
+                    {error}
+                  </div>
+                ) : menuItems.length === 0 ? (
+                  <div style={{ 
+                    gridColumn: '1 / -1', 
+                    padding: '20px', 
+                    textAlign: 'center', 
+                    color: '#666' 
+                  }}>
+                    No menu items found
+                  </div>
+                ) : (
+                  menuItems.map(item => (
+                    <div key={item.id} style={{ 
+                      backgroundColor: '#f9f9f9', 
+                      borderRadius: '8px', 
+                      padding: '15px', 
+                      border: '1px solid #ddd',
+                      position: 'relative',
+                      overflow: 'hidden',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px'
+                    }}>
+                      <div style={{ 
+                        position: 'absolute', 
+                        top: '10px', 
+                        right: '10px', 
+                        backgroundColor: item.available ? '#28a745' : '#dc3545',
+                        color: 'white',
+                        padding: '5px 10px',
+                        borderRadius: '4px',
+                        fontSize: '0.8rem',
+                        fontWeight: 'bold',
+                        textTransform: 'uppercase'
+                      }}>
+                        {item.available ? 'Available' : 'Unavailable'}
+                      </div>
+                      
+                      <div style={{ 
+                        fontSize: '1.1rem', 
+                        fontWeight: 'bold', 
+                        color: '#333' 
+                      }}>
+                        {item.name}
+                      </div>
+                      <div style={{ 
+                        fontSize: '0.9rem', 
+                        color: '#555' 
+                      }}>
+                        Price: ${item.price.full.toFixed(2)}
+                      </div>
+                      <div style={{ 
+                        fontSize: '0.8rem', 
+                        color: '#777' 
+                      }}>
+                        Category: {item.category}
+                      </div>
+                      
+                      <div style={{ 
+                        marginTop: '10px', 
+                        display: 'flex', 
+                        gap: '10px', 
+                        flexWrap: 'wrap' 
+                      }}>
+                        <button
+                          onClick={() => {
+                            setEditingItem(item);
+                            setImagePreview(item.image);
+                            setMenuModalOpen(true);
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: '10px',
+                            backgroundColor: '#007bff',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            fontSize: '0.9rem',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.3s',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '5px'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.backgroundColor = '#0056b3'}
+                          onMouseLeave={e => e.currentTarget.style.backgroundColor = '#007bff'}
+                        >
+                          <FaEdit />
+                          Edit Item
+                        </button>
+                        <button
+                          onClick={() => handleUpdateOrderStatus(item.id, item.available ? 'unavailable' : 'available')}
+                          style={{
+                            flex: 1,
+                            padding: '10px',
+                            backgroundColor: item.available ? '#dc3545' : '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            fontSize: '0.9rem',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.3s',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '5px'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.backgroundColor = item.available ? '#c82333' : '#218838'}
+                          onMouseLeave={e => e.currentTarget.style.backgroundColor = item.available ? '#dc3545' : '#28a745'}
+                        >
+                          {item.available ? <FaTimes /> : <FaCheck />}
+                          {item.available ? 'Mark as Unavailable' : 'Mark as Available'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingItem(item);
+                            setMenuModalOpen(true);
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: '10px',
+                            backgroundColor: '#f39c12',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            fontSize: '0.9rem',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.3s',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '5px'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.backgroundColor = '#e08e0b'}
+                          onMouseLeave={e => e.currentTarget.style.backgroundColor = '#f39c12'}
+                        >
+                          <FaTrash />
+                          Delete Item
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
+          ) : (
+            <div>
+              <h3 style={{ fontSize: '1.5rem', marginBottom: '10px' }}>Categories</h3>
+              
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', 
+                gap: '15px' 
+              }}>
+                {isLoading ? (
+                  <div style={{ 
+                    gridColumn: '1 / -1', 
+                    padding: '20px', 
+                    textAlign: 'center', 
+                    color: '#666' 
+                  }}>
+                    Loading categories...
+                  </div>
+                ) : error ? (
+                  <div style={{ 
+                    gridColumn: '1 / -1', 
+                    padding: '20px', 
+                    textAlign: 'center', 
+                    color: '#d9534f' 
+                  }}>
+                    {error}
+                  </div>
+                ) : categories.length === 0 ? (
+                  <div style={{ 
+                    gridColumn: '1 / -1', 
+                    padding: '20px', 
+                    textAlign: 'center', 
+                    color: '#666' 
+                  }}>
+                    No categories found
+                  </div>
+                ) : (
+                  categories.map(category => (
+                    <div key={category.id} style={{ 
+                      backgroundColor: '#f9f9f9', 
+                      borderRadius: '8px', 
+                      padding: '15px', 
+                      border: '1px solid #ddd',
+                      position: 'relative',
+                      overflow: 'hidden',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px'
+                    }}>
+                      <div style={{ 
+                        position: 'absolute', 
+                        top: '10px', 
+                        right: '10px', 
+                        backgroundColor: category.isActive ? '#28a745' : '#dc3545',
+                        color: 'white',
+                        padding: '5px 10px',
+                        borderRadius: '4px',
+                        fontSize: '0.8rem',
+                        fontWeight: 'bold',
+                        textTransform: 'uppercase'
+                      }}>
+                        {category.isActive ? 'Active' : 'Inactive'}
+                      </div>
+                      
+                      <div style={{ 
+                        fontSize: '1.1rem', 
+                        fontWeight: 'bold', 
+                        color: '#333' 
+                      }}>
+                        {category.name}
+                      </div>
+                      
+                      <div style={{ 
+                        marginTop: '10px', 
+                        display: 'flex', 
+                        gap: '10px', 
+                        flexWrap: 'wrap' 
+                      }}>
+                        <button
+                          onClick={() => {
+                            setEditingCategory(category);
+                            setCategoryModalOpen(true);
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: '10px',
+                            backgroundColor: '#007bff',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            fontSize: '0.9rem',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.3s',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '5px'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.backgroundColor = '#0056b3'}
+                          onMouseLeave={e => e.currentTarget.style.backgroundColor = '#007bff'}
+                        >
+                          <FaEdit />
+                          Edit Category
+                        </button>
+                        <button
+                          onClick={() => handleUpdateOrderStatus(category.id, category.isActive ? 'inactive' : 'active')}
+                          style={{
+                            flex: 1,
+                            padding: '10px',
+                            backgroundColor: category.isActive ? '#dc3545' : '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            fontSize: '0.9rem',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.3s',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '5px'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.backgroundColor = category.isActive ? '#c82333' : '#218838'}
+                          onMouseLeave={e => e.currentTarget.style.backgroundColor = category.isActive ? '#dc3545' : '#28a745'}
+                        >
+                          {category.isActive ? <FaTimes /> : <FaCheck />}
+                          {category.isActive ? 'Deactivate' : 'Activate'}
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default RestaurantMonitoring;

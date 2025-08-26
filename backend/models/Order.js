@@ -19,7 +19,7 @@ export class Order extends BaseModel {
     super();
     
     // Doc References
-    this.deliveryPartnerId = data.deliveryPartnerId || null; // Doc Reference (deliveryPartners)
+    this.deliveryPartnerRef = data.deliveryPartnerRef || null; // Doc Reference (deliveryPartners)
     this.restaurantId = data.restaurantId || null; // Doc Reference (restaurants)
     this.userRef = data.userRef || null; // Doc Reference (users)
     
@@ -37,17 +37,12 @@ export class Order extends BaseModel {
     // String fields
     this.paymentStatus = data.paymentStatus || '';
     this.paymentId = data.paymentId || '';
-    this.deliveryBoyName = data.deliveryBoyName || '';
     this.orderId = data.orderId || '';
     this.timeLeft = data.timeLeft || '';
     this.distanceLeft = data.distanceLeft || '';
     
     // Order status (enum)
     this.orderStatus = data.orderStatus || Order.ORDER_STATUS.YET_TO_BE_ACCEPTED;
-    
-    // Partner assignment data
-    this.partnerAssigned = data.partnerAssigned || null;
-    this.assigningPartner = data.assigningPartner || false;
     
     // List fields
     this.menuItems = data.menuItems || []; // List < Doc Reference (menuItems) >
@@ -66,7 +61,7 @@ export class Order extends BaseModel {
   // Convert to Firestore document format
   toFirestore() {
     const data = {
-      deliveryPartnerId: this.deliveryPartnerId,
+      deliveryPartnerRef: this.deliveryPartnerRef,
       restaurantId: this.restaurantId,
       userRef: this.userRef,
       deliveryAddress: this.deliveryAddress,
@@ -76,13 +71,10 @@ export class Order extends BaseModel {
       paymentDetails: this.paymentDetails,
       paymentStatus: this.paymentStatus,
       paymentId: this.paymentId,
-      deliveryBoyName: this.deliveryBoyName,
       orderId: this.orderId,
       timeLeft: this.timeLeft,
       distanceLeft: this.distanceLeft,
       orderStatus: this.orderStatus,
-      partnerAssigned: this.partnerAssigned,
-      assigningPartner: this.assigningPartner,
       menuItems: this.menuItems,
       products: this.products,
       driverPositions: this.driverPositions,
@@ -137,37 +129,18 @@ export class Order extends BaseModel {
   }
 
   // Method to assign delivery partner
-  async assignDeliveryPartner(deliveryPartnerId, deliveryBoyName = '', options = {}) {
-    if (!deliveryPartnerId) {
-      throw new Error('Delivery partner ID is required');
+  async assignDeliveryPartner(deliveryPartnerRef, options = {}) {
+    if (!deliveryPartnerRef) {
+      throw new Error('Delivery partner reference is required');
     }
     
     const { admin } = await import('../config/firebase.js');
     
-    // Set delivery partner details
-    this.deliveryPartnerId = deliveryPartnerId;
-    this.deliveryBoyName = deliveryBoyName;
+    // Set delivery partner reference
+    this.deliveryPartnerRef = deliveryPartnerRef;
     
     // Set static source coordinates as GeoPoint (restaurant location)
     this.source = new admin.firestore.GeoPoint(21.1874, 79.056);
-    
-    // Set driver position - static for testing, can be made dynamic
-    const driverPosition = options.driverPosition || { lat: 21.169491, lng: 79.1134079 };
-    this.driverPositions = [new admin.firestore.GeoPoint(driverPosition.lat, driverPosition.lng)];
-    
-    // Extract destination from userRef's address (will be implemented when userRef is available)
-    if (this.userRef && this.deliveryAddress) {
-      // If delivery address has coordinates, use them
-      if (this.deliveryAddress.lat && this.deliveryAddress.lng) {
-        this.destination = new admin.firestore.GeoPoint(this.deliveryAddress.lat, this.deliveryAddress.lng);
-      }
-    }
-    
-    // Update order status
-    this.orderStatus = Order.ORDER_STATUS.DISPATCHED;
-    this.updatedAt = new Date();
-    
-    return this.save();
   }
 
   // Method to extract payment details from orderedProduct

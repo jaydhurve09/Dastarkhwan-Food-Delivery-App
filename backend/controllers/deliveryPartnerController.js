@@ -100,4 +100,38 @@ const approveDeliveryPartner = async (req, res) => {
   }
 };
 
+// Get delivery partner by ID
+export const getDeliveryPartnerById = async (req, res) => {
+  try {
+    const { partnerId } = req.params;
+    
+    const partnerDoc = await db.collection('deliveryPartners').doc(partnerId).get();
+    
+    if (!partnerDoc.exists) {
+      return res.status(404).json({
+        success: false,
+        message: 'Delivery partner not found'
+      });
+    }
+
+    const partnerData = partnerDoc.data();
+    
+    res.json({
+      success: true,
+      data: {
+        id: partnerDoc.id,
+        ...partnerData
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching delivery partner:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch delivery partner',
+      error: error.message
+    });
+  }
+};
+
 export { getAllDeliveryPartners , updateDeliveryPartner , blockDeliveryPartner , resetPassword , approveDeliveryPartner, getActiveDeliveryPartners };

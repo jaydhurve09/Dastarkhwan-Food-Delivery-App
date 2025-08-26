@@ -84,6 +84,15 @@ const initialHours = {
 const ResponsiveStyles = () => (
   <style>
     {`
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+
+      .spin {
+        animation: spin 1s linear infinite;
+      }
+
       @media (max-width: 768px) {
         .responsive-grid-container {
           grid-template-columns: 1fr !important;
@@ -91,6 +100,10 @@ const ResponsiveStyles = () => (
 
         .responsive-table thead {
           display: none;
+        }
+
+        .responsive-table tbody {
+          display: block;
         }
 
         .responsive-table tr {
@@ -115,7 +128,7 @@ const ResponsiveStyles = () => (
         }
 
         .responsive-table .action-cell-container {
-           justify-content: flex-end;
+          justify-content: flex-end;
         }
       }
     `}
@@ -1542,7 +1555,29 @@ const RestaurantMonitoring = () => {
                     </td>
                     <td style={styles.td}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '200px' }}>
-                        {order.partnerAssigned ? (
+                        {order.assigningPartner ? (
+                          <div style={{ 
+                            padding: '8px 12px', 
+                            backgroundColor: '#fff3cd', 
+                            borderRadius: '6px',
+                            border: '1px solid #ffeaa7',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
+                          }}>
+                            <div style={{ 
+                              width: '16px', 
+                              height: '16px', 
+                              border: '2px solid #f39c12',
+                              borderTop: '2px solid transparent',
+                              borderRadius: '50%',
+                              animation: 'spin 1s linear infinite'
+                            }}></div>
+                            <span style={{ fontSize: '0.9em', color: '#856404', fontWeight: 'bold' }}>
+                              Assigning Partner...
+                            </span>
+                          </div>
+                        ) : order.partnerAssigned ? (
                           <div style={{ 
                             padding: '8px 12px', 
                             backgroundColor: '#e8f5e8', 
@@ -1550,52 +1585,136 @@ const RestaurantMonitoring = () => {
                             border: '1px solid #c3e6c3'
                           }}>
                             <div style={{ fontWeight: 'bold', fontSize: '0.9em', color: '#2d5f2d' }}>
-                              {order.partnerAssigned.partnerName}
+                              {order.partnerAssigned.name || order.partnerAssigned.partnerName}
                             </div>
-                            {order.partnerAssigned.phone && (
+                            {(order.partnerAssigned.phone) && (
                               <div style={{ fontSize: '0.8em', color: '#666' }}>
                                 📞 {order.partnerAssigned.phone}
                               </div>
                             )}
+                            <div style={{ fontSize: '0.75em', color: '#2d5f2d', marginTop: '4px' }}>
+                              ✅ Auto-assigned
+                            </div>
+                          </div>
+                        ) : order.assignmentError ? (
+                          <div style={{ 
+                            padding: '8px 12px', 
+                            backgroundColor: '#f8d7da', 
+                            borderRadius: '6px',
+                            border: '1px solid #f5c6cb'
+                          }}>
+                            <div style={{ fontSize: '0.9em', color: '#721c24', fontWeight: 'bold' }}>
+                              Assignment Failed
+                            </div>
+                            <div style={{ fontSize: '0.8em', color: '#721c24', marginTop: '2px' }}>
+                              {order.assignmentError}
+                            </div>
+                            {activeDeliveryPartners.length > 0 && (
+                              <div style={{ marginTop: '8px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                <select
+                                  value={selectedPartners[order.id] || ''}
+                                  onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+                                  style={{
+                                    flex: 1,
+                                    padding: '4px 6px',
+                                    border: '1px solid #ddd',
+                                    borderRadius: '4px',
+                                    fontSize: '0.8em',
+                                    backgroundColor: 'white'
+                                  }}
+                                  disabled={assigningOrders.has(order.id)}
+                                >
+                                  <option value="">Manual Assignment</option>
+                                  {activeDeliveryPartners.map(partner => (
+                                    <option key={partner.id} value={partner.id}>
+                                      {partner.displayName || partner.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  onClick={() => handleAssignPartner(order.id)}
+                                  disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
+                                  style={{
+                                    padding: '4px 8px',
+                                    backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    fontSize: '0.75em',
+                                    cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ) : order.orderStatus === 'prepared' ? (
+                          <div style={{ 
+                            padding: '8px 12px', 
+                            backgroundColor: '#d1ecf1', 
+                            borderRadius: '6px',
+                            border: '1px solid #bee5eb'
+                          }}>
+                            <div style={{ fontSize: '0.9em', color: '#0c5460', fontWeight: 'bold' }}>
+                              ⏳ Awaiting Auto-Assignment
+                            </div>
+                            <div style={{ fontSize: '0.8em', color: '#0c5460', marginTop: '2px' }}>
+                              Partner will be assigned automatically
+                            </div>
                           </div>
                         ) : activeDeliveryPartners.length > 0 ? (
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                            <select
-                              value={selectedPartners[order.id] || ''}
-                              onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
-                              style={{
-                                flex: 1,
-                                padding: '6px 8px',
-                                border: '1px solid #ddd',
-                                borderRadius: '4px',
-                                fontSize: '0.85em',
-                                backgroundColor: 'white'
-                              }}
-                              disabled={assigningOrders.has(order.id)}
-                            >
-                              <option value="">Select Partner</option>
-                              {activeDeliveryPartners.map(partner => (
-                                <option key={partner.id} value={partner.id}>
-                                  {partner.displayName || partner.name} - {partner.phone || 'No phone'}
-                                </option>
-                              ))}
-                            </select>
-                            <button
-                              onClick={() => handleAssignPartner(order.id)}
-                              disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
-                              style={{
-                                padding: '6px 12px',
-                                backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '4px',
-                                fontSize: '0.8em',
-                                cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
-                                whiteSpace: 'nowrap'
-                              }}
-                            >
-                              {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
-                            </button>
+                          <div>
+                            <div style={{ 
+                              padding: '6px 10px', 
+                              backgroundColor: '#f8f9fa', 
+                              borderRadius: '4px',
+                              border: '1px solid #dee2e6',
+                              marginBottom: '8px'
+                            }}>
+                              <span style={{ fontSize: '0.9em', color: '#6c757d' }}>
+                                Not Assigned
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                              <select
+                                value={selectedPartners[order.id] || ''}
+                                onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+                                style={{
+                                  flex: 1,
+                                  padding: '6px 8px',
+                                  border: '1px solid #ddd',
+                                  borderRadius: '4px',
+                                  fontSize: '0.85em',
+                                  backgroundColor: 'white'
+                                }}
+                                disabled={assigningOrders.has(order.id)}
+                              >
+                                <option value="">Select Partner</option>
+                                {activeDeliveryPartners.map(partner => (
+                                  <option key={partner.id} value={partner.id}>
+                                    {partner.displayName || partner.name} - {partner.phone || 'No phone'}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={() => handleAssignPartner(order.id)}
+                                disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
+                                style={{
+                                  padding: '6px 12px',
+                                  backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  fontSize: '0.8em',
+                                  cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+                              </button>
+                            </div>
                           </div>
                         ) : (
                           <div style={{ 

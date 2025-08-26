@@ -15,7 +15,8 @@ import {
   getOngoingOrders,
   updateOrderStatusInOrders,
   testOrdersCollection,
-  testGeoPoint
+  testGeoPoint,
+  assignDeliveryPartnerToOrder
 } from '../controllers/orderController.js';
 import { isAuthenticated, isAdmin } from '../middleware/auth.js';
 
@@ -47,6 +48,9 @@ router.delete('/:orderId', isAuthenticated, isAdmin, deleteOrder);
 
 // Order status updates for orders collection
 router.patch('/:orderId/status', updateOrderStatusInOrders);
+
+// Assign delivery partner to order
+router.patch('/:orderId/assign-partner', assignDeliveryPartnerToOrder);
 
 // Delivery partner assignment
 router.put('/assign-agent', isAuthenticated, isAdmin, updateAgent);

@@ -1,9 +1,10 @@
 import express from 'express';
-import { getAllDeliveryPartners, updateDeliveryPartner, blockDeliveryPartner, resetPassword,approveDeliveryPartner } from '../controllers/deliveryPartnerController.js';
+import { getAllDeliveryPartners, updateDeliveryPartner, blockDeliveryPartner, resetPassword,approveDeliveryPartner, getActiveDeliveryPartners } from '../controllers/deliveryPartnerController.js';
 
 const router = express.Router();
 
 router.get('/', getAllDeliveryPartners);
+router.get('/active', getActiveDeliveryPartners);
 router.put('/:id', updateDeliveryPartner);
 router.put('/block/:id', blockDeliveryPartner);
 router.post('/resetpassword', resetPassword);

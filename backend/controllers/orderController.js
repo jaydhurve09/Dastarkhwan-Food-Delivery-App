@@ -712,3 +712,102 @@ export const updateOrderStatusInOrders = async (req, res) => {
     });
   }
 };
+
+// Assign delivery partner to order - enhanced version for admin panel
+export const assignDeliveryPartnerToOrder = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { partnerId, partnerName, phone } = req.body;
+
+    console.log('Assigning delivery partner:', { orderId, partnerId, partnerName, phone });
+
+    if (!orderId || !partnerId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Order ID and Partner ID are required'
+      });
+    }
+
+    // Check if order exists
+    const orderDoc = await db.collection('orders').doc(orderId).get();
+    if (!orderDoc.exists) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    // Check if delivery partner exists and is active
+    const partnerDoc = await db.collection('deliveryPartners').doc(partnerId).get();
+    if (!partnerDoc.exists) {
+      return res.status(404).json({
+        success: false,
+        message: 'Delivery partner not found'
+      });
+    }
+
+    const partnerData = partnerDoc.data();
+    if (!partnerData.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: 'Delivery partner is not active'
+      });
+    }
+
+    // First set assigningPartner to true (loading state)
+    await db.collection('orders').doc(orderId).update({
+      assigningPartner: true,
+      updatedAt: new Date()
+    });
+
+    // Prepare partner assignment data
+    const partnerAssignment = {
+      partnerId: partnerId,
+      partnerName: partnerName || partnerData.displayName || partnerData.name || 'Unknown',
+      phone: phone || partnerData.phone || ''
+    };
+
+    // Update order with partner assignment
+    const updateData = {
+      assigningPartner: false,
+      partnerAssigned: partnerAssignment,
+      deliveryPartnerId: partnerId,
+      deliveryBoyName: partnerAssignment.partnerName,
+      orderStatus: 'partnerAssigned',
+      updatedAt: new Date()
+    };
+
+    await db.collection('orders').doc(orderId).update(updateData);
+
+    // Get the updated order
+    const updatedOrder = await db.collection('orders').doc(orderId).get();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        id: updatedOrder.id,
+        ...updatedOrder.data()
+      },
+      message: 'Delivery partner assigned successfully'
+    });
+
+  } catch (error) {
+    console.error('Error assigning delivery partner:', error);
+    
+    // Reset assigningPartner flag on error
+    try {
+      await db.collection('orders').doc(req.params.orderId).update({
+        assigningPartner: false,
+        updatedAt: new Date()
+      });
+    } catch (resetError) {
+      console.error('Error resetting assigningPartner flag:', resetError);
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Error assigning delivery partner',
+      error: error.message
+    });
+  }
+};

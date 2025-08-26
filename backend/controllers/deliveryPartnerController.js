@@ -11,6 +11,24 @@ const getAllDeliveryPartners = async (req, res) => {
   }
 };
 
+const getActiveDeliveryPartners = async (req, res) => {
+  try {
+    const deliveryPartnersSnapshot = await db.collection('deliveryPartners')
+      .where('isActive', '==', true)
+      .get();
+    
+    const activeDeliveryPartners = deliveryPartnersSnapshot.docs.map(doc => ({ 
+      id: doc.id, 
+      ...doc.data() 
+    }));
+    
+    res.status(200).json(activeDeliveryPartners);
+  } catch (error) {
+    console.error('Error fetching active delivery partners:', error);
+    res.status(500).json({ message: 'Error fetching active delivery partners', error: error.message });
+  }
+};
+
 const updateDeliveryPartner = async (req, res) => {
   try {
     const { id } = req.params;
@@ -81,4 +99,5 @@ const approveDeliveryPartner = async (req, res) => {
     res.status(500).json({ message: 'Error approving delivery partner', error });
   }
 };
-export { getAllDeliveryPartners , updateDeliveryPartner , blockDeliveryPartner , resetPassword , approveDeliveryPartner };
+
+export { getAllDeliveryPartners , updateDeliveryPartner , blockDeliveryPartner , resetPassword , approveDeliveryPartner, getActiveDeliveryPartners };

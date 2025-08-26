@@ -45,6 +45,10 @@ export class Order extends BaseModel {
     // Order status (enum)
     this.orderStatus = data.orderStatus || Order.ORDER_STATUS.YET_TO_BE_ACCEPTED;
     
+    // Partner assignment data
+    this.partnerAssigned = data.partnerAssigned || null;
+    this.assigningPartner = data.assigningPartner || false;
+    
     // List fields
     this.menuItems = data.menuItems || []; // List < Doc Reference (menuItems) >
     this.products = data.products || []; // List < Doc Reference (menuItems) >
@@ -77,6 +81,8 @@ export class Order extends BaseModel {
       timeLeft: this.timeLeft,
       distanceLeft: this.distanceLeft,
       orderStatus: this.orderStatus,
+      partnerAssigned: this.partnerAssigned,
+      assigningPartner: this.assigningPartner,
       menuItems: this.menuItems,
       products: this.products,
       driverPositions: this.driverPositions,

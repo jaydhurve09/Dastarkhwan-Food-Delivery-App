@@ -143,7 +143,7 @@ const Modal = ({ children, isOpen, onClose }) => {
 const DEFAULT_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlZWVlZWUiLz48dGV4dCB4PSI1MCIgeT0iNTAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzk5OSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+';
 
 const RestaurantMonitoring = () => {
-  const { deliveryPartners, orders, users, fetchOrders } = useContext(AdminContext);
+  const { deliveryPartners, orders, users, fetchOrders, activeDeliveryPartners, fetchActiveDeliveryPartners } = useContext(AdminContext);
   const [menuItems, setMenuItems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -158,6 +158,10 @@ const RestaurantMonitoring = () => {
     deliveryTime: '30-45 min',
     logo: null,
   });
+
+  // State for delivery partner assignment
+  const [selectedPartners, setSelectedPartners] = useState({});
+  const [assigningOrders, setAssigningOrders] = useState(new Set());
 
   // State for modals and forms
   const [isMenuModalOpen, setMenuModalOpen] = useState(false);
@@ -227,6 +231,7 @@ const RestaurantMonitoring = () => {
   // Search state variables
   const [incomingOrdersSearch, setIncomingOrdersSearch] = useState('');
   const [ongoingOrdersSearch, setOngoingOrdersSearch] = useState('');
+  const [deliveryPartnerFilter, setDeliveryPartnerFilter] = useState('all'); // 'all', 'assigned', 'unassigned'
 
   // Filter functions for search
   const filteredIncomingOrders = incomingOrders.filter(order => {
@@ -249,6 +254,15 @@ const RestaurantMonitoring = () => {
   });
 
   const filteredOngoingOrders = ongoingOrders.filter(order => {
+    // Filter by delivery partner status
+    if (deliveryPartnerFilter === 'assigned' && !order.partnerAssigned) {
+      return false;
+    }
+    if (deliveryPartnerFilter === 'unassigned' && order.partnerAssigned) {
+      return false;
+    }
+    
+    // Filter by search term
     if (!ongoingOrdersSearch.trim()) return true;
     
     const searchTerm = ongoingOrdersSearch.toLowerCase();
@@ -258,13 +272,15 @@ const RestaurantMonitoring = () => {
     const total = (order.orderValue || 0).toString();
     const date = order.order_Date ? new Date(order.order_Date.seconds * 1000).toLocaleDateString().toLowerCase() : '';
     const items = order.products ? order.products.map(p => (p.name || '').toLowerCase()).join(' ') : '';
+    const partnerName = order.partnerAssigned?.partnerName?.toLowerCase() || '';
     
     return orderId.includes(searchTerm) || 
            customerName.includes(searchTerm) || 
            status.includes(searchTerm) || 
            total.includes(searchTerm) || 
            date.includes(searchTerm) || 
-           items.includes(searchTerm);
+           items.includes(searchTerm) ||
+           partnerName.includes(searchTerm);
   });
 
   // Fetch all orderedProduct documents from users subcollection
@@ -386,10 +402,76 @@ const RestaurantMonitoring = () => {
   useEffect(() => {
     fetchYetToBeAcceptedOrders();
     fetchOngoingOrders();
+    fetchActiveDeliveryPartners();
   }, []);
 
   const handleSaveProfile = () => {
     alert('Profile changes saved!');
+  };
+
+  // Handle delivery partner selection
+  const handlePartnerSelection = (orderId, partnerId) => {
+    setSelectedPartners(prev => ({
+      ...prev,
+      [orderId]: partnerId
+    }));
+  };
+
+  // Handle delivery partner assignment
+  const handleAssignPartner = async (orderId) => {
+    const partnerId = selectedPartners[orderId];
+    
+    if (!partnerId) {
+      toast.error('Please select a delivery partner first');
+      return;
+    }
+
+    const selectedPartner = activeDeliveryPartners.find(p => p.id === partnerId);
+    if (!selectedPartner) {
+      toast.error('Selected delivery partner not found');
+      return;
+    }
+
+    try {
+      setAssigningOrders(prev => new Set([...prev, orderId]));
+
+      const response = await api.patch(`/orders/${orderId}/assign-partner`, {
+        partnerId: partnerId,
+        partnerName: selectedPartner.displayName || selectedPartner.name,
+        phone: selectedPartner.phone
+      });
+
+      if (response.data.success) {
+        toast.success('Delivery partner assigned successfully');
+        // Refresh the orders to show updated status
+        await fetchOngoingOrders();
+        // Clear the selected partner for this order
+        setSelectedPartners(prev => {
+          const updated = { ...prev };
+          delete updated[orderId];
+          return updated;
+        });
+      } else {
+        throw new Error(response.data.message || 'Failed to assign partner');
+      }
+    } catch (error) {
+      console.error('Error assigning delivery partner:', error);
+      toast.error(error.response?.data?.message || 'Failed to assign delivery partner');
+    } finally {
+      setAssigningOrders(prev => {
+        const updated = new Set(prev);
+        updated.delete(orderId);
+        return updated;
+      });
+    }
+  };
+
+  // Get delivery partner assignment status
+  const getPartnerAssignmentStatus = (order) => {
+    if (order.partnerAssigned) {
+      return `Assigned to ${order.partnerAssigned.partnerName}`;
+    }
+    return 'Partner Not Assigned';
   };
 
   const handleSaveHours = () => {
@@ -414,8 +496,14 @@ const RestaurantMonitoring = () => {
         return { ...baseStyle, backgroundColor: '#2ecc71', color: 'white' };
       case 'dispatched':
         return { ...baseStyle, backgroundColor: '#9b59b6', color: 'white' };
+      case 'delivered':
+        return { ...baseStyle, backgroundColor: '#27ae60', color: 'white' };
       case 'declined':
         return { ...baseStyle, backgroundColor: '#e74c3c', color: 'white' };
+      case 'assigningPartner':
+        return { ...baseStyle, backgroundColor: '#f39c12', color: 'white' };
+      case 'partnerAssigned':
+        return { ...baseStyle, backgroundColor: '#8e44ad', color: 'white' };
       default:
         return { ...baseStyle, backgroundColor: '#95a5a6', color: 'white' };
     }
@@ -1267,7 +1355,7 @@ const RestaurantMonitoring = () => {
                                 padding: '6px 12px'
                               }}
                             >
-                              <FaMotorcycle /> Mark as Prepared
+                              Mark as Prepared
                             </button>
                             <button
                               onClick={() => handleUpdateOrderStatus(order.id, 'declined')}
@@ -1319,26 +1407,47 @@ const RestaurantMonitoring = () => {
         </button>
       </div>
 
-      {/* Search bar for ongoing orders */}
-      <div style={{ marginBottom: '20px' }}>
-        <input
-          type="text"
-          placeholder="Search orders by ID, customer, items, total, date, or status..."
-          value={ongoingOrdersSearch}
-          onChange={(e) => setOngoingOrdersSearch(e.target.value)}
-          style={{
-            width: '100%',
-            padding: '12px 16px',
-            border: '1px solid #ddd',
-            borderRadius: '8px',
-            fontSize: '14px',
-            outline: 'none',
-            transition: 'border-color 0.3s',
-            boxSizing: 'border-box'
-          }}
-          onFocus={(e) => e.target.style.borderColor = '#3498db'}
-          onBlur={(e) => e.target.style.borderColor = '#ddd'}
-        />
+      {/* Filter and Search controls for ongoing orders */}
+      <div style={{ marginBottom: '20px', display: 'flex', gap: '15px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <label style={{ fontWeight: 'bold', color: '#2c3e50' }}>Filter by Partner:</label>
+          <select
+            value={deliveryPartnerFilter}
+            onChange={(e) => setDeliveryPartnerFilter(e.target.value)}
+            style={{
+              padding: '8px 12px',
+              border: '1px solid #ddd',
+              borderRadius: '6px',
+              fontSize: '14px',
+              backgroundColor: 'white',
+              minWidth: '150px'
+            }}
+          >
+            <option value="all">All Orders</option>
+            <option value="assigned">Partner Assigned</option>
+            <option value="unassigned">No Partner Assigned</option>
+          </select>
+        </div>
+        <div style={{ flex: 1, minWidth: '300px' }}>
+          <input
+            type="text"
+            placeholder="Search orders by ID, customer, items, total, date, status, or delivery partner..."
+            value={ongoingOrdersSearch}
+            onChange={(e) => setOngoingOrdersSearch(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              border: '1px solid #ddd',
+              borderRadius: '8px',
+              fontSize: '14px',
+              outline: 'none',
+              transition: 'border-color 0.3s',
+              boxSizing: 'border-box'
+            }}
+            onFocus={(e) => e.target.style.borderColor = '#3498db'}
+            onBlur={(e) => e.target.style.borderColor = '#ddd'}
+          />
+        </div>
       </div>
   
       {isLoadingOngoing ? (
@@ -1354,13 +1463,14 @@ const RestaurantMonitoring = () => {
                 <th style={styles.th}>Total</th>
                 <th style={styles.th}>Date</th>
                 <th style={styles.th}>Status</th>
+                <th style={styles.th}>Delivery Partner</th>
                 <th style={styles.th}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredOngoingOrders.length === 0 ? (
                 <tr>
-                  <td colSpan="7" style={{ ...styles.td, textAlign: 'center', padding: '40px', color: '#666' }}>
+                  <td colSpan="8" style={{ ...styles.td, textAlign: 'center', padding: '40px', color: '#666' }}>
                     {ordersError ? (
                       <div>
                         <div style={{ fontSize: '18px', marginBottom: '10px' }}>⚠️ Error loading orders</div>
@@ -1431,6 +1541,77 @@ const RestaurantMonitoring = () => {
                       </span>
                     </td>
                     <td style={styles.td}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '200px' }}>
+                        {order.partnerAssigned ? (
+                          <div style={{ 
+                            padding: '8px 12px', 
+                            backgroundColor: '#e8f5e8', 
+                            borderRadius: '6px',
+                            border: '1px solid #c3e6c3'
+                          }}>
+                            <div style={{ fontWeight: 'bold', fontSize: '0.9em', color: '#2d5f2d' }}>
+                              {order.partnerAssigned.partnerName}
+                            </div>
+                            {order.partnerAssigned.phone && (
+                              <div style={{ fontSize: '0.8em', color: '#666' }}>
+                                📞 {order.partnerAssigned.phone}
+                              </div>
+                            )}
+                          </div>
+                        ) : activeDeliveryPartners.length > 0 ? (
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                            <select
+                              value={selectedPartners[order.id] || ''}
+                              onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+                              style={{
+                                flex: 1,
+                                padding: '6px 8px',
+                                border: '1px solid #ddd',
+                                borderRadius: '4px',
+                                fontSize: '0.85em',
+                                backgroundColor: 'white'
+                              }}
+                              disabled={assigningOrders.has(order.id)}
+                            >
+                              <option value="">Select Partner</option>
+                              {activeDeliveryPartners.map(partner => (
+                                <option key={partner.id} value={partner.id}>
+                                  {partner.displayName || partner.name} - {partner.phone || 'No phone'}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => handleAssignPartner(order.id)}
+                              disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
+                              style={{
+                                padding: '6px 12px',
+                                backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                fontSize: '0.8em',
+                                cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ 
+                            padding: '8px 12px', 
+                            backgroundColor: '#fff3cd', 
+                            borderRadius: '6px',
+                            border: '1px solid #ffeaa7',
+                            fontSize: '0.85em',
+                            color: '#856404'
+                          }}>
+                            No Active Partners Available
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td style={styles.td}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                         {order.orderStatus === 'yetToBeAccepted' ? (
                           <>
@@ -1483,7 +1664,7 @@ const RestaurantMonitoring = () => {
                                 padding: '6px 12px'
                               }}
                             >
-                              <FaMotorcycle /> Mark as Prepared
+                              Mark as Prepared
                             </button>
                             <button
                               onClick={() => handleOngoingOrderStatusUpdate(order.id, 'declined')}

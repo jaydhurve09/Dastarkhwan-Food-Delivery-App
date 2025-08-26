@@ -10,7 +10,9 @@ export class Order extends BaseModel {
     PREPARED: 'prepared',
     DISPATCHED: 'dispatched',
     DELIVERED: 'delivered',
-    DECLINED: 'declined'
+    DECLINED: 'declined',
+    ASSIGNING_PARTNER: 'assigningPartner',
+    PARTNER_ASSIGNED: 'partnerAssigned'
   };
 
   constructor(data = {}) {

@@ -1,145 +1,241 @@
-const functions = require("firebase-functions");
-const admin = require("firebase-admin");
-const express = require("express");
-const cors = require("cors");
+﻿const functions = require('firebase-functions');
+const admin = require('firebase-admin');
 
-// Initialize Firebase Admin
-if (!admin.apps.length) {
-  admin.initializeApp();
-}
+admin.initializeApp();
 
-const db = admin.firestore();
-
-// Initialize express app
-const app = express();
-app.use(cors({origin: true}));
-
-// Example route
-app.get("/hello", (req, res) => {
-  res.send("👋 Hello from Firebase Cloud Functions with Express!");
+// Mark Order as Prepared - Trigger notification to assigned delivery partner
+exports.markOrderPreparedTrigger = functions.https.onCall(async (data, context) => {
+  try {
+    const { orderId, deliveryPartnerId, restaurantName, customerAddress, orderDetails } = data;
+    
+    console.log('Mark order prepared called:', { orderId, deliveryPartnerId, restaurantName });
+    
+    // Get delivery partner's FCM token
+    const deliveryPartnerDoc = await admin.firestore()
+      .collection('deliveryPartners')
+      .doc(deliveryPartnerId)
+      .get();
+    
+    if (!deliveryPartnerDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Delivery partner not found');
+    }
+    
+    const deliveryPartner = deliveryPartnerDoc.data();
+    const fcmToken = deliveryPartner.fcmToken;
+    
+    if (!fcmToken) {
+      console.log('No FCM token found for delivery partner:', deliveryPartnerId);
+      throw new functions.https.HttpsError('failed-precondition', 'Delivery partner has no FCM token');
+    }
+    
+    // Update order status
+    await admin.firestore()
+      .collection('orders')
+      .doc(orderId)
+      .update({
+        status: 'prepared',
+        preparedAt: admin.firestore.FieldValue.serverTimestamp(),
+        notificationSentAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    
+    // Send push notification
+    const message = {
+      token: fcmToken,
+      notification: {
+        title: 'Order Ready for Pickup!',
+        body: 'Order from ' + restaurantName + ' is ready for delivery'
+      },
+      data: {
+        type: 'order_prepared',
+        orderId: orderId,
+        restaurantName: restaurantName,
+        customerAddress: customerAddress,
+        orderDetails: orderDetails,
+        action: 'pickup_ready'
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          sound: 'default',
+          channelId: 'order_notifications'
+        }
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: 'default',
+            badge: 1
+          }
+        }
+      }
+    };
+    
+    const response = await admin.messaging().send(message);
+    console.log('Order prepared notification sent:', response);
+    
+    return { success: true, messageId: response };
+    
+  } catch (error) {
+    console.error('Error sending order prepared notification:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
 });
 
-// Cloud Function to auto-assign delivery partners when order status changes to "prepared"
-exports.autoAssignDeliveryPartner = functions.firestore
-  .document('orders/{orderId}')
-  .onUpdate(async (change, context) => {
-    try {
-      const beforeData = change.before.data();
-      const afterData = change.after.data();
-      const orderId = context.params.orderId;
-
-      // Check if order status changed to "prepared"
-      if (beforeData.orderStatus !== 'prepared' && afterData.orderStatus === 'prepared') {
-        console.log(`Order ${orderId} marked as prepared, starting auto-assignment...`);
-
-        // Query for active delivery partners
-        const partnersSnapshot = await admin.firestore()
-          .collection('deliveryPartners')
-          .where('isActive', '==', true)
-          .limit(1)
-          .get();
-
-        if (partnersSnapshot.empty) {
-          console.log('No active delivery partners found');
-          
-          // Update order to indicate no partners available
-          await change.after.ref.update({
-            assignmentError: 'No active delivery partners available',
-            updatedAt: new Date()
-          });
-          
-          return null;
-        }
-
-        // Get the first available partner
-        const partnerDoc = partnersSnapshot.docs[0];
-        const partnerData = partnerDoc.data();
-        const partnerId = partnerDoc.id;
-
-        console.log(`Assigning partner ${partnerId} (${partnerData.displayName || partnerData.name}) to order ${orderId}`);
-
-        // Create delivery partner reference
-        const deliveryPartnerRef = admin.firestore().collection('deliveryPartners').doc(partnerId);
-
-        // Update order with partner assignment
-        await change.after.ref.update({
-          deliveryPartnerRef: deliveryPartnerRef,
-          orderStatus: 'partnerAssigned',
-          assignmentError: admin.firestore.FieldValue.delete(), // Remove any previous errors
-          updatedAt: new Date()
-        });
-
-        // Send FCM notification to the assigned partner
-        try {
-          if (partnerData.fcmToken) {
-            const message = {
-              notification: {
-                title: 'New Order Assignment',
-                body: `You have been assigned order #${afterData.orderId || orderId}. Please check the app for details.`,
-              },
-              data: {
-                type: 'order_assignment',
-                orderId: orderId,
-                orderNumber: afterData.orderId || orderId,
-                orderValue: (afterData.orderValue || 0).toString(),
-              },
-              token: partnerData.fcmToken,
-            };
-
-            await admin.messaging().send(message);
-            console.log(`FCM notification sent to partner ${partnerId}`);
-          } else {
-            console.log(`No FCM token found for partner ${partnerId}`);
-          }
-        } catch (notificationError) {
-          console.error('Error sending FCM notification:', notificationError);
-          // Don't fail the assignment if notification fails
-        }
-
-        console.log(`Successfully assigned partner ${partnerId} to order ${orderId}`);
-      }
-
-      return null;
-    } catch (error) {
-      console.error('Error in autoAssignDeliveryPartner:', error);
-      
-      // Update order with error status
-      try {
-        await change.after.ref.update({
-          assignmentError: 'Failed to assign delivery partner automatically',
-          updatedAt: new Date()
-        });
-      } catch (updateError) {
-        console.error('Error updating order with assignment error:', updateError);
-      }
-      
-      return null;
+// Assign Delivery Partner - Trigger notification to specific delivery partner
+exports.assignDeliveryPartnerTrigger = functions.https.onCall(async (data, context) => {
+  try {
+    const { orderId, deliveryPartnerId, restaurantName, customerAddress, orderDetails } = data;
+    
+    console.log('Assign delivery partner called:', { orderId, deliveryPartnerId, restaurantName });
+    
+    // Get delivery partner's FCM token
+    const deliveryPartnerDoc = await admin.firestore()
+      .collection('deliveryPartners')
+      .doc(deliveryPartnerId)
+      .get();
+    
+    if (!deliveryPartnerDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Delivery partner not found');
     }
-  });
-
-// Cloud Function to log all order status changes for debugging
-exports.logOrderStatusChanges = functions.firestore
-  .document('orders/{orderId}')
-  .onUpdate((change, context) => {
-    const before = change.before.data();
-    const after = change.after.data();
-    const orderId = context.params.orderId;
-
-    if (before.orderStatus !== after.orderStatus) {
-      console.log(`Order ${orderId} status changed: ${before.orderStatus} → ${after.orderStatus}`);
-      
-      // Log additional details for debugging
-      console.log(`Order details:`, {
-        orderId: after.orderId || orderId,
-        orderValue: after.orderValue,
-        assigningPartner: after.assigningPartner,
-        partnerAssigned: after.partnerAssigned,
-        assignmentError: after.assignmentError
+    
+    const deliveryPartner = deliveryPartnerDoc.data();
+    const fcmToken = deliveryPartner.fcmToken;
+    
+    if (!fcmToken) {
+      console.log('No FCM token found for delivery partner:', deliveryPartnerId);
+      throw new functions.https.HttpsError('failed-precondition', 'Delivery partner has no FCM token');
+    }
+    
+    // Update order with assigned delivery partner
+    await admin.firestore()
+      .collection('orders')
+      .doc(orderId)
+      .update({
+        deliveryPartnerId: deliveryPartnerId,
+        assignedAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: 'assigned_to_delivery'
       });
-    }
+    
+    // Send push notification
+    const message = {
+      token: fcmToken,
+      notification: {
+        title: 'New Order Assigned!',
+        body: `You have been assigned a delivery from ${restaurantName}`
+      },
+      data: {
+        type: 'order_assigned',
+        orderId: orderId,
+        restaurantName: restaurantName,
+        customerAddress: customerAddress,
+        orderDetails: orderDetails,
+        action: 'accept_or_reject'
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          sound: 'default',
+          channelId: 'order_notifications'
+        }
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: 'default',
+            badge: 1
+          }
+        }
+      }
+    };
+    
+    const response = await admin.messaging().send(message);
+    console.log('Order assignment notification sent:', response);
+    
+    return { success: true, messageId: response };
+    
+  } catch (error) {
+    console.error('Error sending order assignment notification:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
 
-    return null;
-  });
+// Accept Delivery Order
+exports.acceptDeliveryOrder = functions.https.onCall(async (data, context) => {
+  try {
+    const { orderId, deliveryPartnerId } = data;
+    
+    console.log('Accept delivery order called:', { orderId, deliveryPartnerId });
+    
+    // Update order status
+    await admin.firestore()
+      .collection('orders')
+      .doc(orderId)
+      .update({
+        status: 'accepted_by_delivery',
+        acceptedAt: admin.firestore.FieldValue.serverTimestamp(),
+        deliveryPartnerId: deliveryPartnerId
+      });
+    
+    // Update delivery partner status
+    await admin.firestore()
+      .collection('deliveryPartners')
+      .doc(deliveryPartnerId)
+      .update({
+        currentOrderId: orderId,
+        isAvailable: false,
+        lastActive: admin.firestore.FieldValue.serverTimestamp()
+      });
+    
+    console.log(`Order ${orderId} accepted by delivery partner ${deliveryPartnerId}`);
+    
+    return { success: true };
+    
+  } catch (error) {
+    console.error('Error accepting order:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
 
-// Export the Express app as a function
-exports.api = functions.https.onRequest(app);
+// Reject Delivery Order
+exports.rejectDeliveryOrder = functions.https.onCall(async (data, context) => {
+  try {
+    const { orderId, deliveryPartnerId } = data;
+    
+    console.log('Reject delivery order called:', { orderId, deliveryPartnerId });
+    
+    // Update order status to find another delivery partner
+    await admin.firestore()
+      .collection('orders')
+      .doc(orderId)
+      .update({
+        status: 'looking_for_delivery',
+        rejectedBy: admin.firestore.FieldValue.arrayUnion(deliveryPartnerId),
+        rejectedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    
+    console.log(`Order ${orderId} rejected by delivery partner ${deliveryPartnerId}`);
+    
+    return { success: true };
+    
+  } catch (error) {
+    console.error('Error rejecting order:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// Test function for debugging
+exports.testNotification = functions.https.onCall(async (data, context) => {
+  try {
+    const { deliveryPartnerId, testType } = data;
+    
+    console.log('Test notification called:', { deliveryPartnerId, testType });
+    
+    return { 
+      success: true, 
+      message: `Test ${testType} notification would be sent to ${deliveryPartnerId}`  
+    };
+  } catch (error) {
+    console.error('Error in test notification:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});

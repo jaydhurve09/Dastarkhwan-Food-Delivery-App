@@ -362,9 +362,8 @@ const RestaurantMonitoring = () => {
           if (currentOrder && currentOrder.partnerAssigned) {
             console.log('Triggering mark as prepared notification for order:', orderId);
             
-            // Call Cloud Function to send notification
-            const markOrderPrepared = httpsCallable(functions, 'markOrderPreparedTrigger');
-            const functionResponse = await markOrderPrepared({
+            // Call test endpoint instead of Cloud Function for now
+            const testResponse = await api.post('/test/test-mark-prepared', {
               orderId: orderId,
               deliveryPartnerId: currentOrder.partnerAssigned.partnerId || currentOrder.partnerAssigned.id,
               restaurantName: currentOrder.restaurantName || 'Restaurant',
@@ -372,14 +371,14 @@ const RestaurantMonitoring = () => {
               orderDetails: JSON.stringify(currentOrder.items || currentOrder.orderDetails || [])
             });
             
-            console.log('Mark as prepared notification sent:', functionResponse.data);
-            toast.success('Order marked as prepared and delivery partner notified!');
+            console.log('✅ Mark as prepared test response:', testResponse.data);
+            toast.success('Order marked as prepared and delivery partner trigger tested!');
           } else {
             toast.success('Order marked as prepared');
           }
         } catch (notificationError) {
-          console.error('Error sending prepared notification:', notificationError);
-          toast.warn('Order marked as prepared but notification failed to send');
+          console.error('Error testing prepared notification:', notificationError);
+          toast.warn('Order marked as prepared but notification test failed');
         }
       }
 
@@ -488,7 +487,7 @@ const RestaurantMonitoring = () => {
       });
 
       if (response.data.success) {
-        // Call Cloud Function to send assignment notification
+        // Call test endpoint instead of Cloud Function for now
         try {
           console.log('Triggering assignment notification for order:', orderId);
           
@@ -496,8 +495,7 @@ const RestaurantMonitoring = () => {
           const currentOrder = ongoingOrders.find(order => order.id === orderId) || 
                               preparingOrders.find(order => order.id === orderId);
           
-          const assignDeliveryPartner = httpsCallable(functions, 'assignDeliveryPartnerTrigger');
-          const functionResponse = await assignDeliveryPartner({
+          const testResponse = await api.post('/test/test-assign-partner', {
             orderId: orderId,
             deliveryPartnerId: partnerId,
             restaurantName: currentOrder?.restaurantName || 'Restaurant',
@@ -505,11 +503,11 @@ const RestaurantMonitoring = () => {
             orderDetails: JSON.stringify(currentOrder?.items || currentOrder?.orderDetails || [])
           });
           
-          console.log('Assignment notification sent:', functionResponse.data);
-          toast.success('Delivery partner assigned and notified successfully!');
+          console.log('✅ Assignment test response:', testResponse.data);
+          toast.success('Delivery partner assigned and trigger tested successfully!');
         } catch (notificationError) {
-          console.error('Error sending assignment notification:', notificationError);
-          toast.warn('Partner assigned but notification failed to send');
+          console.error('Error testing assignment notification:', notificationError);
+          toast.warn('Partner assigned but notification test failed');
         }
 
         // Refresh the orders to show updated status

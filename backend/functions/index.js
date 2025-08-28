@@ -69,15 +69,35 @@ exports.markOrderPreparedTrigger = functions.https.onCall(async (data, context) 
         }
       }
     };
-    
-    const response = await admin.messaging().send(message);
-    console.log('Order prepared notification sent:', response);
-    
-    return { success: true, messageId: response };
+
+    try {
+      const response = await admin.messaging().send(message);
+      console.log('Order prepared notification sent successfully:', response);
+      
+      return { 
+        success: true, 
+        messageId: response,
+        message: 'Order marked as prepared and notification sent successfully'
+      };
+    } catch (notificationError) {
+      console.error('FCM notification failed:', notificationError.message);
+      
+      // Still return success for admin panel, but note notification failed
+      return {
+        success: true,
+        notificationFailed: true,
+        error: notificationError.message,
+        message: 'Order marked as prepared but notification failed (FCM token may be invalid)'
+      };
+    }
     
   } catch (error) {
-    console.error('Error sending order prepared notification:', error);
-    throw new functions.https.HttpsError('internal', error.message);
+    console.error('Error in markOrderPreparedTrigger:', error);
+    return {
+      success: false,
+      error: error.message,
+      message: 'Failed to process order prepared trigger'
+    };
   }
 });
 
@@ -148,14 +168,34 @@ exports.assignDeliveryPartnerTrigger = functions.https.onCall(async (data, conte
       }
     };
     
-    const response = await admin.messaging().send(message);
-    console.log('Order assignment notification sent:', response);
-    
-    return { success: true, messageId: response };
+    try {
+      const response = await admin.messaging().send(message);
+      console.log('Order assignment notification sent successfully:', response);
+      
+      return { 
+        success: true, 
+        messageId: response,
+        message: 'Delivery partner assigned and notification sent successfully'
+      };
+    } catch (notificationError) {
+      console.error('FCM notification failed:', notificationError.message);
+      
+      // Still return success for admin panel, but note notification failed
+      return {
+        success: true,
+        notificationFailed: true,
+        error: notificationError.message,
+        message: 'Delivery partner assigned but notification failed (FCM token may be invalid)'
+      };
+    }
     
   } catch (error) {
-    console.error('Error sending order assignment notification:', error);
-    throw new functions.https.HttpsError('internal', error.message);
+    console.error('Error in assignDeliveryPartnerTrigger:', error);
+    return {
+      success: false,
+      error: error.message,
+      message: 'Failed to process delivery partner assignment'
+    };
   }
 });
 

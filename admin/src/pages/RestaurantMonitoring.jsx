@@ -6,6 +6,8 @@ import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { AdminContext } from '../contexts/adminContext';
 import api from '../config/axios';
+import { functions } from '../config/firebase';
+import { httpsCallable } from 'firebase/functions';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -352,6 +354,35 @@ const RestaurantMonitoring = () => {
       // Use the correct endpoint for updating order status in Firebase orderedProducts subcollection
       const response = await api.patch(`/ordered-products/admin/orders/${orderId}/status`, { status: newStatus });
 
+      // If marking as prepared and there's a delivery partner assigned, trigger notification
+      if (newStatus === 'prepared') {
+        try {
+          // Find the order to get delivery partner info
+          const currentOrder = preparingOrders.find(order => order.id === orderId);
+          if (currentOrder && currentOrder.partnerAssigned) {
+            console.log('Triggering mark as prepared notification for order:', orderId);
+            
+            // Call Cloud Function to send notification
+            const markOrderPrepared = httpsCallable(functions, 'markOrderPreparedTrigger');
+            const functionResponse = await markOrderPrepared({
+              orderId: orderId,
+              deliveryPartnerId: currentOrder.partnerAssigned.partnerId || currentOrder.partnerAssigned.id,
+              restaurantName: currentOrder.restaurantName || 'Restaurant',
+              customerAddress: currentOrder.customerAddress || currentOrder.address,
+              orderDetails: JSON.stringify(currentOrder.items || currentOrder.orderDetails || [])
+            });
+            
+            console.log('Mark as prepared notification sent:', functionResponse.data);
+            toast.success('Order marked as prepared and delivery partner notified!');
+          } else {
+            toast.success('Order marked as prepared');
+          }
+        } catch (notificationError) {
+          console.error('Error sending prepared notification:', notificationError);
+          toast.warn('Order marked as prepared but notification failed to send');
+        }
+      }
+
       // Update local state based on the status change
       if (newStatus === 'preparing') {
         // Move order from incoming to preparing list
@@ -365,7 +396,9 @@ const RestaurantMonitoring = () => {
       } else if (newStatus === 'prepared') {
         // Remove from preparing orders when marked as prepared
         setPreparingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
-        toast.success('Order marked as prepared');
+        if (!newStatus.includes('notification')) { // Only show this toast if notification toast wasn't shown
+          toast.success('Order marked as prepared');
+        }
       } else if (newStatus === 'declined') {
         // Remove from both incoming and preparing orders when declined
         setIncomingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
@@ -455,7 +488,30 @@ const RestaurantMonitoring = () => {
       });
 
       if (response.data.success) {
-        toast.success('Delivery partner assigned successfully');
+        // Call Cloud Function to send assignment notification
+        try {
+          console.log('Triggering assignment notification for order:', orderId);
+          
+          // Find the order to get details for notification
+          const currentOrder = ongoingOrders.find(order => order.id === orderId) || 
+                              preparingOrders.find(order => order.id === orderId);
+          
+          const assignDeliveryPartner = httpsCallable(functions, 'assignDeliveryPartnerTrigger');
+          const functionResponse = await assignDeliveryPartner({
+            orderId: orderId,
+            deliveryPartnerId: partnerId,
+            restaurantName: currentOrder?.restaurantName || 'Restaurant',
+            customerAddress: currentOrder?.customerAddress || currentOrder?.address || 'Customer Address',
+            orderDetails: JSON.stringify(currentOrder?.items || currentOrder?.orderDetails || [])
+          });
+          
+          console.log('Assignment notification sent:', functionResponse.data);
+          toast.success('Delivery partner assigned and notified successfully!');
+        } catch (notificationError) {
+          console.error('Error sending assignment notification:', notificationError);
+          toast.warn('Partner assigned but notification failed to send');
+        }
+
         // Refresh the orders to show updated status
         await fetchOngoingOrders();
         // Clear the selected partner for this order

@@ -5,9 +5,38 @@ import {updateDeliveryPartner, blockDeliveryPartner , resetPassword , approveDel
 
 
 const initialPendingApprovals = [
-  { id: 1, name: "Rahul Singh", mobile: "9876543210", vehicle: "Honda Goldwing", vehicleNo: "DL5SAF0001", documents: ["Aadhar.pdf", "DL.pdf"], appliedDate: "2025-07-20" },
-  { id: 2, name: "Priya Sharma", mobile: "9123456780", vehicle: "TVS Apache", vehicleNo: "MH12BC5678", documents: ["Aadhar.pdf"], appliedDate: "2025-07-20" },
-  { id: 3, name: "Arjun Verma", mobile: "9988776655", vehicle: "Bajaj Pulsar", vehicleNo: "RJ14WV5555", documents: ["Passport.pdf", "DL.pdf"], appliedDate: "2025-07-21" },
+  { 
+    id: 1, 
+    name: "Rahul Singh", 
+    phone: "9876543210", 
+    vehicle: { name: "Honda Goldwing", number: "DL5SAF0001" }, 
+    documents: [
+      { type: "aadhar", documentNumber: "AADHAR123", imageUrl: "/docs/aadhar.pdf" },
+      { type: "license", documentNumber: "DL123", imageUrl: "/docs/dl.pdf" }
+    ], 
+    appliedDate: "2025-07-20" 
+  },
+  { 
+    id: 2, 
+    name: "Priya Sharma", 
+    phone: "9123456780", 
+    vehicle: { name: "TVS Apache", number: "MH12BC5678" }, 
+    documents: [
+      { type: "aadhar", documentNumber: "AADHAR456", imageUrl: "/docs/aadhar.pdf" }
+    ], 
+    appliedDate: "2025-07-20" 
+  },
+  { 
+    id: 3, 
+    name: "Arjun Verma", 
+    phone: "9988776655", 
+    vehicle: { name: "Bajaj Pulsar", number: "RJ14WV5555" }, 
+    documents: [
+      { type: "passport", documentNumber: "PASS789", imageUrl: "/docs/passport.pdf" },
+      { type: "license", documentNumber: "DL789", imageUrl: "/docs/dl.pdf" }
+    ], 
+    appliedDate: "2025-07-21" 
+  },
 ];
 
 const initialPartners = [
@@ -296,9 +325,9 @@ const toggleBlockPartner = async (id) => {
     setEditPartner(partner);
     setEditForm({
       name: partner.name,
-      phone: partner.phone, // <-- use phone, not mobile
-      vehicle: partner.vehicle.name,
-      vehicleNo: partner.vehicle.number
+      phone: partner.phone || partner.mobile, // <-- use phone, not mobile
+      vehicle: partner.vehicle?.name || partner.vehicle || '',
+      vehicleNo: partner.vehicle?.number || partner.vehicleNo || ''
     });
   }
 
@@ -358,7 +387,7 @@ const toggleBlockPartner = async (id) => {
               deliveryPartners.filter(p => !p.isVerified).map(p => (
                 <tr key={p.id}>
                   <td style={styles.td}>{p.name}</td>
-                  <td style={styles.td}>{p.phone}</td>
+                  <td style={styles.td}>{p.phone || p.mobile}</td>
                   <td style={styles.td}>{p.vehicle?.name || 'N/A'} | {p.vehicle?.number || 'N/A'}</td>
                   <td style={styles.td}>{p.appliedDate}</td>
                   <td style={{ ...styles.td, color: "#2563eb" }}>
@@ -445,15 +474,15 @@ const toggleBlockPartner = async (id) => {
           <div style={styles.modal} role="dialog" aria-modal="true" aria-labelledby="pendingDetailTitle">
             <button style={styles.closeBtn} onClick={() => setPendingDetail(null)} aria-label="Close modal">&times;</button>
             <h2 id="pendingDetailTitle" style={styles.modalHeader}>{pendingDetail.name}</h2>
-            <p><b>Mobile:</b> {pendingDetail.phone}</p>
-            <p><b>Vehicle:</b> {pendingDetail.vehicle.name} | {pendingDetail.vehicle.number}</p>
+            <p><b>Mobile:</b> {pendingDetail.phone || pendingDetail.mobile}</p>
+            <p><b>Vehicle:</b> {pendingDetail.vehicle?.name || pendingDetail.vehicle || 'N/A'} | {pendingDetail.vehicle?.number || pendingDetail.vehicleNo || 'N/A'}</p>
             <p><b>Applied Date:</b> {pendingDetail.appliedDate}</p>
             <div>
               <b>Documents:</b>
               <ul style={styles.docList}>
-                {pendingDetail.documents.map((doc, i) => (
+                {(pendingDetail.documents || []).map((doc, i) => (
                   <li key={i} style={styles.docItem}>
-                    <span>{doc.type || doc.documentNumber || "Document"}</span>
+                    <span>{doc.type || doc.documentNumber || doc || "Document"}</span>
                     {doc.imageUrl && (
                       <>
                         {" "}
@@ -487,8 +516,8 @@ const toggleBlockPartner = async (id) => {
           <div style={styles.modal} role="dialog" aria-modal="true" aria-labelledby="partnerDetailTitle">
             <button style={styles.closeBtn} onClick={() => setPartnerDetail(null)} aria-label="Close modal">&times;</button>
             <h2 id="partnerDetailTitle" style={styles.modalHeader}>{partnerDetail.name}</h2>
-            <p><b>Mobile:</b> {partnerDetail.phone}</p>
-            <p><b>Vehicle Info:</b> {partnerDetail.vehicle.number} | {partnerDetail.vehicle.name}</p>
+            <p><b>Mobile:</b> {partnerDetail.phone || partnerDetail.mobile}</p>
+            <p><b>Vehicle Info:</b> {partnerDetail.vehicle?.number || partnerDetail.vehicleNo || 'N/A'} | {partnerDetail.vehicle?.name || partnerDetail.vehicle || 'N/A'}</p>
             <p><b>Status:</b> {partnerDetail.online ? <span style={styles.online}>Online</span> : <span style={styles.offline}>Offline</span>}</p>
             <p><b>Total Deliveries:</b> {partnerDetail.totalDeliveries}</p>
             <p><b>Rating:</b> {partnerDetail.rating} ★</p>
@@ -497,7 +526,7 @@ const toggleBlockPartner = async (id) => {
             <div>
               <b>Documents:</b>
               <ul style={styles.docList}>
-                {partnerDetail.documents.map((doc, i) => (
+                {(partnerDetail.documents || []).map((doc, i) => (
                   <li key={i} style={styles.docItem}>
                     <span>{doc.type || doc.documentNumber || "Document"}</span>
                     {doc.imageUrl && (

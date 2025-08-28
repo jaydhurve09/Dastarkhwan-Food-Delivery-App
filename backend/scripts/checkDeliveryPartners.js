@@ -1,4 +1,4 @@
-import { DeliveryPartner } from '../models/DeliveryPartner.js';
+import DeliveryPartner from '../models/deliveryPartner.js';
 
 async function checkDeliveryPartners() {
   try {

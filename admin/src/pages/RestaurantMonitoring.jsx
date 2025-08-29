@@ -240,6 +240,7 @@ const RestaurantMonitoring = () => {
   const [isLoadingOrders, setIsLoadingOrders] = useState(true);
   const [isLoadingOngoing, setIsLoadingOngoing] = useState(true); // New loading state
   const [ordersError, setOrdersError] = useState(null);
+  const [autoAssignPartners, setAutoAssignPartners] = useState(true); // Auto-assignment toggle
   
   // Search state variables
   const [incomingOrdersSearch, setIncomingOrdersSearch] = useState('');
@@ -268,10 +269,10 @@ const RestaurantMonitoring = () => {
 
   const filteredOngoingOrders = ongoingOrders.filter(order => {
     // Filter by delivery partner status
-    if (deliveryPartnerFilter === 'assigned' && !order.partnerAssigned) {
+    if (deliveryPartnerFilter === 'assigned' && !order.assigningPartner && !order.partnerAssigned) {
       return false;
     }
-    if (deliveryPartnerFilter === 'unassigned' && order.partnerAssigned) {
+    if (deliveryPartnerFilter === 'unassigned' && (order.assigningPartner || order.partnerAssigned)) {
       return false;
     }
     
@@ -345,6 +346,40 @@ const RestaurantMonitoring = () => {
     }
   };
 
+  // Handle order acceptance and notify all active delivery partners
+  const handleAcceptOrderWithNotification = async (orderId) => {
+    try {
+      console.log('Accepting order and notifying all delivery partners:', orderId);
+      
+      // Call the new backend endpoint that accepts order and notifies all active partners
+      const response = await api.patch(`/orders/${orderId}/accept-and-notify`);
+      
+      if (response.data.success) {
+        const { data, notifiedPartners, message } = response.data;
+        
+        console.log('✅ Order accepted successfully:', data);
+        console.log('📱 Notified partners:', notifiedPartners);
+        
+        // Update local state - move order from incoming to ongoing
+        const acceptedOrder = incomingOrders.find(order => order.id === orderId);
+        if (acceptedOrder) {
+          setOngoingOrders(prev => [...prev, { ...acceptedOrder, orderStatus: 'preparing' }]);
+          setIncomingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+        }
+        
+        // Show success message with notification count
+        toast.success(`${message} - Order moved to preparing!`);
+        
+        // Refresh both sections to ensure data consistency
+        await fetchYetToBeAcceptedOrders();
+        await fetchOngoingOrders();
+      }
+    } catch (error) {
+      console.error('Error accepting order and notifying partners:', error);
+      toast.error('Failed to accept order and send notifications');
+    }
+  };
+
   // Handle order status update - now works with orders collection
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
     try {
@@ -386,16 +421,135 @@ const RestaurantMonitoring = () => {
         const acceptedOrder = incomingOrders.find(order => order.id === orderId);
         if (acceptedOrder) {
           setOngoingOrders(prev => [...prev, { ...acceptedOrder, orderStatus: 'preparing' }]);
+          
+          // Auto-assign delivery partner when accepting order (if enabled)
+          if (autoAssignPartners) {
+            try {
+              console.log('Auto-assigning delivery partner for accepted order:', orderId);
+              
+              // Find an available delivery partner
+              if (activeDeliveryPartners.length > 0) {
+                // Smart partner selection: prefer partners who are not currently assigned
+                let availablePartner = null;
+                
+                // First, try to find a partner who doesn't have any current assignments
+                const unassignedPartners = activeDeliveryPartners.filter(partner => {
+                  // Check if this partner is already assigned to any ongoing order
+                  const isAssigned = ongoingOrders.some(order => 
+                    order.partnerAssigned && 
+                    (order.partnerAssigned.partnerId === partner.id || 
+                     order.partnerAssigned.id === partner.id)
+                  );
+                  return !isAssigned;
+                });
+                
+                if (unassignedPartners.length > 0) {
+                  // Pick the first unassigned partner
+                  availablePartner = unassignedPartners[0];
+                  console.log('Selected unassigned partner:', availablePartner.displayName || availablePartner.name);
+                } else {
+                  // If all partners are assigned, pick the first available one
+                  availablePartner = activeDeliveryPartners[0];
+                  console.log('All partners assigned, selecting first available:', availablePartner.displayName || availablePartner.name);
+                }
+              
+                console.log('Assigning partner:', availablePartner.displayName || availablePartner.name);
+                
+                // Call the assign partner API
+                const assignResponse = await api.patch(`/orders/${orderId}/assign-partner`, {
+                  partnerId: availablePartner.id,
+                  partnerName: availablePartner.displayName || availablePartner.name,
+                  phone: availablePartner.phone
+                });
+                
+                if (assignResponse.data.success) {
+                  console.log('✅ Auto-assignment successful');
+                  
+                  // Send partner assignment notification
+                  try {
+                    const notificationResponse = await api.post('/test/test-assign-partner', {
+                      orderId: orderId,
+                      deliveryPartnerId: availablePartner.id,
+                      orderStatus: 'accepted_and_assigned',
+                      restaurantName: 'Restaurant',
+                      customerAddress: acceptedOrder.deliveryAddress?.address || acceptedOrder.address || 'Customer Address',
+                      orderDetails: JSON.stringify(acceptedOrder.products || acceptedOrder.items || []),
+                      notificationType: 'order_accepted_and_partner_assigned',
+                      partnerName: availablePartner.displayName || availablePartner.name
+                    });
+                    console.log('✅ Auto-assignment notification sent:', notificationResponse.data);
+                    toast.success(`Order accepted and assigned to ${availablePartner.displayName || availablePartner.name}!`);
+                  } catch (notificationError) {
+                    console.error('Error sending auto-assignment notification:', notificationError);
+                    toast.success('Order accepted and partner assigned (notification failed)');
+                  }
+                } else {
+                  throw new Error('Assignment failed');
+                }
+              } else {
+                // No delivery partners available, just send acceptance notification
+                console.log('No delivery partners available for auto-assignment');
+                const notificationResponse = await api.post('/test/test-assign-partner', {
+                  orderId: orderId,
+                  orderStatus: 'accepted',
+                  restaurantName: 'Restaurant',
+                  customerAddress: acceptedOrder.deliveryAddress?.address || acceptedOrder.address || 'Customer Address',
+                  orderDetails: JSON.stringify(acceptedOrder.products || acceptedOrder.items || []),
+                  notificationType: 'order_accepted_no_partner'
+                });
+                console.log('✅ Order acceptance notification sent (no partners):', notificationResponse.data);
+                toast.success('Order accepted! (No delivery partners available for auto-assignment)');
+              }
+            } catch (error) {
+              console.error('Error in auto-assignment process:', error);
+              // Send basic acceptance notification as fallback
+              try {
+                const notificationResponse = await api.post('/test/test-assign-partner', {
+                  orderId: orderId,
+                  orderStatus: 'accepted',
+                  restaurantName: 'Restaurant',
+                  customerAddress: acceptedOrder.deliveryAddress?.address || acceptedOrder.address || 'Customer Address',
+                  orderDetails: JSON.stringify(acceptedOrder.products || acceptedOrder.items || []),
+                  notificationType: 'order_accepted_fallback'
+                });
+                console.log('✅ Fallback acceptance notification sent:', notificationResponse.data);
+              } catch (notificationError) {
+                console.error('Error sending fallback notification:', notificationError);
+              }
+              toast.success('Order accepted! (Auto-assignment failed)');
+            }
+          } else {
+            // Auto-assignment disabled, just send acceptance notification
+            try {
+              console.log('Sending acceptance notification (auto-assignment disabled):', orderId);
+              const notificationResponse = await api.post('/test/test-assign-partner', {
+                orderId: orderId,
+                orderStatus: 'accepted',
+                restaurantName: 'Restaurant',
+                customerAddress: acceptedOrder.deliveryAddress?.address || acceptedOrder.address || 'Customer Address',
+                orderDetails: JSON.stringify(acceptedOrder.products || acceptedOrder.items || []),
+                notificationType: 'order_accepted_manual'
+              });
+              console.log('✅ Order acceptance notification sent:', notificationResponse.data);
+              toast.success('Order accepted and moved to ongoing');
+            } catch (notificationError) {
+              console.error('Error sending acceptance notification:', notificationError);
+              toast.success('Order accepted and moved to ongoing');
+            }
+          }
         }
         // Remove from incoming orders
         setIncomingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
-        toast.success('Order accepted and moved to ongoing');
       } else if (newStatus === 'prepared') {
-        // Remove from ongoing orders when marked as prepared
-        setOngoingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+        // When marked as prepared, keep order in ongoing orders (don't remove it)
+        // The order will show the dispatch button now
         if (!newStatus.includes('notification')) { // Only show this toast if notification toast wasn't shown
-          toast.success('Order marked as prepared');
+          toast.success('Order marked as prepared - ready for dispatch');
         }
+      } else if (newStatus === 'dispatched') {
+        // Remove from ongoing orders when dispatched
+        setOngoingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+        toast.success('Order dispatched');
       } else if (newStatus === 'declined') {
         // Remove from both incoming and ongoing orders when declined
         setIncomingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
@@ -457,29 +611,31 @@ const RestaurantMonitoring = () => {
       });
 
       if (response.data.success) {
-        // Call test endpoint instead of Cloud Function for now
+        // Call the single partner notification endpoint (only notify the assigned partner)
         try {
-          console.log('Triggering assignment notification for order:', orderId);
+          console.log('Triggering single partner assignment notification for order:', orderId);
           
-          // Find the order to get details for notification
-          const currentOrder = ongoingOrders.find(order => order.id === orderId);
+          // Find the order to get details for notification (check both incoming and ongoing)
+          const currentOrder = ongoingOrders.find(order => order.id === orderId) || 
+                              incomingOrders.find(order => order.id === orderId);
           
-          const testResponse = await api.post('/test/test-assign-partner', {
+          const testResponse = await api.post('/test/test-single-partner-notification', {
             orderId: orderId,
             deliveryPartnerId: partnerId,
+            partnerName: selectedPartner.displayName || selectedPartner.name,
             restaurantName: currentOrder?.restaurantName || 'Restaurant',
-            customerAddress: currentOrder?.customerAddress || currentOrder?.address || 'Customer Address',
-            orderDetails: JSON.stringify(currentOrder?.items || currentOrder?.orderDetails || [])
+            customerAddress: currentOrder?.customerAddress || currentOrder?.deliveryAddress?.address || currentOrder?.address || 'Customer Address'
           });
           
-          console.log('✅ Assignment test response:', testResponse.data);
-          toast.success('Delivery partner assigned and trigger tested successfully!');
+          console.log('✅ Single partner assignment notification:', testResponse.data);
+          toast.success(`${selectedPartner.displayName || selectedPartner.name} assigned and notified!`);
         } catch (notificationError) {
-          console.error('Error testing assignment notification:', notificationError);
-          toast.warn('Partner assigned but notification test failed');
+          console.error('Error testing single partner assignment notification:', notificationError);
+          toast.warn(`${selectedPartner.displayName || selectedPartner.name} assigned but notification failed`);
         }
 
-        // Refresh the orders to show updated status
+        // Refresh both sections to show updated status
+        await fetchYetToBeAcceptedOrders();
         await fetchOngoingOrders();
         // Clear the selected partner for this order
         setSelectedPartners(prev => {
@@ -499,6 +655,27 @@ const RestaurantMonitoring = () => {
         updated.delete(orderId);
         return updated;
       });
+    }
+  };
+
+  // Handle dispatching order (set orderStatus to 'dispatched')
+  const handleDispatchOrder = async (orderId) => {
+    try {
+      console.log('Dispatching order:', orderId);
+      
+      const response = await api.patch(`/orders/${orderId}/dispatch`);
+      
+      if (response.data.success) {
+        toast.success('Order dispatched successfully!');
+        // Refresh both sections to show updated status
+        await fetchYetToBeAcceptedOrders();
+        await fetchOngoingOrders();
+      } else {
+        throw new Error(response.data.message || 'Failed to dispatch order');
+      }
+    } catch (error) {
+      console.error('Error dispatching order:', error);
+      toast.error(error.response?.data?.message || 'Failed to dispatch order');
     }
   };
 
@@ -536,10 +713,6 @@ const RestaurantMonitoring = () => {
         return { ...baseStyle, backgroundColor: '#27ae60', color: 'white' };
       case 'declined':
         return { ...baseStyle, backgroundColor: '#e74c3c', color: 'white' };
-      case 'assigningPartner':
-        return { ...baseStyle, backgroundColor: '#f39c12', color: 'white' };
-      case 'partnerAssigned':
-        return { ...baseStyle, backgroundColor: '#8e44ad', color: 'white' };
       default:
         return { ...baseStyle, backgroundColor: '#95a5a6', color: 'white' };
     }
@@ -1211,20 +1384,74 @@ const RestaurantMonitoring = () => {
     <div style={{ ...styles.card, gridColumn: '1 / -1' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <h2 style={styles.cardTitle}>Incoming Orders</h2>
-        <button 
-          onClick={fetchYetToBeAcceptedOrders}
-          style={{
-            ...styles.button,
-            backgroundColor: '#3498db',
-            color: 'white',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '2px',
-            borderRadius: '60px',
-          }}
-        >
-          <MdOutlineRefresh size={20}/>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          {/* Auto-assignment toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontSize: '14px', color: '#666', fontWeight: '500' }}>
+              Auto-assign Partners:
+            </label>
+            <label style={{ 
+              position: 'relative',
+              display: 'inline-block',
+              width: '50px',
+              height: '24px',
+              cursor: 'pointer'
+            }}>
+              <input
+                type="checkbox"
+                checked={autoAssignPartners}
+                onChange={(e) => setAutoAssignPartners(e.target.checked)}
+                style={{ opacity: 0, width: 0, height: 0 }}
+              />
+              <span style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: autoAssignPartners ? '#4CAF50' : '#ccc',
+                borderRadius: '24px',
+                transition: '0.3s',
+                cursor: 'pointer'
+              }}>
+                <span style={{
+                  position: 'absolute',
+                  content: '',
+                  height: '18px',
+                  width: '18px',
+                  left: autoAssignPartners ? '29px' : '3px',
+                  bottom: '3px',
+                  backgroundColor: 'white',
+                  borderRadius: '50%',
+                  transition: '0.3s',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                }}></span>
+              </span>
+            </label>
+            <span style={{ 
+              fontSize: '12px', 
+              color: autoAssignPartners ? '#4CAF50' : '#999',
+              fontWeight: '500',
+              minWidth: '30px'
+            }}>
+              {autoAssignPartners ? 'ON' : 'OFF'}
+            </span>
+          </div>
+          <button 
+            onClick={fetchYetToBeAcceptedOrders}
+            style={{
+              ...styles.button,
+              backgroundColor: '#3498db',
+              color: 'white',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '2px',
+              borderRadius: '60px',
+            }}
+          >
+            <MdOutlineRefresh size={20}/>
+          </button>
+        </div>
       </div>
 
       {/* Search bar for incoming orders */}
@@ -1262,13 +1489,14 @@ const RestaurantMonitoring = () => {
                 <th style={styles.th}>Total</th>
                 <th style={styles.th}>Date</th>
                 <th style={styles.th}>Status</th>
+                <th style={styles.th}>Delivery Partner</th>
                 <th style={styles.th}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredIncomingOrders.length === 0 ? (
                 <tr>
-                  <td colSpan="7" style={{ ...styles.td, textAlign: 'center', padding: '40px', color: '#666' }}>
+                  <td colSpan="8" style={{ ...styles.td, textAlign: 'center', padding: '40px', color: '#666' }}>
                     {ordersError ? (
                       <div>
                         <div style={{ fontSize: '18px', marginBottom: '10px' }}>⚠️ Error loading orders</div>
@@ -1339,11 +1567,135 @@ const RestaurantMonitoring = () => {
                       </span>
                     </td>
                     <td style={styles.td}>
+                      {/* Delivery Partner Assignment for Incoming Orders */}
+                      {assigningOrders.has(order.id) ? (
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '8px',
+                          padding: '6px 10px', 
+                          backgroundColor: '#fff3cd', 
+                          borderRadius: '4px',
+                          border: '1px solid #ffeaa7'
+                        }}>
+                          <div style={{ 
+                            width: '16px', 
+                            height: '16px', 
+                            border: '2px solid #f39c12',
+                            borderTop: '2px solid transparent',
+                            borderRadius: '50%',
+                            animation: 'spin 1s linear infinite'
+                          }}></div>
+                          <span style={{ fontSize: '0.8em', color: '#856404', fontWeight: 'bold' }}>
+                            Assigning...
+                          </span>
+                        </div>
+                      ) : order.assigningPartner && order.partnerAssigned ? (
+                        <div style={{ 
+                          padding: '6px 10px', 
+                          backgroundColor: '#e8f5e8', 
+                          borderRadius: '4px',
+                          border: '1px solid #c3e6c3'
+                        }}>
+                          <div style={{ fontWeight: 'bold', fontSize: '0.8em', color: '#2d5f2d' }}>
+                            {order.partnerAssigned.name || order.partnerAssigned.partnerName}
+                          </div>
+                          {order.partnerAssigned.phone && (
+                            <div style={{ fontSize: '0.7em', color: '#666' }}>
+                              📞 {order.partnerAssigned.phone}
+                            </div>
+                          )}
+                          <div style={{ fontSize: '0.7em', color: '#2d5f2d', marginTop: '2px' }}>
+                            ✅ Ready to Dispatch
+                          </div>
+                          <button
+                            onClick={() => handleDispatchOrder(order.id)}
+                            style={{
+                              marginTop: '4px',
+                              padding: '4px 8px',
+                              backgroundColor: '#9b59b6',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              fontSize: '0.7em',
+                              cursor: 'pointer',
+                              width: '100%'
+                            }}
+                          >
+                            Dispatch
+                          </button>
+                        </div>
+                      ) : order.orderStatus === 'dispatched' ? (
+                        <div style={{ 
+                          padding: '6px 10px', 
+                          backgroundColor: '#e6e2ff', 
+                          borderRadius: '4px',
+                          border: '1px solid #d1c7ff'
+                        }}>
+                          <div style={{ fontWeight: 'bold', fontSize: '0.8em', color: '#6b46c1' }}>
+                            {order.partnerAssigned ? (order.partnerAssigned.name || order.partnerAssigned.partnerName) : 'Partner'}
+                          </div>
+                          <div style={{ fontSize: '0.7em', color: '#6b46c1', marginTop: '2px' }}>
+                            🚀 Dispatched
+                          </div>
+                        </div>
+                      ) : activeDeliveryPartners.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <select
+                            value={selectedPartners[order.id] || ''}
+                            onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+                            style={{
+                              padding: '4px 6px',
+                              border: '1px solid #ddd',
+                              borderRadius: '4px',
+                              fontSize: '0.75em',
+                              backgroundColor: 'white'
+                            }}
+                            disabled={assigningOrders.has(order.id)}
+                          >
+                            <option value="">Select Partner</option>
+                            {activeDeliveryPartners.map(partner => (
+                              <option key={partner.id} value={partner.id}>
+                                {partner.displayName || partner.name}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={() => handleAssignPartner(order.id)}
+                            disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
+                            style={{
+                              padding: '4px 8px',
+                              backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              fontSize: '0.7em',
+                              cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer'
+                            }}
+                          >
+                            {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ 
+                          padding: '6px 10px', 
+                          backgroundColor: '#fff3cd', 
+                          borderRadius: '4px',
+                          border: '1px solid #ffeaa7',
+                          fontSize: '0.75em',
+                          color: '#856404',
+                          textAlign: 'center'
+                        }}>
+                          No Partners Available
+                        </div>
+                      )}
+                    </td>
+                    <td style={styles.td}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                         {order.orderStatus === 'yetToBeAccepted' ? (
                           <>
                             <button
-                              onClick={() => handleUpdateOrderStatus(order.id, 'preparing')}
+                              onClick={() => handleAcceptOrderWithNotification(order.id)}
                               style={{
                                 ...styles.button,
                                 backgroundColor: '#2ecc71',
@@ -1356,7 +1708,7 @@ const RestaurantMonitoring = () => {
                                 padding: '6px 12px'
                               }}
                             >
-                              <FaCheck /> Accept
+                              <FaCheck /> Accept & Notify All Partners
                             </button>
                             <button
                               onClick={() => handleUpdateOrderStatus(order.id, 'declined')}
@@ -1600,6 +1952,60 @@ const RestaurantMonitoring = () => {
                               Assigning Partner...
                             </span>
                           </div>
+                        ) : order.assigningPartner && order.partnerAssigned ? (
+                          <div style={{ 
+                            padding: '8px 12px', 
+                            backgroundColor: '#e8f5e8', 
+                            borderRadius: '6px',
+                            border: '1px solid #c3e6c3'
+                          }}>
+                            <div style={{ fontWeight: 'bold', fontSize: '0.9em', color: '#2d5f2d' }}>
+                              {order.partnerAssigned.name || order.partnerAssigned.partnerName}
+                            </div>
+                            {(order.partnerAssigned.phone) && (
+                              <div style={{ fontSize: '0.8em', color: '#666' }}>
+                                📞 {order.partnerAssigned.phone}
+                              </div>
+                            )}
+                            <div style={{ fontSize: '0.75em', color: '#2d5f2d', marginTop: '4px' }}>
+                              ✅ Partner Assigned
+                            </div>
+                            <button
+                              onClick={() => handleDispatchOrder(order.id)}
+                              style={{
+                                marginTop: '8px',
+                                padding: '6px 12px',
+                                backgroundColor: '#9b59b6',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                fontSize: '0.8em',
+                                cursor: 'pointer',
+                                width: '100%'
+                              }}
+                            >
+                              Dispatch
+                            </button>
+                          </div>
+                        ) : order.orderStatus === 'dispatched' ? (
+                          <div style={{ 
+                            padding: '8px 12px', 
+                            backgroundColor: '#e6e2ff', 
+                            borderRadius: '6px',
+                            border: '1px solid #d1c7ff'
+                          }}>
+                            <div style={{ fontWeight: 'bold', fontSize: '0.9em', color: '#6b46c1' }}>
+                              {order.partnerAssigned ? (order.partnerAssigned.name || order.partnerAssigned.partnerName) : 'Delivery Partner'}
+                            </div>
+                            {order.partnerAssigned && order.partnerAssigned.phone && (
+                              <div style={{ fontSize: '0.8em', color: '#666' }}>
+                                📞 {order.partnerAssigned.phone}
+                              </div>
+                            )}
+                            <div style={{ fontSize: '0.75em', color: '#6b46c1', marginTop: '4px' }}>
+                              🚀 Dispatched
+                            </div>
+                          </div>
                         ) : order.partnerAssigned ? (
                           <div style={{ 
                             padding: '8px 12px', 
@@ -1616,7 +2022,7 @@ const RestaurantMonitoring = () => {
                               </div>
                             )}
                             <div style={{ fontSize: '0.75em', color: '#2d5f2d', marginTop: '4px' }}>
-                              ✅ Auto-assigned
+                              ✅ Partner Assigned (Legacy)
                             </div>
                           </div>
                         ) : order.assignmentError ? (
@@ -1758,7 +2164,7 @@ const RestaurantMonitoring = () => {
                         {order.orderStatus === 'yetToBeAccepted' ? (
                           <>
                             <button
-                              onClick={() => handleUpdateOrderStatus(order.id, 'preparing')}
+                              onClick={() => handleAcceptOrderWithNotification(order.id)}
                               style={{
                                 ...styles.button,
                                 backgroundColor: '#2ecc71',
@@ -1771,7 +2177,7 @@ const RestaurantMonitoring = () => {
                                 padding: '6px 12px'
                               }}
                             >
-                              <FaCheck /> Accept
+                              <FaCheck /> Accept & Notify All Partners
                             </button>
                             <button
                               onClick={() => handleUpdateOrderStatus(order.id, 'declined')}
@@ -1823,6 +2229,25 @@ const RestaurantMonitoring = () => {
                               }}
                             >
                               <FaTimes /> Decline
+                            </button>
+                          </>
+                        ) : order.orderStatus === 'prepared' ? (
+                          <>
+                            <button
+                              onClick={() => handleDispatchOrder(order.id)}
+                              style={{
+                                ...styles.button,
+                                backgroundColor: '#9b59b6',
+                                color: 'white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '5px',
+                                fontSize: '12px',
+                                padding: '6px 12px'
+                              }}
+                            >
+                              🚚 Dispatch
                             </button>
                           </>
                         ) : null}

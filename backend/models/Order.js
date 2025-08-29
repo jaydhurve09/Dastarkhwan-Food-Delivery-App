@@ -11,8 +11,6 @@ export class Order extends BaseModel {
     DISPATCHED: 'dispatched',
     DELIVERED: 'delivered',
     DECLINED: 'declined',
-    ASSIGNING_PARTNER: 'assigningPartner',
-    PARTNER_ASSIGNED: 'partnerAssigned'
   };
 
   constructor(data = {}) {

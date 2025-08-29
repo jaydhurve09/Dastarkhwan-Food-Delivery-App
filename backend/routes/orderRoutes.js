@@ -17,7 +17,9 @@ import {
   updateOrderStatusInOrders,
   testOrdersCollection,
   testGeoPoint,
-  assignDeliveryPartnerToOrder
+  assignDeliveryPartnerToOrder,
+  dispatchOrder,
+  acceptOrderAndNotifyPartners
 } from '../controllers/orderController.js';
 import { isAuthenticated, isAdmin } from '../middleware/auth.js';
 
@@ -52,8 +54,14 @@ router.delete('/:orderId', isAuthenticated, isAdmin, deleteOrder);
 // Order status updates for orders collection
 router.patch('/:orderId/status', updateOrderStatusInOrders);
 
+// Accept order and notify all active delivery partners
+router.patch('/:orderId/accept-and-notify', acceptOrderAndNotifyPartners);
+
 // Assign delivery partner to order
 router.patch('/:orderId/assign-partner', assignDeliveryPartnerToOrder);
+
+// Dispatch order (set status to 'dispatched')
+router.patch('/:orderId/dispatch', dispatchOrder);
 
 // Delivery partner assignment
 router.put('/assign-agent', isAuthenticated, isAdmin, updateAgent);

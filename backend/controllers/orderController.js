@@ -880,13 +880,13 @@ export const assignDeliveryPartnerToOrder = async (req, res) => {
       phone: phone || partnerData.phone || ''
     };
 
-    // Update order with partner assignment
+    // Update order with partner assignment (keep current orderStatus, don't change to 'partnerAssigned')
     const updateData = {
-      assigningPartner: false,
+      assigningPartner: true, // Set to true when partner is assigned
       partnerAssigned: partnerAssignment,
       deliveryPartnerId: partnerId,
       deliveryBoyName: partnerAssignment.partnerName,
-      orderStatus: 'partnerAssigned',
+      // orderStatus remains unchanged - no longer setting to 'partnerAssigned'
       updatedAt: new Date()
     };
 
@@ -990,6 +990,164 @@ const assignDeliveryPartner = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to assign delivery partner',
+      error: error.message
+    });
+  }
+};
+
+// Dispatch order (set orderStatus to 'dispatched')
+export const dispatchOrder = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    console.log('Dispatching order:', orderId);
+
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Order ID is required'
+      });
+    }
+
+    // Check if order exists
+    const orderDoc = await db.collection('orders').doc(orderId).get();
+    if (!orderDoc.exists) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    const orderData = orderDoc.data();
+
+    // Check if order has a partner assigned
+    if (!orderData.assigningPartner && !orderData.partnerAssigned) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot dispatch order without assigned delivery partner'
+      });
+    }
+
+    // Update order status to dispatched
+    const updateData = {
+      orderStatus: 'dispatched',
+      assigningPartner: false, // Reset this flag when dispatched
+      updatedAt: new Date()
+    };
+
+    await db.collection('orders').doc(orderId).update(updateData);
+
+    // Get the updated order
+    const updatedOrder = await db.collection('orders').doc(orderId).get();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        id: updatedOrder.id,
+        ...updatedOrder.data()
+      },
+      message: 'Order dispatched successfully'
+    });
+
+  } catch (error) {
+    console.error('Error dispatching order:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error dispatching order',
+      error: error.message
+    });
+  }
+};
+
+// Accept order and notify all active delivery partners
+export const acceptOrderAndNotifyPartners = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    
+    console.log('Accepting order and notifying delivery partners:', orderId);
+
+    // Check if order exists
+    const orderDoc = await db.collection('orders').doc(orderId).get();
+    if (!orderDoc.exists) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    const orderData = orderDoc.data();
+    
+    // Update order status to 'preparing' (accepted)
+    await db.collection('orders').doc(orderId).update({
+      orderStatus: 'preparing',
+      acceptedAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    // Get all active delivery partners
+    const partnersSnapshot = await db.collection('deliveryPartners')
+      .where('isActive', '==', true)
+      .get();
+
+    console.log(`Found ${partnersSnapshot.size} active delivery partners`);
+
+    // Send notifications to all active partners
+    const notificationPromises = [];
+    const notifiedPartners = [];
+
+    partnersSnapshot.forEach(partnerDoc => {
+      const partnerData = partnerDoc.data();
+      const fcmToken = partnerData.fcmToken;
+      
+      if (fcmToken && fcmToken !== 'no-token' && fcmToken !== 'no-token-yet') {
+        // Import messaging at function level to avoid module loading issues
+        import('firebase-admin/messaging').then(({ getMessaging }) => {
+          const message = {
+            token: fcmToken,
+            notification: {
+              title: 'New Order Available!',
+              body: `A new order is available for delivery. Order #${orderId}`
+            },
+            data: {
+              orderId: orderId,
+              orderType: 'new_order_available',
+              restaurantName: orderData.restaurantName || 'Restaurant',
+              customerAddress: orderData.deliveryAddress || 'Customer Address',
+              timestamp: new Date().toISOString()
+            }
+          };
+
+          return getMessaging().send(message);
+        }).catch(error => {
+          console.error(`Failed to send notification to partner ${partnerDoc.id}:`, error);
+        });
+
+        notifiedPartners.push({
+          id: partnerDoc.id,
+          name: partnerData.name || partnerData.displayName,
+          phone: partnerData.phone
+        });
+      }
+    });
+
+    // Get the updated order
+    const updatedOrderDoc = await db.collection('orders').doc(orderId).get();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        id: updatedOrderDoc.id,
+        ...updatedOrderDoc.data()
+      },
+      notifiedPartners,
+      message: `Order accepted and ${notifiedPartners.length} delivery partners notified`
+    });
+
+  } catch (error) {
+    console.error('Error accepting order and notifying partners:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error accepting order and notifying partners',
       error: error.message
     });
   }

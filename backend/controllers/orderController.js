@@ -92,8 +92,9 @@ export const updateAgent = async (req, res) => {
       });
     }
 
-    // Set delivery partner details
-    order.deliveryPartnerId = agentId;
+    // Set delivery partner details using document reference
+    const agentRef = db.collection('deliveryPartners').doc(agentId);
+    order.deliveryPartnerId = agentRef;
     order.deliveryBoyName = deliveryBoyName || '';
     order.orderStatus = 'dispatched';
     order.updatedAt = new Date();
@@ -313,7 +314,9 @@ export const getOrdersByDeliveryPartner = async (req, res) => {
       return res.status(400).json({ message: 'Delivery partner ID is required' });
     }
     
-    let query = db.collection('orders').where('deliveryPartnerId', '==', deliveryPartnerId);
+    // Create document reference for the query
+    const deliveryPartnerRef = db.collection('deliveryPartners').doc(deliveryPartnerId);
+    let query = db.collection('orders').where('deliveryPartnerId', '==', deliveryPartnerRef);
     
     if (status) {
       query = query.where('orderStatus', '==', status);
@@ -873,9 +876,11 @@ export const assignDeliveryPartnerToOrder = async (req, res) => {
       updatedAt: new Date()
     });
 
-    // Prepare partner assignment data
+    // Prepare partner assignment data with document references
+    const deliveryPartnerRef = db.collection('deliveryPartners').doc(partnerId);
+    
     const partnerAssignment = {
-      partnerId: partnerId,
+      partnerId: deliveryPartnerRef, // Document reference instead of string
       partnerName: partnerName || partnerData.displayName || partnerData.name || 'Unknown',
       phone: phone || partnerData.phone || ''
     };
@@ -884,7 +889,7 @@ export const assignDeliveryPartnerToOrder = async (req, res) => {
     const updateData = {
       assigningPartner: true, // Set to true when partner is assigned
       partnerAssigned: partnerAssignment,
-      deliveryPartnerId: partnerId,
+      deliveryPartnerId: deliveryPartnerRef, // Document reference instead of string
       deliveryBoyName: partnerAssignment.partnerName,
       // orderStatus remains unchanged - no longer setting to 'partnerAssigned'
       updatedAt: new Date()
@@ -966,11 +971,17 @@ const assignDeliveryPartner = async (req, res) => {
     }
 
     // Create delivery partner reference
-    const deliveryPartnerRef = db.collection('deliveryPartners').doc(partnerId);
+    const partnerRef = db.collection('deliveryPartners').doc(partnerId);
 
-    // Update order with delivery partner reference
+    // Update order with delivery partner reference (using same field names as main assign function)
     await db.collection('orders').doc(orderId).update({
-      deliveryPartnerRef: deliveryPartnerRef,
+      deliveryPartnerId: partnerRef,
+      partnerAssigned: {
+        partnerId: partnerRef,
+        partnerName: partnerData.displayName || partnerData.name || 'Unknown',
+        phone: partnerData.phone || ''
+      },
+      deliveryBoyName: partnerData.displayName || partnerData.name || 'Unknown',
       orderStatus: 'partnerAssigned',
       updatedAt: new Date()
     });

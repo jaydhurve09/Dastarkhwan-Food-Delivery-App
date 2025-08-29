@@ -363,12 +363,17 @@ const RestaurantMonitoring = () => {
         // Update local state - move order from incoming to ongoing
         const acceptedOrder = incomingOrders.find(order => order.id === orderId);
         if (acceptedOrder) {
-          setOngoingOrders(prev => [...prev, { ...acceptedOrder, orderStatus: 'preparing' }]);
+          const updatedOrder = { ...acceptedOrder, orderStatus: 'preparing', assigningPartner: true };
+          setOngoingOrders(prev => [...prev, updatedOrder]);
           setIncomingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+          
+          // Show success message with notification count
+          toast.success(`${message} - Order moved to preparing!`);
+          
+          // Trigger auto-assignment AFTER order status is updated to 'preparing'
+          console.log('Order status updated to preparing, triggering auto-assignment...');
+          await handleAutoAssignPartner(orderId, acceptedOrder);
         }
-        
-        // Show success message with notification count
-        toast.success(`${message} - Order moved to preparing!`);
         
         // Refresh both sections to ensure data consistency
         await fetchYetToBeAcceptedOrders();
@@ -421,122 +426,7 @@ const RestaurantMonitoring = () => {
         const acceptedOrder = incomingOrders.find(order => order.id === orderId);
         if (acceptedOrder) {
           setOngoingOrders(prev => [...prev, { ...acceptedOrder, orderStatus: 'preparing' }]);
-          
-          // Auto-assign delivery partner when accepting order (if enabled)
-          if (autoAssignPartners) {
-            try {
-              console.log('Auto-assigning delivery partner for accepted order:', orderId);
-              
-              // Find an available delivery partner
-              if (activeDeliveryPartners.length > 0) {
-                // Smart partner selection: prefer partners who are not currently assigned
-                let availablePartner = null;
-                
-                // First, try to find a partner who doesn't have any current assignments
-                const unassignedPartners = activeDeliveryPartners.filter(partner => {
-                  // Check if this partner is already assigned to any ongoing order
-                  const isAssigned = ongoingOrders.some(order => 
-                    order.partnerAssigned && 
-                    (order.partnerAssigned.partnerId === partner.id || 
-                     order.partnerAssigned.id === partner.id)
-                  );
-                  return !isAssigned;
-                });
-                
-                if (unassignedPartners.length > 0) {
-                  // Pick the first unassigned partner
-                  availablePartner = unassignedPartners[0];
-                  console.log('Selected unassigned partner:', availablePartner.displayName || availablePartner.name);
-                } else {
-                  // If all partners are assigned, pick the first available one
-                  availablePartner = activeDeliveryPartners[0];
-                  console.log('All partners assigned, selecting first available:', availablePartner.displayName || availablePartner.name);
-                }
-              
-                console.log('Assigning partner:', availablePartner.displayName || availablePartner.name);
-                
-                // Call the assign partner API
-                const assignResponse = await api.patch(`/orders/${orderId}/assign-partner`, {
-                  partnerId: availablePartner.id,
-                  partnerName: availablePartner.displayName || availablePartner.name,
-                  phone: availablePartner.phone
-                });
-                
-                if (assignResponse.data.success) {
-                  console.log('✅ Auto-assignment successful');
-                  
-                  // Send partner assignment notification
-                  try {
-                    const notificationResponse = await api.post('/test/test-assign-partner', {
-                      orderId: orderId,
-                      deliveryPartnerId: availablePartner.id,
-                      orderStatus: 'accepted_and_assigned',
-                      restaurantName: 'Restaurant',
-                      customerAddress: acceptedOrder.deliveryAddress?.address || acceptedOrder.address || 'Customer Address',
-                      orderDetails: JSON.stringify(acceptedOrder.products || acceptedOrder.items || []),
-                      notificationType: 'order_accepted_and_partner_assigned',
-                      partnerName: availablePartner.displayName || availablePartner.name
-                    });
-                    console.log('✅ Auto-assignment notification sent:', notificationResponse.data);
-                    toast.success(`Order accepted and assigned to ${availablePartner.displayName || availablePartner.name}!`);
-                  } catch (notificationError) {
-                    console.error('Error sending auto-assignment notification:', notificationError);
-                    toast.success('Order accepted and partner assigned (notification failed)');
-                  }
-                } else {
-                  throw new Error('Assignment failed');
-                }
-              } else {
-                // No delivery partners available, just send acceptance notification
-                console.log('No delivery partners available for auto-assignment');
-                const notificationResponse = await api.post('/test/test-assign-partner', {
-                  orderId: orderId,
-                  orderStatus: 'accepted',
-                  restaurantName: 'Restaurant',
-                  customerAddress: acceptedOrder.deliveryAddress?.address || acceptedOrder.address || 'Customer Address',
-                  orderDetails: JSON.stringify(acceptedOrder.products || acceptedOrder.items || []),
-                  notificationType: 'order_accepted_no_partner'
-                });
-                console.log('✅ Order acceptance notification sent (no partners):', notificationResponse.data);
-                toast.success('Order accepted! (No delivery partners available for auto-assignment)');
-              }
-            } catch (error) {
-              console.error('Error in auto-assignment process:', error);
-              // Send basic acceptance notification as fallback
-              try {
-                const notificationResponse = await api.post('/test/test-assign-partner', {
-                  orderId: orderId,
-                  orderStatus: 'accepted',
-                  restaurantName: 'Restaurant',
-                  customerAddress: acceptedOrder.deliveryAddress?.address || acceptedOrder.address || 'Customer Address',
-                  orderDetails: JSON.stringify(acceptedOrder.products || acceptedOrder.items || []),
-                  notificationType: 'order_accepted_fallback'
-                });
-                console.log('✅ Fallback acceptance notification sent:', notificationResponse.data);
-              } catch (notificationError) {
-                console.error('Error sending fallback notification:', notificationError);
-              }
-              toast.success('Order accepted! (Auto-assignment failed)');
-            }
-          } else {
-            // Auto-assignment disabled, just send acceptance notification
-            try {
-              console.log('Sending acceptance notification (auto-assignment disabled):', orderId);
-              const notificationResponse = await api.post('/test/test-assign-partner', {
-                orderId: orderId,
-                orderStatus: 'accepted',
-                restaurantName: 'Restaurant',
-                customerAddress: acceptedOrder.deliveryAddress?.address || acceptedOrder.address || 'Customer Address',
-                orderDetails: JSON.stringify(acceptedOrder.products || acceptedOrder.items || []),
-                notificationType: 'order_accepted_manual'
-              });
-              console.log('✅ Order acceptance notification sent:', notificationResponse.data);
-              toast.success('Order accepted and moved to ongoing');
-            } catch (notificationError) {
-              console.error('Error sending acceptance notification:', notificationError);
-              toast.success('Order accepted and moved to ongoing');
-            }
-          }
+          toast.success('Order accepted and moved to ongoing');
         }
         // Remove from incoming orders
         setIncomingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
@@ -584,6 +474,101 @@ const RestaurantMonitoring = () => {
       ...prev,
       [orderId]: partnerId
     }));
+  };
+
+  // Auto-assign delivery partner after order status is updated to 'preparing'
+  const handleAutoAssignPartner = async (orderId, orderData) => {
+    if (!autoAssignPartners) {
+      console.log('Auto-assignment disabled for order:', orderId);
+      return;
+    }
+
+    try {
+      console.log('Auto-assigning delivery partner for order:', orderId);
+      
+      // Find an available delivery partner
+      if (activeDeliveryPartners.length > 0) {
+        // Smart partner selection: prefer partners who are not currently assigned
+        let availablePartner = null;
+        
+        // First, try to find a partner who doesn't have any current assignments
+        const unassignedPartners = activeDeliveryPartners.filter(partner => {
+          // Check if this partner is already assigned to any ongoing order
+          const isAssigned = ongoingOrders.some(order => 
+            order.partnerAssigned && 
+            (order.partnerAssigned.partnerId === partner.id || 
+             order.partnerAssigned.id === partner.id)
+          );
+          return !isAssigned;
+        });
+        
+        if (unassignedPartners.length > 0) {
+          // Pick the first unassigned partner
+          availablePartner = unassignedPartners[0];
+          console.log('Selected unassigned partner:', availablePartner.displayName || availablePartner.name);
+        } else {
+          // If all partners are assigned, pick the first available one
+          availablePartner = activeDeliveryPartners[0];
+          console.log('All partners assigned, selecting first available:', availablePartner.displayName || availablePartner.name);
+        }
+      
+        console.log('Auto-assigning partner:', availablePartner.displayName || availablePartner.name);
+        
+        // Call the assign partner API
+        const assignResponse = await api.patch(`/orders/${orderId}/assign-partner`, {
+          partnerId: availablePartner.id,
+          partnerName: availablePartner.displayName || availablePartner.name,
+          phone: availablePartner.phone
+        });
+        
+        if (assignResponse.data.success) {
+          console.log('✅ Auto-assignment successful');
+          
+          // Update local state to reflect the assignment
+          setOngoingOrders(prev => prev.map(order => {
+            if (order.id === orderId) {
+              return {
+                ...order,
+                partnerAssigned: {
+                  partnerId: availablePartner.id,
+                  name: availablePartner.displayName || availablePartner.name,
+                  phone: availablePartner.phone
+                },
+                assigningPartner: false
+              };
+            }
+            return order;
+          }));
+          
+          // Send partner assignment notification
+          try {
+            const notificationResponse = await api.post('/test/test-single-partner-notification', {
+              orderId: orderId,
+              deliveryPartnerId: availablePartner.id,
+              orderStatus: 'auto_assigned',
+              restaurantName: 'Restaurant',
+              customerAddress: orderData.deliveryAddress?.address || orderData.address || 'Customer Address',
+              orderDetails: JSON.stringify(orderData.products || orderData.items || []),
+              notificationType: 'order_auto_assigned',
+              partnerName: availablePartner.displayName || availablePartner.name
+            });
+            console.log('✅ Auto-assignment notification sent:', notificationResponse.data);
+            toast.success(`Order auto-assigned to ${availablePartner.displayName || availablePartner.name}!`);
+          } catch (notificationError) {
+            console.error('Error sending auto-assignment notification:', notificationError);
+            toast.success(`Order auto-assigned to ${availablePartner.displayName || availablePartner.name} (notification failed)`);
+          }
+        } else {
+          throw new Error('Auto-assignment failed');
+        }
+      } else {
+        console.log('No delivery partners available for auto-assignment');
+        toast.info('Order accepted! No delivery partners available for auto-assignment');
+      }
+    } catch (error) {
+      console.error('Error in auto-assignment process:', error);
+      toast.warn('Order accepted! Auto-assignment failed - please assign manually');
+    }
   };
 
   // Handle delivery partner assignment
@@ -1935,22 +1920,66 @@ const RestaurantMonitoring = () => {
                             padding: '8px 12px', 
                             backgroundColor: '#fff3cd', 
                             borderRadius: '6px',
-                            border: '1px solid #ffeaa7',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px'
+                            border: '1px solid #ffeaa7'
                           }}>
-                            <div style={{ 
-                              width: '16px', 
-                              height: '16px', 
-                              border: '2px solid #f39c12',
-                              borderTop: '2px solid transparent',
-                              borderRadius: '50%',
-                              animation: 'spin 1s linear infinite'
-                            }}></div>
-                            <span style={{ fontSize: '0.9em', color: '#856404', fontWeight: 'bold' }}>
-                              Assigning Partner...
-                            </span>
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              marginBottom: '8px'
+                            }}>
+                              <div style={{ 
+                                width: '16px', 
+                                height: '16px', 
+                                border: '2px solid #f39c12',
+                                borderTop: '2px solid transparent',
+                                borderRadius: '50%',
+                                animation: 'spin 1s linear infinite'
+                              }}></div>
+                              <span style={{ fontSize: '0.9em', color: '#856404', fontWeight: 'bold' }}>
+                                Assigning Partner...
+                              </span>
+                            </div>
+                            {activeDeliveryPartners.length > 0 && (
+                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                <select
+                                  value={selectedPartners[order.id] || ''}
+                                  onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+                                  style={{
+                                    flex: 1,
+                                    padding: '4px 6px',
+                                    border: '1px solid #ddd',
+                                    borderRadius: '4px',
+                                    fontSize: '0.8em',
+                                    backgroundColor: 'white'
+                                  }}
+                                  disabled={assigningOrders.has(order.id)}
+                                >
+                                  <option value="">Manual Assignment</option>
+                                  {activeDeliveryPartners.map(partner => (
+                                    <option key={partner.id} value={partner.id}>
+                                      {partner.displayName || partner.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  onClick={() => handleAssignPartner(order.id)}
+                                  disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
+                                  style={{
+                                    padding: '4px 8px',
+                                    backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    fontSize: '0.75em',
+                                    cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+                                </button>
+                              </div>
+                            )}
                           </div>
                         ) : order.assigningPartner && order.partnerAssigned ? (
                           <div style={{ 
@@ -2076,6 +2105,77 @@ const RestaurantMonitoring = () => {
                                 >
                                   {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
                                 </button>
+                              </div>
+                            )}
+                          </div>
+                        ) : (order.assigningPartner || order.orderStatus === 'prepared') ? (
+                          <div>
+                            <div style={{ 
+                              padding: '8px 12px', 
+                              backgroundColor: '#d1ecf1', 
+                              borderRadius: '6px',
+                              border: '1px solid #bee5eb',
+                              marginBottom: '8px'
+                            }}>
+                              <div style={{ fontSize: '0.9em', color: '#0c5460', fontWeight: 'bold' }}>
+                                ⏳ Awaiting Auto-Assignment
+                              </div>
+                              <div style={{ fontSize: '0.8em', color: '#0c5460', marginTop: '2px' }}>
+                                Partner will be assigned automatically
+                              </div>
+                            </div>
+                            {/* Manual assignment interface alongside auto-assignment */}
+                            {activeDeliveryPartners.length > 0 && (
+                              <div>
+                                <div style={{ 
+                                  padding: '4px 8px', 
+                                  backgroundColor: '#f8f9fa', 
+                                  borderRadius: '4px',
+                                  border: '1px solid #dee2e6',
+                                  marginBottom: '6px',
+                                  fontSize: '0.8em',
+                                  color: '#6c757d'
+                                }}>
+                                  Or assign manually:
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                                  <select
+                                    value={selectedPartners[order.id] || ''}
+                                    onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+                                    style={{
+                                      flex: 1,
+                                      padding: '6px 8px',
+                                      border: '1px solid #ddd',
+                                      borderRadius: '4px',
+                                      fontSize: '0.85em',
+                                      backgroundColor: 'white'
+                                    }}
+                                    disabled={assigningOrders.has(order.id)}
+                                  >
+                                    <option value="">Select Partner</option>
+                                    {activeDeliveryPartners.map(partner => (
+                                      <option key={partner.id} value={partner.id}>
+                                        {partner.displayName || partner.name} - {partner.phone || 'No phone'}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    onClick={() => handleAssignPartner(order.id)}
+                                    disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
+                                    style={{
+                                      padding: '6px 12px',
+                                      backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '4px',
+                                      fontSize: '0.75em',
+                                      cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                  >
+                                    {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+                                  </button>
+                                </div>
                               </div>
                             )}
                           </div>

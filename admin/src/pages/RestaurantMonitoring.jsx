@@ -165,8 +165,6 @@ const RestaurantMonitoring = () => {
   const [reviews] = useState(initialReviews);
   const [operatingHours, setOperatingHours] = useState(initialHours);
   const [isOnline, setIsOnline] = useState(true);
-
-  const [preparingOrders, setPreparingOrders] = useState([]);
  
   const [profile, setProfile] = useState({
     name: 'Dastarkhwan Restaurant',
@@ -347,18 +345,18 @@ const RestaurantMonitoring = () => {
     }
   };
 
-  // Handle order status update (static for now)
+  // Handle order status update - now works with orders collection
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
     try {
       console.log('Updating order status:', { orderId, newStatus });
-      // Use the correct endpoint for updating order status in Firebase orderedProducts subcollection
-      const response = await api.patch(`/ordered-products/admin/orders/${orderId}/status`, { status: newStatus });
+      // Use the orders collection endpoint to update order status
+      const response = await api.patch(`/orders/${orderId}/status`, { status: newStatus });
 
       // If marking as prepared and there's a delivery partner assigned, trigger notification
       if (newStatus === 'prepared') {
         try {
           // Find the order to get delivery partner info
-          const currentOrder = preparingOrders.find(order => order.id === orderId);
+          const currentOrder = ongoingOrders.find(order => order.id === orderId);
           if (currentOrder && currentOrder.partnerAssigned) {
             console.log('Triggering mark as prepared notification for order:', orderId);
             
@@ -384,24 +382,24 @@ const RestaurantMonitoring = () => {
 
       // Update local state based on the status change
       if (newStatus === 'preparing') {
-        // Move order from incoming to preparing list
+        // Move order from incoming to ongoing list
         const acceptedOrder = incomingOrders.find(order => order.id === orderId);
         if (acceptedOrder) {
-          setPreparingOrders(prev => [...prev, { ...acceptedOrder, orderStatus: 'preparing' }]);
+          setOngoingOrders(prev => [...prev, { ...acceptedOrder, orderStatus: 'preparing' }]);
         }
         // Remove from incoming orders
         setIncomingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
-        toast.success('Order accepted and moved to preparing');
+        toast.success('Order accepted and moved to ongoing');
       } else if (newStatus === 'prepared') {
-        // Remove from preparing orders when marked as prepared
-        setPreparingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+        // Remove from ongoing orders when marked as prepared
+        setOngoingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
         if (!newStatus.includes('notification')) { // Only show this toast if notification toast wasn't shown
           toast.success('Order marked as prepared');
         }
       } else if (newStatus === 'declined') {
-        // Remove from both incoming and preparing orders when declined
+        // Remove from both incoming and ongoing orders when declined
         setIncomingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
-        setPreparingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+        setOngoingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
         toast.success('Order declined');
       }
 
@@ -411,34 +409,6 @@ const RestaurantMonitoring = () => {
 
     } catch (error) {
       console.error('Error updating order status:', error);
-      toast.error('Failed to update order status');
-    }
-  };
-
-  // Handle order status update for ongoing orders (orders collection)
-  const handleOngoingOrderStatusUpdate = async (orderId, newStatus) => {
-    try {
-      console.log('Updating ongoing order status:', { orderId, newStatus });
-      
-      const response = await api.patch(`/orders/${orderId}/status`, { status: newStatus });
-
-      // Update local state based on the status change
-      if (newStatus === 'prepared') {
-        // Remove from ongoing orders when marked as prepared
-        setOngoingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
-        toast.success('Order marked as prepared');
-      } else if (newStatus === 'declined') {
-        // Remove from ongoing orders when declined
-        setOngoingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
-        toast.success('Order declined');
-      }
-
-      // Refresh both sections to ensure data consistency
-      await fetchYetToBeAcceptedOrders();
-      await fetchOngoingOrders();
-
-    } catch (error) {
-      console.error('Error updating ongoing order status:', error);
       toast.error('Failed to update order status');
     }
   };
@@ -492,8 +462,7 @@ const RestaurantMonitoring = () => {
           console.log('Triggering assignment notification for order:', orderId);
           
           // Find the order to get details for notification
-          const currentOrder = ongoingOrders.find(order => order.id === orderId) || 
-                              preparingOrders.find(order => order.id === orderId);
+          const currentOrder = ongoingOrders.find(order => order.id === orderId);
           
           const testResponse = await api.post('/test/test-assign-partner', {
             orderId: orderId,
@@ -1789,7 +1758,7 @@ const RestaurantMonitoring = () => {
                         {order.orderStatus === 'yetToBeAccepted' ? (
                           <>
                             <button
-                              onClick={() => handleOngoingOrderStatusUpdate(order.id, 'preparing')}
+                              onClick={() => handleUpdateOrderStatus(order.id, 'preparing')}
                               style={{
                                 ...styles.button,
                                 backgroundColor: '#2ecc71',
@@ -1805,7 +1774,7 @@ const RestaurantMonitoring = () => {
                               <FaCheck /> Accept
                             </button>
                             <button
-                              onClick={() => handleOngoingOrderStatusUpdate(order.id, 'declined')}
+                              onClick={() => handleUpdateOrderStatus(order.id, 'declined')}
                               style={{
                                 ...styles.button,
                                 backgroundColor: '#e74c3c',
@@ -1824,7 +1793,7 @@ const RestaurantMonitoring = () => {
                         ) : order.orderStatus === 'preparing' ? (
                           <>
                             <button
-                              onClick={() => handleOngoingOrderStatusUpdate(order.id, 'prepared')}
+                              onClick={() => handleUpdateOrderStatus(order.id, 'prepared')}
                               style={{
                                 ...styles.button,
                                 backgroundColor: '#3498db',
@@ -1840,7 +1809,7 @@ const RestaurantMonitoring = () => {
                               Mark as Prepared
                             </button>
                             <button
-                              onClick={() => handleOngoingOrderStatusUpdate(order.id, 'declined')}
+                              onClick={() => handleUpdateOrderStatus(order.id, 'declined')}
                               style={{
                                 ...styles.button,
                                 backgroundColor: '#e74c3c',

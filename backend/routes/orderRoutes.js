@@ -4,6 +4,7 @@ import {
   updateAgent, 
   updateStatus, 
   getYetToBeAcceptedOrders, 
+  getIncomingOrdersNew,
   updateOrderStatus,
   getOrdersByStatus,
   getOrdersByRestaurant,
@@ -31,6 +32,8 @@ router.get('/test-geopoint', testGeoPoint);
 router.get('/', getAllOrders);
 router.get('/status', getOrdersByStatus); // GET /orders/status?status=preparing
 router.get('/ongoing', getOngoingOrders); // GET /orders/ongoing - for restaurant monitoring
+router.get('/yet-to-be-accepted', getYetToBeAcceptedOrders);
+router.get('/incoming-new', getIncomingOrdersNew); // NEW route for incoming orders without index issues
 router.post('/', isAuthenticated, createOrder);
 
 // Restaurant specific routes

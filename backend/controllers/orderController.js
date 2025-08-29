@@ -442,38 +442,151 @@ export const deleteOrder = async (req, res) => {
   }
 };
 
-// Legacy function for backward compatibility (kept for existing routes)
+// Get orders with 'yetToBeAccepted' status from orders collection
 export const getYetToBeAcceptedOrders = async (req, res) => {
   try {
-    const orders = [];
+    console.log('=== INCOMING ORDERS ENDPOINT CALLED ===');
     
-    // Get all users
-    const usersSnapshot = await db.collection('users').get();
+    // Get all orders from the orders collection (no where clause to avoid index issues)
+    const ordersSnapshot = await db.collection('orders').get();
     
-    // For each user, get their orderedProduct subcollection with status filter
-    for (const userDoc of usersSnapshot.docs) {
-      const orderedProductsSnapshot = await db
-        .collection('users')
-        .doc(userDoc.id)
-        .collection('orderedProduct')
-        .where('orderStatus', '==', 'yetToBeAccepted')
-        .get();
+    console.log(`Found ${ordersSnapshot.docs.length} total orders in collection`);
+    
+    const incomingOrders = [];
+    
+    for (const doc of ordersSnapshot.docs) {
+      const orderData = doc.data();
       
-      orderedProductsSnapshot.docs.forEach(orderDoc => {
-        orders.push({
-          id: orderDoc.id,
-          userId: userDoc.id,
-          userInfo: userDoc.data(),
-          ...orderDoc.data()
+      // Filter for yetToBeAccepted status in JavaScript
+      if (orderData.orderStatus === 'yetToBeAccepted') {
+        console.log('Found incoming order:', doc.id, orderData.orderStatus);
+        
+        // Get user info if userRef exists
+        let userInfo = null;
+        if (orderData.userRef) {
+          try {
+            // Handle DocumentReference properly
+            let userDoc;
+            if (typeof orderData.userRef === 'string') {
+              userDoc = await db.collection('users').doc(orderData.userRef).get();
+            } else if (orderData.userRef.get) {
+              userDoc = await orderData.userRef.get();
+            } else if (orderData.userRef.path) {
+              const userId = orderData.userRef.path.split('/').pop();
+              userDoc = await db.collection('users').doc(userId).get();
+            }
+            
+            if (userDoc && userDoc.exists) {
+              userInfo = userDoc.data();
+            }
+          } catch (error) {
+            console.log('Error fetching user info:', error.message);
+          }
+        } else if (orderData.userId) {
+          try {
+            const userDoc = await db.collection('users').doc(orderData.userId).get();
+            if (userDoc.exists) {
+              userInfo = userDoc.data();
+            }
+          } catch (error) {
+            console.log('Error fetching user info by userId:', error.message);
+          }
+        }
+        
+        incomingOrders.push({
+          id: doc.id,
+          ...orderData,
+          userInfo: userInfo
         });
-      });
+      }
     }
     
-    console.log(`Found ${orders.length} orders with status 'yetToBeAccepted'`);
-    res.status(200).json(orders);
+    // Sort by createdAt manually
+    incomingOrders.sort((a, b) => {
+      const dateA = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate() : new Date(a.createdAt)) : new Date(0);
+      const dateB = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate() : new Date(b.createdAt)) : new Date(0);
+      return dateB - dateA; // Most recent first
+    });
+    
+    console.log(`Processed ${incomingOrders.length} incoming orders with status 'yetToBeAccepted'`);
+    res.status(200).json(incomingOrders);
   } catch (error) {
-    console.error('Error fetching orderedProduct documents:', error);
-    res.status(500).json({ message: 'Error fetching orders', error: error.message });
+    console.error('Error in getYetToBeAcceptedOrders:', error);
+    res.status(500).json({ message: 'Error fetching incoming orders', error: error.message });
+  }
+};
+
+// NEW function to get incoming orders without index issues
+export const getIncomingOrdersNew = async (req, res) => {
+  try {
+    console.log('=== NEW INCOMING ORDERS FUNCTION CALLED ===');
+    
+    // Get all orders from the orders collection (no where clause to avoid index issues)
+    const ordersSnapshot = await db.collection('orders').get();
+    
+    console.log(`Found ${ordersSnapshot.docs.length} total orders in collection`);
+    
+    const incomingOrders = [];
+    
+    for (const doc of ordersSnapshot.docs) {
+      const orderData = doc.data();
+      
+      // Filter for yetToBeAccepted status in JavaScript
+      if (orderData.orderStatus === 'yetToBeAccepted') {
+        console.log('Found incoming order:', doc.id, orderData.orderStatus);
+        
+        // Get user info if userRef exists
+        let userInfo = null;
+        if (orderData.userRef) {
+          try {
+            // Handle DocumentReference properly
+            let userDoc;
+            if (typeof orderData.userRef === 'string') {
+              userDoc = await db.collection('users').doc(orderData.userRef).get();
+            } else if (orderData.userRef.get) {
+              userDoc = await orderData.userRef.get();
+            } else if (orderData.userRef.path) {
+              const userId = orderData.userRef.path.split('/').pop();
+              userDoc = await db.collection('users').doc(userId).get();
+            }
+            
+            if (userDoc && userDoc.exists) {
+              userInfo = userDoc.data();
+            }
+          } catch (error) {
+            console.log('Error fetching user info:', error.message);
+          }
+        } else if (orderData.userId) {
+          try {
+            const userDoc = await db.collection('users').doc(orderData.userId).get();
+            if (userDoc.exists) {
+              userInfo = userDoc.data();
+            }
+          } catch (error) {
+            console.log('Error fetching user info by userId:', error.message);
+          }
+        }
+        
+        incomingOrders.push({
+          id: doc.id,
+          ...orderData,
+          userInfo: userInfo
+        });
+      }
+    }
+    
+    // Sort by createdAt manually
+    incomingOrders.sort((a, b) => {
+      const dateA = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate() : new Date(a.createdAt)) : new Date(0);
+      const dateB = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate() : new Date(b.createdAt)) : new Date(0);
+      return dateB - dateA; // Most recent first
+    });
+    
+    console.log(`Processed ${incomingOrders.length} incoming orders with status 'yetToBeAccepted'`);
+    res.status(200).json(incomingOrders);
+  } catch (error) {
+    console.error('Error in getIncomingOrdersNew:', error);
+    res.status(500).json({ message: 'Error fetching incoming orders', error: error.message });
   }
 };
 

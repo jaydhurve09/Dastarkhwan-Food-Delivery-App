@@ -19,6 +19,7 @@ firebaseAdminConfig.json
 .firebase/
 .firebaserc
 
+#temp
 # Logs
 logs
 *.log

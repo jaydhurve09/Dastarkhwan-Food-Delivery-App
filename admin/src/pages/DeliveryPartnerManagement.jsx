@@ -354,22 +354,54 @@ export default function DeliveryPartnerManagement() {
   const [currentDoc, setCurrentDoc] = useState(null);
   const [docDropdown, setDocDropdown] = useState(null);
 
-  // Format Firestore timestamp to readable date
-  const formatDate = (timestamp) => {
-    if (!timestamp) return 'N/A';
+  // Format date from Firestore (handles both ISO strings and timestamps)
+  const formatDate = (dateValue) => {
+    if (!dateValue) return 'N/A';
     
     try {
-      // If it's a Firestore timestamp
-      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+      let date;
+      
+      // Handle Firestore timestamp with toDate()
+      if (dateValue.toDate) {
+        date = dateValue.toDate();
+      } 
+      // Handle Firestore timestamp with seconds/nanoseconds
+      else if (dateValue.seconds) {
+        date = new Date(dateValue.seconds * 1000);
+      }
+      // Handle ISO string
+      else if (typeof dateValue === 'string') {
+        date = new Date(dateValue);
+      } 
+      // Handle Unix timestamp (milliseconds)
+      else if (typeof dateValue === 'number') {
+        date = new Date(dateValue);
+      }
+      // If it's already a Date object
+      else if (dateValue instanceof Date) {
+        date = dateValue;
+      } else {
+        console.warn('Unsupported date format:', dateValue);
+        return 'Invalid Date';
+      }
+
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        console.warn('Invalid date value:', dateValue);
+        return 'Invalid Date';
+      }
+
+      // Format the date
       return date.toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        hour12: true
       });
     } catch (error) {
-      console.error('Error formatting date:', error);
+      console.error('Error formatting date:', error, 'Value:', dateValue);
       return 'Invalid Date';
     }
   };

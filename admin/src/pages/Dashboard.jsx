@@ -14,6 +14,8 @@ import { motion } from "framer-motion";
 import "react-datepicker/dist/react-datepicker.css";
 import "leaflet/dist/leaflet.css";
 import { AdminContext } from "../contexts/adminContext";
+import scooterIcon from "../assets/scooter.png";
+import DeliveryPartnerMap from "../components/DeliveryPartnerMap";
 // ---- Delivery Map Data Nagpur ----
 const deliveryData = [
   {
@@ -502,7 +504,7 @@ export default function Dashboard() {
         )}
       </motion.div>
 
-      {/* Live Order Map – Nagpur, Blue line, Presentable */}
+      {/* Live Order Map – show delivery partners from Firestore driverPositions */}
       <motion.div
         initial={{ opacity: 0, y: 35 }}
         animate={{ opacity: 1, y: 0 }}
@@ -511,50 +513,11 @@ export default function Dashboard() {
           background: "#fff", borderRadius: 20, boxShadow: "0 2px 6px #f1f1f1",
           padding: "26px 22px", minWidth: 260, maxWidth: 600, margin: "0 auto", textAlign: "center"
         }}>
-        <div style={{ fontWeight: 600, marginBottom: 18, fontSize: 17 }}>Live Order Map (Nagpur)</div>
-        <MapContainer
-          center={[21.146633, 79.079637]}
-          zoom={12}
-          scrollWheelZoom={false}
-          style={{ height: 280, width: "100%", borderRadius: 8 }}
-        >
-          <TileLayer
-            attribution='&copy; OpenStreetMap'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          {deliveryData.map(d => (
-            <React.Fragment key={d.id}>
-              <Marker
-                position={d.location}
-                icon={isArrived(d.location, d.destination) ? greenIcon : blueIcon}
-              >
-                <Popup>
-                  <strong>{d.boyName}</strong><br />
-                  Order: {d.orderId}<br />
-                  Status: <b>{isArrived(d.location, d.destination) ? "Arrived" : "En Route"}</b>
-                </Popup>
-              </Marker>
-              <Marker
-                position={d.destination}
-                icon={redIcon}
-              >
-                <Popup>
-                  Delivery Address<br />
-                  Order: {d.orderId}
-                </Popup>
-              </Marker>
-              <Polyline
-                positions={[d.location, d.destination]}
-                pathOptions={{ color: "#2563eb", weight: 4, opacity: 0.75 }}
-              />
-            </React.Fragment>
-          ))}
-        </MapContainer>
+        <div style={{ fontWeight: 600, marginBottom: 18, fontSize: 17 }}>Live Order Map (Delivery Partners)</div>
+        <DeliveryPartnerMap orders={orders} />
         <div style={{ color: "#94a3b8", fontSize: 15, marginTop: 10 }}>
-          <b>Blue</b>: delivery partner<br />
-          <b>Green</b>: arrived at order<br />
-          <b>Red</b>: delivery address<br />
-          <span style={{ color: "#2563eb" }}>Blue line</span>: route from rider to delivery point
+          <b>Scooter icon</b>: delivery partner's live location<br />
+          <span style={{ color: "#2563eb" }}>Live from Firestore driverPositions field</span>
         </div>
       </motion.div>
     </div>

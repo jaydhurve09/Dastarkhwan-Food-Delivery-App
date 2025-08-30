@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useContext } from "react";
 import { AdminContext } from "../contexts/adminContext";
 import {updateDeliveryPartner, blockDeliveryPartner , resetPassword , approveDeliveryPartner} from "../services/deliveryPatnerService";
+import DeliveryPartnerMap from "../components/DeliveryPartnerMap";
 
 
 const initialPendingApprovals = [
@@ -895,6 +896,15 @@ const toggleBlockPartner = async (id) => {
             <p><b>Vehicle No:</b> {pendingDetail.vehicle?.number || pendingDetail.vehicleNo || 'N/A'}</p>
             <p><b>Applied Date:</b> {pendingDetail.created_time ? formatDate(pendingDetail.created_time) : 'N/A'}</p>
             <p><b>Email:</b> {pendingDetail.email}</p>
+                      {/* Delivery Partners Map */}
+                      <div style={{ margin: "32px 0" }}>
+                        <h3>Delivery Partners Live Location Map</h3>
+                        <DeliveryPartnerMap orders={orders} />
+                        <div style={{ color: "#94a3b8", fontSize: 15, marginTop: 10 }}>
+                          <b>Scooter icon</b>: delivery partner's live location<br />
+                          <span style={{ color: "#2563eb" }}>Live from Firestore driverPositions field</span>
+                        </div>
+                      </div>
             <div style={{ marginTop: 20, display: "flex", gap: 12 }}>
               <button style={{...styles.btn, ...styles.btnBlock, padding: "8px 16px"}} onClick={() => { rejectPending(pendingDetail.id); }}>Reject</button>
               <button style={{...styles.btn, ...styles.btnView, padding: "8px 16px"}} onClick={() => { approvePending(pendingDetail.id); }}>Approve</button>

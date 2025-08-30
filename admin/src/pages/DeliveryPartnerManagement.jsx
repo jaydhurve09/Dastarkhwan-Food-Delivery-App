@@ -726,13 +726,13 @@ const toggleBlockPartner = async (id) => {
         aria-label="Search delivery partner"
       />
 
-      {/* Delivery Partners Table */}
+      {/* Delivery Partners Table - show full info like pending approvals */}
       <div style={styles.tableBlock}>
         <h3>All Delivery Partners</h3>
         <table style={styles.table}>
           <thead>
             <tr>
-              {["Name", "Mobile", "Vehicle Info", "Online/Offline", "Total Deliveries", "Ratings", "Actions"].map((t) => (
+              {["Name", "Mobile", "Vehicle No.", "Documents", "Online/Offline", "Total Deliveries", "Ratings", "Actions"].map((t) => (
                 <th key={t} style={styles.th}>{t}</th>
               ))}
             </tr>
@@ -740,38 +740,146 @@ const toggleBlockPartner = async (id) => {
           <tbody>
             {deliveryPartners.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: "center", padding: 20 }}>No delivery partners found.</td>
+                <td colSpan={8} style={{ textAlign: "center", padding: 20 }}>No delivery partners found.</td>
               </tr>
-            ) : deliveryPartners.map(p => (
-              <tr key={p.id}>
-                <td style={styles.td}>{p.display_name || 'N/A'}</td>
-                <td style={styles.td}>{p.phone || p.mobile || 'N/A'}</td>
-                <td style={styles.td}>
-                  {p.vehicle ? 
-                    (typeof p.vehicle === 'string' ? 
-                      `${p.vehicle} | ${p.vehicleNo || p.vehicleNumber || 'N/A'}` :
-                      `${p.vehicle?.name || p.vehicle?.type || 'N/A'} | ${p.vehicle?.number || p.vehicleNo || p.vehicleNumber || 'N/A'}`
-                    ) : 
-                    'N/A'
-                  }
-                </td>
-                <td style={styles.td}>
-                  {p.online || p.isOnline ? <span style={styles.online}>● Online</span> : <span style={styles.offline}>● Offline</span>}
-                </td>
-                <td style={styles.td}>{p.totalDeliveries || p.deliveries || 0}</td>
-                <td style={styles.td}>{p.rating || 0} ★</td>
-                <td style={{ ...styles.td, minWidth: 250 }}>
-                  <div style={styles.actionRow}>
-                    <button style={{...styles.btn, ...styles.btnView}} onClick={() => setPartnerDetail(p)}>View Profile</button>
-                    <button style={{...styles.btn, ...styles.btnEdit}} onClick={() => openEditModal(p)}>Edit Info</button>
-                    <button style={{...styles.btn, ...p.isActive ? styles.btnBlock : styles.btnUnblock}} onClick={() => toggleBlockPartner(p.id)}>
-                      {p.isActive? "Block" : "Unblock"}
-                    </button>
-                    <button style={{...styles.btn, ...styles.btnReset}} onClick={() => handleResetPasswordClick(p)}>Reset Password</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            ) : deliveryPartners.map(p => {
+              const hasDocuments = p.profileImage || p.govtId || p.drivingLicense;
+              return (
+                <tr key={p.id}>
+                  <td style={styles.td}>{p.display_name || p.name || 'N/A'}</td>
+                  <td style={styles.td}>{p.phone || p.mobile || 'N/A'}</td>
+                  <td style={styles.td}>{p.vehicle?.number || p.vehicleNo || 'N/A'}</td>
+                  <td style={styles.td}>
+                    <div className="doc-dropdown" style={{ position: 'relative', display: 'inline-block' }}>
+                      <button 
+                        style={{
+                          ...styles.btn,
+                          backgroundColor: hasDocuments ? '#e0f2fe' : '#f3f4f6',
+                          color: hasDocuments ? '#0369a1' : '#6b7280',
+                          padding: '6px 12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontSize: '14px',
+                          border: `1px solid ${hasDocuments ? '#bae6fd' : '#e5e7eb'}`,
+                          minWidth: '120px',
+                          justifyContent: 'center',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => hasDocuments && toggleDropdown(p.id)}
+                      >
+                        {hasDocuments ? (
+                          <>
+                            <span>View Docs</span>
+                            <span style={{ fontSize: '12px' }}>▼</span>
+                          </>
+                        ) : 'No Docs'}
+                      </button>
+                      {hasDocuments && docDropdown === p.id && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '100%',
+                          left: 0,
+                          backgroundColor: 'white',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                          zIndex: 1000,
+                          minWidth: '200px',
+                          overflow: 'hidden',
+                          marginTop: '4px'
+                        }}>
+                          {p.profileImage && (
+                            <button 
+                              onClick={() => viewDocument(p.profileImage)}
+                              style={{
+                                width: '100%',
+                                textAlign: 'left',
+                                padding: '8px 16px',
+                                background: 'none',
+                                border: 'none',
+                                color: '#1e40af',
+                                fontSize: '14px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                ':hover': {
+                                  backgroundColor: '#f3f4f6'
+                                }
+                              }}
+                            >
+                              <span>👤</span> Profile Photo
+                            </button>
+                          )}
+                          {p.govtId && (
+                            <button 
+                              onClick={() => viewDocument(p.govtId)}
+                              style={{
+                                width: '100%',
+                                textAlign: 'left',
+                                padding: '8px 16px',
+                                background: 'none',
+                                border: 'none',
+                                color: '#1e40af',
+                                fontSize: '14px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                ':hover': {
+                                  backgroundColor: '#f3f4f6'
+                                }
+                              }}
+                            >
+                              <span>🆔</span> Government ID
+                            </button>
+                          )}
+                          {p.drivingLicense && (
+                            <button 
+                              onClick={() => viewDocument(p.drivingLicense)}
+                              style={{
+                                width: '100%',
+                                textAlign: 'left',
+                                padding: '8px 16px',
+                                background: 'none',
+                                border: 'none',
+                                color: '#1e40af',
+                                fontSize: '14px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                ':hover': {
+                                  backgroundColor: '#f3f4f6'
+                                }
+                              }}
+                            >
+                              <span>📝</span> Driving License
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                  <td style={styles.td}>
+                    {p.online || p.isOnline ? <span style={styles.online}>● Online</span> : <span style={styles.offline}>● Offline</span>}
+                  </td>
+                  <td style={styles.td}>{p.totalDeliveries || p.deliveries || 0}</td>
+                  <td style={styles.td}>{p.rating || 0} ★</td>
+                  <td style={{ ...styles.td, minWidth: 250 }}>
+                    <div style={styles.actionRow}>
+                      <button style={{...styles.btn, ...styles.btnView}} onClick={() => setPartnerDetail(p)}>View Profile</button>
+                      <button style={{...styles.btn, ...styles.btnEdit}} onClick={() => openEditModal(p)}>Edit Info</button>
+                      <button style={{...styles.btn, ...p.isActive ? styles.btnBlock : styles.btnUnblock}} onClick={() => toggleBlockPartner(p.id)}>
+                        {p.isActive? "Block" : "Unblock"}
+                      </button>
+                      <button style={{...styles.btn, ...styles.btnReset}} onClick={() => handleResetPasswordClick(p)}>Reset Password</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

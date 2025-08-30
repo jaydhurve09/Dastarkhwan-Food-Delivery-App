@@ -1,22 +1,123 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /users/{document=**} {
-      allow read, write: if true; 
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+             request.auth.token.role == 'admin';
+    }
+    
+    function isDeliveryPartner() {
+      return isAuthenticated() && 
+             request.auth.token.role == 'delivery';
+    }
+    
+    function isRestaurant() {
+      return isAuthenticated() && 
+             request.auth.token.role == 'restaurant';
+    }
+
+    // Users collection - users can read/write their own data, admin can read all
+    match /users/{userId} {
+      allow create: if isAuthenticated();
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Orders - users can create/read their orders, delivery partners can read/update assigned orders, admin can do all
+    match /orders/{orderId} {
+      allow create: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        resource.data.userRef == '/users/' + request.auth.uid ||
+        resource.data.deliveryPartnerId == '/deliveryPartners/' + request.auth.uid ||
+        isAdmin() ||
+        isDeliveryPartner() ||
+        isRestaurant()
+      );
+      allow write: if isAuthenticated() && (
+        resource.data.userRef == '/users/' + request.auth.uid ||
+        resource.data.deliveryPartnerId == '/deliveryPartners/' + request.auth.uid ||
+        isAdmin() ||
+        isDeliveryPartner() ||
+        isRestaurant()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Delivery Partners - can read all, write their own profile, admin can do all
+    match /deliveryPartners/{partnerId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow write: if isOwner(partnerId) || isAdmin() || isDeliveryPartner();
+      allow delete: if isAdmin();
+    }
+
+    // Menu Items - read for all authenticated users, write for admin/restaurant only
+    match /menuItems/{document} {
+      allow read: if isAuthenticated();
+      allow create, write, delete: if isAdmin() || isRestaurant();
+    }
+
+    // Menu Categories - read for all authenticated users, write for admin/restaurant only
+    match /menuCategories/{document} {
+      allow read: if isAuthenticated();
+      allow create, write, delete: if isAdmin() || isRestaurant();
+    }
+
+    // Restaurants - read for all authenticated users, write for admin only
+    match /restaurants/{document} {
+      allow read: if isAuthenticated();
+      allow create, write, delete: if isAdmin();
+    }
+
+    // Complaints - users can create/read their complaints, delivery partners can read assigned complaints
+    match /complaints/{document} {
+      allow create: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Feedbacks - users can create/read their feedback
+    match /feedbacks/{document} {
+      allow create: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Promo Codes - read for all authenticated users, admin write
+    match /promoCodes/{document} {
+      allow read: if isAuthenticated();
+      allow create, write, delete: if isAdmin();
+    }
+
+    // Alternative promo code collection name
+    match /promoCode/{document} {
+      allow read: if isAuthenticated();
+      allow create, write, delete: if isAdmin();
+    }
+
+    // Payments - users can create/read their payments, admin can do all
+    match /payments/{document} {
+      allow create: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Default rule for any other collections
+    match /{document=**} {
+      allow read, write: if isAuthenticated();
     }
   }
 }
-
-
-
-// rules_version = '2';
-// service cloud.firestore {
-//   match /databases/{database}/documents {
-//     match /users/{document} {
-//       allow create: if request.auth.uid == document;
-//       allow read: if request.auth.uid == document;
-//       allow write: if request.auth.uid == document;
-//       allow delete: if request.auth.uid == document;
-//     }
-//   }
-// }

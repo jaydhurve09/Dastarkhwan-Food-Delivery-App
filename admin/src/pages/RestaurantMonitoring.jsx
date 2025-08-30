@@ -6,8 +6,6 @@ import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { AdminContext } from '../contexts/adminContext';
 import api from '../config/axios';
-import { functions } from '../config/firebase';
-import { httpsCallable } from 'firebase/functions';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 

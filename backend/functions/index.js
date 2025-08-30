@@ -3,6 +3,13 @@ const admin = require('firebase-admin');
 
 admin.initializeApp();
 
+// Import driver position functions
+const { updateDriverPosition, getDriverPosition } = require('./driverPositionFunctions');
+
+// Export driver position functions
+exports.updateDriverPosition = updateDriverPosition;
+exports.getDriverPosition = getDriverPosition;
+
 // Mark Order as Prepared - Trigger notification to assigned delivery partner
 exports.markOrderPreparedTrigger = functions.https.onCall(async (data, context) => {
   try {

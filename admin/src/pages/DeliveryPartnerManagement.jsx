@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useContext } from "react";
 import { AdminContext } from "../contexts/adminContext";
 import {updateDeliveryPartner, blockDeliveryPartner , resetPassword , approveDeliveryPartner} from "../services/deliveryPatnerService";
@@ -233,6 +233,105 @@ const styles = {
   }
 };
 
+const DocumentCard = ({ title, url, type = 'image' }) => {
+  const [isHovered, setIsHovered] = useState(false);
+  
+  const getPreviewContent = () => {
+    if (type === 'pdf') {
+      return (
+        <div style={{
+          width: '100%',
+          height: '150px',
+          backgroundColor: '#f5f5f5',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: '8px 8px 0 0',
+          overflow: 'hidden'
+        }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '48px', marginBottom: '10px' }}>📄</div>
+            <div style={{ fontSize: '12px', color: '#666' }}>PDF Document</div>
+          </div>
+        </div>
+      );
+    }
+    
+    return (
+      <img 
+        src={url} 
+        alt={title}
+        style={{
+          width: '100%',
+          height: '150px',
+          objectFit: 'cover',
+          borderRadius: '8px 8px 0 0',
+          transition: 'transform 0.3s ease',
+          transform: isHovered ? 'scale(1.05)' : 'scale(1)'
+        }}
+        onError={(e) => {
+          e.target.onerror = null;
+          e.target.src = 'https://via.placeholder.com/300x150?text=Image+Not+Available';
+        }}
+      />
+    );
+  };
+
+  return (
+    <div 
+      style={{
+        border: '1px solid #e5e7eb',
+        borderRadius: '8px',
+        overflow: 'hidden',
+        transition: 'box-shadow 0.3s ease',
+        ':hover': {
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+        }
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      {getPreviewContent()}
+      <div style={{ 
+        padding: '12px',
+        backgroundColor: '#fff',
+        borderTop: '1px solid #e5e7eb',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }}>
+        <span style={{ 
+          fontSize: '14px',
+          fontWeight: '500',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          maxWidth: '70%'
+        }}>
+          {title}
+        </span>
+        <a 
+          href={url} 
+          target="_blank" 
+          rel="noopener noreferrer"
+          style={{
+            color: '#2563eb',
+            textDecoration: 'none',
+            fontSize: '14px',
+            fontWeight: '500',
+            ':hover': {
+              textDecoration: 'underline'
+            }
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          Open
+        </a>
+      </div>
+    </div>
+  );
+};
+
 export default function DeliveryPartnerManagement() {
   const {fetchOrders,fetchDeliveryPartners ,deliveryPartners ,orders} = useContext(AdminContext);
   const [pendingApprovals, setPendingApprovals] = useState(deliveryPartners);
@@ -250,6 +349,30 @@ export default function DeliveryPartnerManagement() {
     confirmPassword: ""
   });
   const [passwordError, setPasswordError] = useState("");
+
+  const [showDocPopup, setShowDocPopup] = useState(false);
+  const [currentDoc, setCurrentDoc] = useState(null);
+  const [docDropdown, setDocDropdown] = useState(null);
+
+  // Format Firestore timestamp to readable date
+  const formatDate = (timestamp) => {
+    if (!timestamp) return 'N/A';
+    
+    try {
+      // If it's a Firestore timestamp
+      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Invalid Date';
+    }
+  };
 
   // Filter to search delivery partners by name
   const filteredPartners = useMemo(() => {
@@ -353,6 +476,29 @@ const toggleBlockPartner = async (id) => {
   // Calculate commission = 15% of order amount
   const commission = (amount) => (amount * 0.15).toFixed(2);
 
+  // Toggle dropdown
+  const toggleDropdown = (id) => {
+    setDocDropdown(docDropdown === id ? null : id);
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (docDropdown && !event.target.closest('.doc-dropdown')) {
+        setDocDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [docDropdown]);
+
+  // View document in popup
+  const viewDocument = (url) => {
+    setCurrentDoc(url);
+    setShowDocPopup(true);
+    setDocDropdown(null);
+  };
+
   return (
     <div style={styles.container}>
       <h1 style={styles.heading}>Delivery Partner Management</h1>
@@ -375,26 +521,157 @@ const toggleBlockPartner = async (id) => {
           <table style={styles.table}>
             <thead>
               <tr>
-                {["Name", "Mobile", "Vehicle Info", "Applied Date", "Actions"].map((t) => (
+                {["Name", "Mobile", "Vehicle No.", "Applied Date", "Documents", "Actions"].map((t) => (
                   <th key={t} style={styles.th}>{t}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {deliveryPartners.length === 0 ? (
-                <tr><td colSpan={5} style={{ textAlign: "center", padding: 20 }}>No Pending Approvals.</td></tr>
+                <tr><td colSpan={6} style={{ textAlign: "center", padding: 20 }}>No Pending Approvals.</td></tr>
               ) : 
-              deliveryPartners.filter(p => !p.isVerified).map(p => (
-                <tr key={p.id}>
-                  <td style={styles.td}>{p.name}</td>
-                  <td style={styles.td}>{p.phone || p.mobile}</td>
-                  <td style={styles.td}>{p.vehicle?.name || 'N/A'} | {p.vehicle?.number || 'N/A'}</td>
-                  <td style={styles.td}>{p.appliedDate}</td>
-                  <td style={{ ...styles.td, color: "#2563eb" }}>
-                    <button style={{...styles.btn, ...styles.btnView}} onClick={() => setPendingDetail(p)}>View</button>
-                  </td>
-                </tr>
-              ))}
+              deliveryPartners.filter(p => !p.isVerified).map(p => {
+                const hasDocuments = p.profileImage || p.govtId || p.drivingLicense;
+                
+                return (
+                  <tr key={p.id}>
+                    <td style={styles.td}>{p.display_name}</td>
+                    <td style={styles.td}>{p.phone || p.mobile}</td>
+                    <td style={styles.td}> {p.vehicleNo || 'N/A'}</td>
+                    <td style={styles.td}>
+                    {p.created_time ? formatDate(p.created_time) : 'N/A'}
+                    </td>
+                    <td style={styles.td}>
+                      <div className="doc-dropdown" style={{ position: 'relative', display: 'inline-block' }}>
+                        <button 
+                          style={{
+                            ...styles.btn,
+                            backgroundColor: hasDocuments ? '#e0f2fe' : '#f3f4f6',
+                            color: hasDocuments ? '#0369a1' : '#6b7280',
+                            padding: '6px 12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontSize: '14px',
+                            border: `1px solid ${hasDocuments ? '#bae6fd' : '#e5e7eb'}`,
+                            minWidth: '120px',
+                            justifyContent: 'center',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => hasDocuments && toggleDropdown(p.id)}
+                        >
+                          {hasDocuments ? (
+                            <>
+                              <span>View Docs</span>
+                              <span style={{ fontSize: '12px' }}>▼</span>
+                            </>
+                          ) : 'No Docs'}
+                        </button>
+                        {hasDocuments && docDropdown === p.id && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '100%',
+                            left: 0,
+                            backgroundColor: 'white',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '8px',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                            zIndex: 1000,
+                            minWidth: '200px',
+                            overflow: 'hidden',
+                            marginTop: '4px'
+                          }}>
+                            {p.profileImage && (
+                              <button 
+                                onClick={() => viewDocument(p.profileImage)}
+                                style={{
+                                  width: '100%',
+                                  textAlign: 'left',
+                                  padding: '8px 16px',
+                                  background: 'none',
+                                  border: 'none',
+                                  color: '#1e40af',
+                                  fontSize: '14px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  ':hover': {
+                                    backgroundColor: '#f3f4f6'
+                                  }
+                                }}
+                              >
+                                <span>👤</span> Profile Photo
+                              </button>
+                            )}
+                            {p.govtId && (
+                              <button 
+                                onClick={() => viewDocument(p.govtId)}
+                                style={{
+                                  width: '100%',
+                                  textAlign: 'left',
+                                  padding: '8px 16px',
+                                  background: 'none',
+                                  border: 'none',
+                                  color: '#1e40af',
+                                  fontSize: '14px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  ':hover': {
+                                    backgroundColor: '#f3f4f6'
+                                  }
+                                }}
+                              >
+                                <span>🆔</span> Government ID
+                              </button>
+                            )}
+                            {p.drivingLicense && (
+                              <button 
+                                onClick={() => viewDocument(p.drivingLicense)}
+                                style={{
+                                  width: '100%',
+                                  textAlign: 'left',
+                                  padding: '8px 16px',
+                                  background: 'none',
+                                  border: 'none',
+                                  color: '#1e40af',
+                                  fontSize: '14px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  ':hover': {
+                                    backgroundColor: '#f3f4f6'
+                                  }
+                                }}
+                              >
+                                <span>📝</span> Driving License
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td style={styles.td}>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button 
+                          style={{
+                            ...styles.btn,
+                            ...styles.btnView,
+                            padding: '6px 12px',
+                            fontSize: '14px'
+                          }} 
+                          onClick={() => setPendingDetail(p)}
+                        >
+                          View
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -435,7 +712,7 @@ const toggleBlockPartner = async (id) => {
               </tr>
             ) : deliveryPartners.map(p => (
               <tr key={p.id}>
-                <td style={styles.td}>{p.name || 'N/A'}</td>
+                <td style={styles.td}>{p.display_name || 'N/A'}</td>
                 <td style={styles.td}>{p.phone || p.mobile || 'N/A'}</td>
                 <td style={styles.td}>
                   {p.vehicle ? 
@@ -475,31 +752,9 @@ const toggleBlockPartner = async (id) => {
             <button style={styles.closeBtn} onClick={() => setPendingDetail(null)} aria-label="Close modal">&times;</button>
             <h2 id="pendingDetailTitle" style={styles.modalHeader}>{pendingDetail.name}</h2>
             <p><b>Mobile:</b> {pendingDetail.phone || pendingDetail.mobile}</p>
-            <p><b>Vehicle:</b> {pendingDetail.vehicle?.name || pendingDetail.vehicle || 'N/A'} | {pendingDetail.vehicle?.number || pendingDetail.vehicleNo || 'N/A'}</p>
-            <p><b>Applied Date:</b> {pendingDetail.appliedDate}</p>
-            <div>
-              <b>Documents:</b>
-              <ul style={styles.docList}>
-                {(pendingDetail.documents || []).map((doc, i) => (
-                  <li key={i} style={styles.docItem}>
-                    <span>{doc.type || doc.documentNumber || doc || "Document"}</span>
-                    {doc.imageUrl && (
-                      <>
-                        {" "}
-                        <a
-                          href={doc.imageUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ color: "#2563eb", marginLeft: 8, textDecoration: "underline" }}
-                        >
-                          View
-                        </a>
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <p><b>Vehicle No:</b> {pendingDetail.vehicle?.number || pendingDetail.vehicleNo || 'N/A'}</p>
+            <p><b>Applied Date:</b> {pendingDetail.created_time ? formatDate(pendingDetail.created_time) : 'N/A'}</p>
+            <p><b>Email:</b> {pendingDetail.email}</p>
             <div style={{ marginTop: 20, display: "flex", gap: 12 }}>
               <button style={{...styles.btn, ...styles.btnBlock, padding: "8px 16px"}} onClick={() => { rejectPending(pendingDetail.id); }}>Reject</button>
               <button style={{...styles.btn, ...styles.btnView, padding: "8px 16px"}} onClick={() => { approvePending(pendingDetail.id); }}>Approve</button>
@@ -516,55 +771,95 @@ const toggleBlockPartner = async (id) => {
           <div style={styles.modal} role="dialog" aria-modal="true" aria-labelledby="partnerDetailTitle">
             <button style={styles.closeBtn} onClick={() => setPartnerDetail(null)} aria-label="Close modal">&times;</button>
             <h2 id="partnerDetailTitle" style={styles.modalHeader}>{partnerDetail.name}</h2>
-            <p><b>Mobile:</b> {partnerDetail.phone || partnerDetail.mobile}</p>
-            <p><b>Vehicle Info:</b> {partnerDetail.vehicle?.number || partnerDetail.vehicleNo || 'N/A'} | {partnerDetail.vehicle?.name || partnerDetail.vehicle || 'N/A'}</p>
-            <p><b>Status:</b> {partnerDetail.online ? <span style={styles.online}>Online</span> : <span style={styles.offline}>Offline</span>}</p>
-            <p><b>Total Deliveries:</b> {partnerDetail.totalDeliveries}</p>
-            <p><b>Rating:</b> {partnerDetail.rating} ★</p>
-            <p><b>Total Earnings:</b> ₹{partnerDetail.totalEarnings}</p>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+              <div>
+                <p><b>Mobile:</b> {partnerDetail.phone || partnerDetail.mobile || 'N/A'}</p>
+                <p><b>Email:</b> {partnerDetail.email || 'N/A'}</p>
+                <p><b>Status:</b> {partnerDetail.isActive ? 
+                  <span style={{ color: '#10b981', fontWeight: 600 }}>Active</span> : 
+                  <span style={{ color: '#ef4444', fontWeight: 600 }}>Inactive</span>}
+                </p>
+                <p><b>Online Status:</b> {partnerDetail.online || partnerDetail.isOnline ? 
+                  <span style={styles.online}>Online</span> : 
+                  <span style={styles.offline}>Offline</span>}
+                </p>
+              </div>
+              <div>
+                <p><b>Vehicle Type:</b> {partnerDetail.vehicle?.name || partnerDetail.vehicle || 'N/A'}</p>
+                <p><b>Vehicle Number:</b> {partnerDetail.vehicle?.number || partnerDetail.vehicleNo || 'N/A'}</p>
+                <p><b>Total Deliveries:</b> {partnerDetail.totalDeliveries || 0}</p>
+                <p><b>Rating:</b> {partnerDetail.rating ? `${partnerDetail.rating} ★` : 'N/A'}</p>
+              </div>
+            </div>
 
-            <div>
-              <b>Documents:</b>
-              <ul style={styles.docList}>
-                {(partnerDetail.documents || []).map((doc, i) => (
-                  <li key={i} style={styles.docItem}>
-                    <span>{doc.type || doc.documentNumber || "Document"}</span>
-                    {doc.imageUrl && (
-                      <>
-                        {" "}
-                        <a
-                          href={doc.imageUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ color: "#2563eb", marginLeft: 8, textDecoration: "underline" }}
-                        >
-                          View
-                        </a>
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
+            <div style={{ margin: '20px 0' }}>
+              <h3 style={{ marginBottom: '10px' }}>Documents</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '15px' }}>
+                {partnerDetail.profileImage && (
+                  <DocumentCard 
+                    title="Profile Photo" 
+                    url={partnerDetail.profileImage}
+                    type="image"
+                  />
+                )}
+                {partnerDetail.govtId && (
+                  <DocumentCard 
+                    title="Government ID" 
+                    url={partnerDetail.govtId}
+                    type={partnerDetail.govtId.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image'}
+                  />
+                )}
+                {partnerDetail.drivingLicense && (
+                  <DocumentCard 
+                    title="Driving License" 
+                    url={partnerDetail.drivingLicense}
+                    type={partnerDetail.drivingLicense.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image'}
+                  />
+                )}
+                {partnerDetail.vehicleRegistration && (
+                  <DocumentCard 
+                    title="Vehicle Registration" 
+                    url={partnerDetail.vehicleRegistration}
+                    type={partnerDetail.vehicleRegistration.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image'}
+                  />
+                )}
+                {(!partnerDetail.profileImage && !partnerDetail.govtId && !partnerDetail.drivingLicense && !partnerDetail.vehicleRegistration) && (
+                  <p>No documents available</p>
+                )}
+              </div>
             </div>
 
             <div style={styles.lastOrdersContainer}>
-              <b>Last 5 Orders (with 15% commission):</b>
-              {partnerDetail.orders.length === 0 ? (
-                <p style={{ fontStyle: "italic", color: "#555" }}>No order history.</p>
+              <h3>Recent Orders</h3>
+              {partnerDetail.orders && partnerDetail.orders.length > 0 ? (
+                <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '8px' }}>
+                  {partnerDetail.orders.slice(0, 5).map((orderId) => {
+                    const order = orders.find(o => o.id === orderId);
+                    if (!order) return null;
+                    return (
+                      <div key={order.id} style={{
+                        ...styles.lastOrderItem,
+                        borderBottom: '1px solid #eee',
+                        marginBottom: '8px',
+                        paddingBottom: '8px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <div>
+                            <div><b>Order ID:</b> {order.id}</div>
+                            <div><b>Date:</b> {new Date(order.createdAt?.toDate()).toLocaleString() || 'N/A'}</div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div><b>Amount:</b> ₹{order.orderTotal?.toFixed(2)}</div>
+                            <div><b>Commission (15%):</b> ₹{(order.orderTotal * 0.15).toFixed(2)}</div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
-                partnerDetail.orders.map((ord) => {
-                  console.log(ord, "ord");
-                  const order = orders.find(o => o.id === ord);
-
-                  return (
-                    <div key={order.id} style={styles.lastOrderItem}>
-                      <div><b>Order ID:</b> {order.id}</div>
-                      <div><b>Date:</b> {order.date}</div>
-                      <div><b>Order Amount:</b> ₹{order.orderTotal}</div>
-                      <div><b>Commission (15%):</b> ₹{order.orderTotal * 0.15}</div>
-                    </div>
-                  );
-                })
+                <p style={{ fontStyle: 'italic', color: '#666' }}>No order history available</p>
               )}
             </div>
           </div>
@@ -690,6 +985,71 @@ const toggleBlockPartner = async (id) => {
             </div>
           </div>
         </>
+      )}
+
+      {/* Document Preview Popup */}
+      {showDocPopup && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }} onClick={() => setShowDocPopup(false)}>
+          <div style={{
+            maxWidth: '90%',
+            maxHeight: '90%',
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '20px',
+            position: 'relative',
+            overflow: 'auto'
+          }} onClick={e => e.stopPropagation()}>
+            <button 
+              onClick={() => setShowDocPopup(false)}
+              style={{
+                position: 'absolute',
+                top: '10px',
+                right: '10px',
+                background: 'none',
+                border: 'none',
+                fontSize: '20px',
+                cursor: 'pointer',
+                color: '#666'
+              }}
+            >
+              ×
+            </button>
+            {currentDoc && (
+              <div style={{ textAlign: 'center' }}>
+                {currentDoc.match(/\.(jpeg|jpg|gif|png)$/) ? (
+                  <img 
+                    src={currentDoc} 
+                    alt="Document preview" 
+                    style={{ maxWidth: '100%', maxHeight: '80vh' }}
+                  />
+                ) : (
+                  <iframe 
+                    src={currentDoc} 
+                    style={{
+                      width: '800px',
+                      height: '600px',
+                      border: 'none',
+                      borderRadius: '4px'
+                    }}
+                    title="Document preview"
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       <style>{`

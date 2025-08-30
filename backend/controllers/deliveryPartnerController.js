@@ -1,4 +1,4 @@
-import DeliveryPartner from '../models/deliveryPartner.js';
+import DeliveryPartner from '../models/DeliveryPartner.js';
 import { admin, db } from '../config/firebase.js';
 
 const getAllDeliveryPartners = async (req, res) => {
@@ -88,15 +88,25 @@ const approveDeliveryPartner = async (req, res) => {
     if (!deliveryPartner.exists) {
       return res.status(404).json({ message: 'Delivery partner not found' });
     }
-    if(deliveryPartner.data().isVerified){
-      await db.collection('deliveryPartners').doc(id).update({ isVerified: false });
-      return res.status(404).json({ message: 'Delivery partner already rejected' });
-    } else{
-    await db.collection('deliveryPartners').doc(id).update({ isVerified: true });
-    res.status(200).json({ message: 'Delivery partner approved successfully' });
+    
+    const partnerData = deliveryPartner.data();
+    
+    if (partnerData.isVerified) {
+      await db.collection('deliveryPartners').doc(id).update({ 
+        isVerified: false,
+        accountStatus: 'rejected' 
+      });
+      return res.status(200).json({ message: 'Delivery partner rejected successfully' });
+    } else {
+      await db.collection('deliveryPartners').doc(id).update({ 
+        isVerified: true,
+        accountStatus: 'approved'
+      });
+      return res.status(200).json({ message: 'Delivery partner approved successfully' });
     }
   } catch (error) {
-    res.status(500).json({ message: 'Error approving delivery partner', error });
+    console.error('Error in approveDeliveryPartner:', error);
+    res.status(500).json({ message: 'Error processing delivery partner approval', error: error.message });
   }
 };
 
@@ -134,4 +144,78 @@ export const getDeliveryPartnerById = async (req, res) => {
   }
 };
 
-export { getAllDeliveryPartners , updateDeliveryPartner , blockDeliveryPartner , resetPassword , approveDeliveryPartner, getActiveDeliveryPartners };
+// Update driver positions for a delivery partner
+const updateDriverPositions = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { latitude, longitude } = req.body;
+
+    // Validate input
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude and longitude must be valid numbers'
+      });
+    }
+
+    if (latitude < -90 || latitude > 90) {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude must be between -90 and 90'
+      });
+    }
+
+    if (longitude < -180 || longitude > 180) {
+      return res.status(400).json({
+        success: false,
+        message: 'Longitude must be between -180 and 180'
+      });
+    }
+
+    // Check if delivery partner exists
+    const partnerDoc = await db.collection('deliveryPartners').doc(id).get();
+    if (!partnerDoc.exists) {
+      return res.status(404).json({
+        success: false,
+        message: 'Delivery partner not found'
+      });
+    }
+
+    const partnerData = partnerDoc.data();
+
+    // Create new position using same format as Order model: { lat, lng }
+    const newPosition = {
+      lat: latitude,
+      lng: longitude
+    };
+
+    // Update delivery partner document with single driver position
+    await db.collection('deliveryPartners').doc(id).update({
+      driverPositions: newPosition,
+      currentLocation: {
+        type: 'Point',
+        coordinates: [longitude, latitude] // [longitude, latitude] for GeoJSON
+      },
+      lastActive: new Date(),
+      updatedAt: new Date()
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Driver position updated successfully',
+      data: {
+        driverPosition: { lat: latitude, lng: longitude }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error updating driver positions:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update driver positions',
+      error: error.message
+    });
+  }
+};
+
+export { getAllDeliveryPartners , updateDeliveryPartner , blockDeliveryPartner , resetPassword , approveDeliveryPartner, getActiveDeliveryPartners, updateDriverPositions };

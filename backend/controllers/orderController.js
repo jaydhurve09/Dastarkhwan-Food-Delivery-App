@@ -885,12 +885,16 @@ export const assignDeliveryPartnerToOrder = async (req, res) => {
       phone: phone || partnerData.phone || ''
     };
 
+    // Fetch driver positions from delivery partner and include in order
+    const partnerDriverPositions = partnerData.driverPositions || { lat: null, lng: null };
+
     // Update order with partner assignment (keep current orderStatus, don't change to 'partnerAssigned')
     const updateData = {
-      assigningPartner: true, // Set to true when partner is assigned
+      assigningPartner: false, // Set to false when partner is successfully assigned
       partnerAssigned: partnerAssignment,
       deliveryPartnerId: deliveryPartnerRef, // Document reference instead of string
       deliveryBoyName: partnerAssignment.partnerName,
+      driverPositions: partnerDriverPositions, // Copy driver positions from delivery partner
       // orderStatus remains unchanged - no longer setting to 'partnerAssigned'
       updatedAt: new Date()
     };
@@ -973,8 +977,12 @@ const assignDeliveryPartner = async (req, res) => {
     // Create delivery partner reference
     const partnerRef = db.collection('deliveryPartners').doc(partnerId);
 
+    // Fetch driver positions from delivery partner
+    const partnerDriverPositions = partnerData.driverPositions || { lat: null, lng: null };
+
     // Update order with delivery partner reference (using same field names as main assign function)
     await db.collection('orders').doc(orderId).update({
+      assigningPartner: false, // Set to false when partner is successfully assigned
       deliveryPartnerId: partnerRef,
       partnerAssigned: {
         partnerId: partnerRef,
@@ -982,6 +990,7 @@ const assignDeliveryPartner = async (req, res) => {
         phone: partnerData.phone || ''
       },
       deliveryBoyName: partnerData.displayName || partnerData.name || 'Unknown',
+      driverPositions: partnerDriverPositions, // Copy driver positions from delivery partner
       orderStatus: 'partnerAssigned',
       updatedAt: new Date()
     });
@@ -1159,6 +1168,76 @@ export const acceptOrderAndNotifyPartners = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error accepting order and notifying partners',
+      error: error.message
+    });
+  }
+};
+
+// Update driver positions for a specific order
+export const updateOrderDriverPositions = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { latitude, longitude } = req.body;
+
+    // Validate input
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude and longitude must be valid numbers'
+      });
+    }
+
+    if (latitude < -90 || latitude > 90) {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude must be between -90 and 90'
+      });
+    }
+
+    if (longitude < -180 || longitude > 180) {
+      return res.status(400).json({
+        success: false,
+        message: 'Longitude must be between -180 and 180'
+      });
+    }
+
+    // Check if order exists
+    const orderDoc = await db.collection('orders').doc(orderId).get();
+    if (!orderDoc.exists) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    const orderData = orderDoc.data();
+
+    // Create new position using same format as destination/source: { lat, lng }
+    const newPosition = {
+      lat: latitude,
+      lng: longitude
+    };
+
+    // Update order document with single driver position
+    await db.collection('orders').doc(orderId).update({
+      driverPositions: newPosition,
+      updatedAt: new Date()
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Order driver position updated successfully',
+      data: {
+        orderId: orderId,
+        driverPosition: { lat: latitude, lng: longitude }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error updating order driver positions:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update order driver positions',
       error: error.message
     });
   }

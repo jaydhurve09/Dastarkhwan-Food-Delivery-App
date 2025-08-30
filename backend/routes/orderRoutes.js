@@ -19,7 +19,8 @@ import {
   testGeoPoint,
   assignDeliveryPartnerToOrder,
   dispatchOrder,
-  acceptOrderAndNotifyPartners
+  acceptOrderAndNotifyPartners,
+  updateOrderDriverPositions
 } from '../controllers/orderController.js';
 import { isAuthenticated, isAdmin } from '../middleware/auth.js';
 
@@ -62,6 +63,9 @@ router.patch('/:orderId/assign-partner', assignDeliveryPartnerToOrder);
 
 // Dispatch order (set status to 'dispatched')
 router.patch('/:orderId/dispatch', dispatchOrder);
+
+// Update driver positions for order tracking
+router.patch('/:orderId/driver-positions', updateOrderDriverPositions);
 
 // Delivery partner assignment
 router.put('/assign-agent', isAuthenticated, isAdmin, updateAgent);

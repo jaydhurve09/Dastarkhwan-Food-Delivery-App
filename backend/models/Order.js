@@ -45,9 +45,9 @@ export class Order extends BaseModel {
     // List fields
     this.menuItems = data.menuItems || []; // List < Doc Reference (menuItems) >
     this.products = data.products || []; // List < Doc Reference (menuItems) >
-    this.driverPositions = data.driverPositions || []; // List < Lat Lng >
     
     // Lat Lng fields
+    this.driverPositions = data.driverPositions || { lat: null, lng: null };
     this.destination = data.destination || { lat: null, lng: null };
     this.source = data.source || { lat: null, lng: null };
     
@@ -234,6 +234,39 @@ export class Order extends BaseModel {
       limit: options.limit,
       offset: options.offset
     });
+  }
+
+  // Helper methods for driver positions management
+  
+  // Set driver position (single object like destination/source)
+  setDriverPosition(latitude, longitude) {
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+      throw new Error('Latitude and longitude must be numbers');
+    }
+    
+    // Use same structure as destination/source: { lat, lng }
+    this.driverPositions = {
+      lat: latitude,
+      lng: longitude
+    };
+    
+    return this;
+  }
+
+  // Get driver position as object
+  getDriverPosition() {
+    return this.driverPositions || { lat: null, lng: null };
+  }
+
+  // Check if driver has a position set
+  hasDriverPosition() {
+    return this.driverPositions && this.driverPositions.lat !== null && this.driverPositions.lng !== null;
+  }
+
+  // Clear driver position
+  clearDriverPosition() {
+    this.driverPositions = { lat: null, lng: null };
+    return this;
   }
 }
 

@@ -327,4 +327,181 @@ router.post('/test-single-partner-notification', async (req, res) => {
   }
 });
 
+// Test endpoint for driver positions functionality
+router.post('/test-driver-positions', async (req, res) => {
+  try {
+    const { partnerId, orderId, latitude, longitude } = req.body;
+    
+    if (!partnerId && !orderId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Either partnerId or orderId is required'
+      });
+    }
+    
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid latitude and longitude are required'
+      });
+    }
+    
+    console.log('🧪 Testing driver positions update...');
+    
+    const results = {};
+    
+    // Test updating delivery partner positions
+    if (partnerId) {
+      try {
+        const partnerDoc = await db.collection('deliveryPartners').doc(partnerId).get();
+        if (partnerDoc.exists) {
+          const newPosition = {
+            lat: latitude,
+            lng: longitude
+          };
+          
+          await db.collection('deliveryPartners').doc(partnerId).update({
+            driverPositions: newPosition,
+            currentLocation: {
+              type: 'Point',
+              coordinates: [longitude, latitude]
+            },
+            lastActive: new Date(),
+            updatedAt: new Date()
+          });
+          
+          results.deliveryPartner = {
+            success: true,
+            partnerId: partnerId,
+            driverPosition: newPosition
+          };
+        } else {
+          results.deliveryPartner = {
+            success: false,
+            message: 'Delivery partner not found'
+          };
+        }
+      } catch (error) {
+        results.deliveryPartner = {
+          success: false,
+          error: error.message
+        };
+      }
+    }
+    
+    // Test updating order positions
+    if (orderId) {
+      try {
+        const orderDoc = await db.collection('orders').doc(orderId).get();
+        if (orderDoc.exists) {
+          const newPosition = {
+            lat: latitude,
+            lng: longitude
+          };
+          
+          await db.collection('orders').doc(orderId).update({
+            driverPositions: newPosition,
+            updatedAt: new Date()
+          });
+          
+          results.order = {
+            success: true,
+            orderId: orderId,
+            driverPosition: newPosition
+          };
+        } else {
+          results.order = {
+            success: false,
+            message: 'Order not found'
+          };
+        }
+      } catch (error) {
+        results.order = {
+          success: false,
+          error: error.message
+        };
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: 'Driver positions test completed',
+      results: results
+    });
+    
+  } catch (error) {
+    console.error('Error in driver positions test:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Driver positions test failed',
+      error: error.message
+    });
+  }
+});
+
+// Test endpoint to verify driver positions are copied during assignment
+router.post('/test-assignment-driver-positions', async (req, res) => {
+  try {
+    const { partnerId, orderId } = req.body;
+    
+    if (!partnerId || !orderId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Both partnerId and orderId are required'
+      });
+    }
+    
+    console.log('🧪 Testing driver positions copy during assignment...');
+    
+    // Get delivery partner data
+    const partnerDoc = await db.collection('deliveryPartners').doc(partnerId).get();
+    if (!partnerDoc.exists) {
+      return res.status(404).json({
+        success: false,
+        message: 'Delivery partner not found'
+      });
+    }
+    
+    const partnerData = partnerDoc.data();
+    const partnerDriverPositions = partnerData.driverPositions || { lat: null, lng: null };
+    
+    // Assign partner to order (this should copy driver positions)
+    const deliveryPartnerRef = db.collection('deliveryPartners').doc(partnerId);
+    await db.collection('orders').doc(orderId).update({
+      deliveryPartnerId: deliveryPartnerRef,
+      partnerAssigned: {
+        partnerId: deliveryPartnerRef,
+        partnerName: partnerData.displayName || partnerData.name || 'Test Partner',
+        phone: partnerData.phone || ''
+      },
+      driverPositions: partnerDriverPositions, // Copy driver positions
+      updatedAt: new Date()
+    });
+    
+    // Verify the assignment and driver positions copy
+    const orderDoc = await db.collection('orders').doc(orderId).get();
+    const orderData = orderDoc.data();
+    
+    res.json({
+      success: true,
+      message: 'Assignment and driver positions copy test completed',
+      results: {
+        partnerId: partnerId,
+        orderId: orderId,
+        partnerDriverPositions: partnerDriverPositions,
+        orderDriverPositions: orderData.driverPositions,
+        positionsCopied: JSON.stringify(partnerDriverPositions) === JSON.stringify(orderData.driverPositions)
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error in assignment driver positions test:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Assignment driver positions test failed',
+      error: error.message
+    });
+  }
+});
+
 export default router;

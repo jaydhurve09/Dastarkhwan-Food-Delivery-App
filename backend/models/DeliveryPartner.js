@@ -11,9 +11,6 @@ export class DeliveryPartner extends BaseModel {
     SUSPENDED: 'suspended'
   };
 
-  // Vehicle types
-  static VEHICLE_TYPES = ['bike', 'bicycle', 'scooter', 'car'];
-
   // Document types
   static DOCUMENT_TYPES = {
     AADHAR: 'aadhar',
@@ -24,88 +21,79 @@ export class DeliveryPartner extends BaseModel {
 
   constructor(data = {}) {
     super();
-    this.name = data.name || ''; // Required
+    this.TOrders = data.TOrders || 0;
+    this.accountStatus = data.accountStatus || 'pending';
+    this.blocked = data.blocked || false;
+    this.created_time = data.created_time || new Date().toISOString();
+    this.display_name = data.display_name || '';
+    this.drivingLicense = data.drivingLicense || '';
     this.email = data.email ? data.email.toLowerCase() : ''; // Required, unique
-    this.phone = data.phone || ''; // Required, unique
-    this.password = data.password || ''; // Required
-    this.profileImage = data.profileImage || '';
-    //declare orders array
-    this.orders = data.orders || []; // Array of order IDs associated with the delivery partner
-    
-    this.address = data.address || {
-      street: '',
-      city: '',
-      state: '',
-      pincode: ''
-    };
-    
-    this.documents = (data.documents || []).map(doc => ({
-      type: doc.type,
-      documentNumber: doc.documentNumber || '',
-      imageUrl: doc.imageUrl || '',
-      verified: doc.verified || false,
-      verifiedById: doc.verifiedById || null,
-      verifiedAt: doc.verifiedAt || null,
-      rejectionReason: doc.rejectionReason || ''
-    }));
-    
-    this.vehicle = data.vehicle || {
-      type: '',
-      number: '',
-      name: '',
-      color: ''
-    };
-    
+    this.fcmToken = data.fcmToken || '';
+    this.govtId = data.govtId || '';
+    this.isActive = data.isActive || false;
     this.isOnline = data.isOnline || false;
-    this.isActive = data.isActive !== undefined ? data.isActive : true;
     this.isVerified = data.isVerified || false;
-    
-    this.currentLocation = data.currentLocation || {
-      type: 'Point',
-      coordinates: [0, 0] // [longitude, latitude]
-    };
-    
+    this.phone_number = data.phone_number || '';
+    this.profileImage = data.profileImage || '';
     this.rating = data.rating || 0;
-    this.totalRatings = data.totalRatings || 0;
     this.totalDeliveries = data.totalDeliveries || 0;
     this.totalEarnings = data.totalEarnings || 0;
+    this.totalRatings = data.totalRatings || 0;
+    this.uid = data.uid || '';
+    this.updatedAt = data.updatedAt || new Date().toISOString();
+    this.vehicleNo = data.vehicleNo || '';
     this.walletBalance = data.walletBalance || 0;
-    this.fcmToken = data.fcmToken || '';
-    this.lastActive = data.lastActive || null;
     
-    this.accountStatus = data.accountStatus || DeliveryPartner.STATUS.PENDING;
-    this.rejectionReason = data.rejectionReason || '';
+    // Existing fields that might be used elsewhere in the application
+    this.name = data.name || this.display_name;
+    this.phone = data.phone || this.phone_number;
+    this.password = data.password || ''; // Required for authentication
     
-    this.createdAt = data.createdAt || new Date();
-    this.updatedAt = data.updatedAt || new Date();
+    // Initialize documents array with the driving license and govt ID
+    this.documents = [
+      {
+        type: 'license',
+        documentNumber: this.vehicleNo,
+        imageUrl: this.drivingLicense,
+        verified: this.isVerified
+      },
+      {
+        type: 'aadhar',
+        imageUrl: this.govtId,
+        verified: this.isVerified
+      }
+    ];
   }
 
   // Convert to Firestore document format
   toFirestore() {
     return {
-      name: this.name,
+      TOrders: this.TOrders,
+      accountStatus: this.accountStatus,
+      blocked: this.blocked,
+      created_time: this.created_time,
+      display_name: this.display_name,
+      drivingLicense: this.drivingLicense,
       email: this.email.toLowerCase(),
-      phone: this.phone,
-      password: this.password,
-      profileImage: this.profileImage,
-      orders: this.orders,
-      address: this.address,
-      documents: this.documents,
-      vehicle: this.vehicle,
-      isOnline: this.isOnline,
+      fcmToken: this.fcmToken,
+      govtId: this.govtId,
       isActive: this.isActive,
+      isOnline: this.isOnline,
       isVerified: this.isVerified,
-      currentLocation: this.currentLocation,
+      phone_number: this.phone_number,
+      profileImage: this.profileImage,
       rating: this.rating,
-      totalRatings: this.totalRatings,
       totalDeliveries: this.totalDeliveries,
       totalEarnings: this.totalEarnings,
+      totalRatings: this.totalRatings,
+      uid: this.uid,
+      updatedAt: new Date(),
+      vehicleNo: this.vehicleNo,
       walletBalance: this.walletBalance,
-      fcmToken: this.fcmToken,
-      lastActive: this.lastActive,
-      accountStatus: this.accountStatus,
-      rejectionReason: this.rejectionReason,
-      updatedAt: new Date()
+      name: this.name,
+      phone: this.phone,
+      password: this.password,
+      documents: this.documents
     };
   }
 
@@ -125,11 +113,6 @@ export class DeliveryPartner extends BaseModel {
     // Validate account status
     if (!Object.values(DeliveryPartner.STATUS).includes(this.accountStatus)) {
       throw new Error('Invalid account status');
-    }
-    
-    // Validate vehicle type if provided
-    if (this.vehicle.type && !DeliveryPartner.VEHICLE_TYPES.includes(this.vehicle.type)) {
-      throw new Error('Invalid vehicle type');
     }
     
     return true;
@@ -268,6 +251,38 @@ export class DeliveryPartner extends BaseModel {
     this.rating = (currentTotal + newRating) / this.totalRatings;
     
     return this.save();
+  }
+
+  // Helper methods for driver positions management
+  
+  // Set driver position (single object like Order model)
+  setDriverPosition(latitude, longitude) {
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+      throw new Error('Latitude and longitude must be numbers');
+    }
+    
+    this.driverPositions = {
+      lat: latitude,
+      lng: longitude
+    };
+    
+    return this;
+  }
+
+  // Get driver position as object
+  getDriverPosition() {
+    return this.driverPositions || { lat: null, lng: null };
+  }
+
+  // Check if driver has a position set
+  hasDriverPosition() {
+    return this.driverPositions && this.driverPositions.lat !== null && this.driverPositions.lng !== null;
+  }
+
+  // Clear driver position
+  clearDriverPosition() {
+    this.driverPositions = { lat: null, lng: null };
+    return this;
   }
 }
 

@@ -534,6 +534,7 @@ const RestaurantMonitoring = () => {
                   name: availablePartner.displayName || availablePartner.name,
                   phone: availablePartner.phone
                 },
+                driverPositions: availablePartner.driverPositions || { lat: null, lng: null },
                 assigningPartner: false
               };
             }
@@ -596,6 +597,24 @@ const RestaurantMonitoring = () => {
       });
 
       if (response.data.success) {
+        // Immediately update local state to show assignment
+        setOngoingOrders(prev => prev.map(order => {
+          if (order.id === orderId) {
+            return {
+              ...order,
+              partnerAssigned: {
+                partnerId: partnerId,
+                partnerName: selectedPartner.displayName || selectedPartner.name,
+                name: selectedPartner.displayName || selectedPartner.name,
+                phone: selectedPartner.phone
+              },
+              driverPositions: selectedPartner.driverPositions || { lat: null, lng: null },
+              assigningPartner: false
+            };
+          }
+          return order;
+        }));
+
         // Call the single partner notification endpoint (only notify the assigned partner)
         try {
           console.log('Triggering single partner assignment notification for order:', orderId);
@@ -1575,7 +1594,7 @@ const RestaurantMonitoring = () => {
                             Assigning...
                           </span>
                         </div>
-                      ) : order.assigningPartner && order.partnerAssigned ? (
+                      ) : order.partnerAssigned ? (
                         <div style={{ 
                           padding: '6px 10px', 
                           backgroundColor: '#e8f5e8', 

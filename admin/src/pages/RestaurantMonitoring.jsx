@@ -349,6 +349,15 @@ const RestaurantMonitoring = () => {
     try {
       console.log('Accepting order and notifying all delivery partners:', orderId);
       
+      // Log which partners are eligible for notifications
+      const eligiblePartners = activeDeliveryPartners.filter(partner => 
+        partner.isActive === true && partner.isOnline === true
+      );
+      console.log('📋 Eligible partners for notification (active & online):');
+      eligiblePartners.forEach(partner => {
+        console.log(`  - ${partner.displayName || partner.name} (ID: ${partner.id}) - Active: ${partner.isActive}, Online: ${partner.isOnline}`);
+      });
+      
       // Call the new backend endpoint that accepts order and notifies all active partners
       const response = await api.patch(`/orders/${orderId}/accept-and-notify`);
       
@@ -356,21 +365,30 @@ const RestaurantMonitoring = () => {
         const { data, notifiedPartners, message } = response.data;
         
         console.log('✅ Order accepted successfully:', data);
-        console.log('📱 Notified partners:', notifiedPartners);
+        console.log('📱 Notification sent to partners:');
+        if (notifiedPartners && Array.isArray(notifiedPartners)) {
+          notifiedPartners.forEach(partner => {
+            console.log(`  ✅ Notified: ${partner.name || partner.displayName} (ID: ${partner.id})`);
+          });
+        } else {
+          console.log('  ℹ️ No partner notification details returned from server');
+        }
+        console.log(`📊 Total partners notified: ${notifiedPartners?.length || 0}`);
         
         // Update local state - move order from incoming to ongoing
         const acceptedOrder = incomingOrders.find(order => order.id === orderId);
         if (acceptedOrder) {
-          const updatedOrder = { ...acceptedOrder, orderStatus: 'preparing', assigningPartner: true };
+          // Don't auto-assign partner, just move to ongoing with preparing status
+          const updatedOrder = { 
+            ...acceptedOrder, 
+            orderStatus: 'preparing',
+            assigningPartner: false // Don't show auto-assignment loading
+          };
           setOngoingOrders(prev => [...prev, updatedOrder]);
           setIncomingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
           
           // Show success message with notification count
-          toast.success(`${message} - Order moved to preparing!`);
-          
-          // Trigger auto-assignment AFTER order status is updated to 'preparing'
-          console.log('Order status updated to preparing, triggering auto-assignment...');
-          await handleAutoAssignPartner(orderId, acceptedOrder);
+          toast.success(`${message} - Order moved to preparing! Delivery partners will respond if available.`);
         }
         
         // Refresh both sections to ensure data consistency
@@ -474,103 +492,7 @@ const RestaurantMonitoring = () => {
     }));
   };
 
-  // Auto-assign delivery partner after order status is updated to 'preparing'
-  const handleAutoAssignPartner = async (orderId, orderData) => {
-    if (!autoAssignPartners) {
-      console.log('Auto-assignment disabled for order:', orderId);
-      return;
-    }
-
-    try {
-      console.log('Auto-assigning delivery partner for order:', orderId);
-      
-      // Find an available delivery partner
-      if (activeDeliveryPartners.length > 0) {
-        // Smart partner selection: prefer partners who are not currently assigned
-        let availablePartner = null;
-        
-        // First, try to find a partner who doesn't have any current assignments
-        const unassignedPartners = activeDeliveryPartners.filter(partner => {
-          // Check if this partner is already assigned to any ongoing order
-          const isAssigned = ongoingOrders.some(order => 
-            order.partnerAssigned && 
-            (order.partnerAssigned.partnerId === partner.id || 
-             order.partnerAssigned.id === partner.id)
-          );
-          return !isAssigned;
-        });
-        
-        if (unassignedPartners.length > 0) {
-          // Pick the first unassigned partner
-          availablePartner = unassignedPartners[0];
-          console.log('Selected unassigned partner:', availablePartner.displayName || availablePartner.name);
-        } else {
-          // If all partners are assigned, pick the first available one
-          availablePartner = activeDeliveryPartners[0];
-          console.log('All partners assigned, selecting first available:', availablePartner.displayName || availablePartner.name);
-        }
-      
-        console.log('Auto-assigning partner:', availablePartner.displayName || availablePartner.name);
-        
-        // Call the assign partner API
-        const assignResponse = await api.patch(`/orders/${orderId}/assign-partner`, {
-          partnerId: availablePartner.id,
-          partnerName: availablePartner.displayName || availablePartner.name,
-          phone: availablePartner.phone
-        });
-        
-        if (assignResponse.data.success) {
-          console.log('✅ Auto-assignment successful');
-          
-          // Update local state to reflect the assignment
-          setOngoingOrders(prev => prev.map(order => {
-            if (order.id === orderId) {
-              return {
-                ...order,
-                partnerAssigned: {
-                  partnerId: availablePartner.id,
-                  name: availablePartner.displayName || availablePartner.name,
-                  phone: availablePartner.phone
-                },
-                driverPositions: availablePartner.driverPositions || { lat: null, lng: null },
-                assigningPartner: false
-              };
-            }
-            return order;
-          }));
-          
-          // Send partner assignment notification
-          try {
-            const notificationResponse = await api.post('/test/test-single-partner-notification', {
-              orderId: orderId,
-              deliveryPartnerId: availablePartner.id,
-              orderStatus: 'auto_assigned',
-              restaurantName: 'Restaurant',
-              customerAddress: orderData.deliveryAddress?.address || orderData.address || 'Customer Address',
-              orderDetails: JSON.stringify(orderData.products || orderData.items || []),
-              notificationType: 'order_auto_assigned',
-              partnerName: availablePartner.displayName || availablePartner.name
-            });
-            console.log('✅ Auto-assignment notification sent:', notificationResponse.data);
-            toast.success(`Order auto-assigned to ${availablePartner.displayName || availablePartner.name}!`);
-          } catch (notificationError) {
-            console.error('Error sending auto-assignment notification:', notificationError);
-            toast.success(`Order auto-assigned to ${availablePartner.displayName || availablePartner.name} (notification failed)`);
-          }
-        } else {
-          throw new Error('Auto-assignment failed');
-        }
-      } else {
-        console.log('No delivery partners available for auto-assignment');
-        toast.info('Order accepted! No delivery partners available for auto-assignment');
-      }
-    } catch (error) {
-      console.error('Error in auto-assignment process:', error);
-      toast.warn('Order accepted! Auto-assignment failed - please assign manually');
-    }
-  };
-
-  // Handle delivery partner assignment
+  // Handle delivery partner assignment with filtering for active/online partners
   const handleAssignPartner = async (orderId) => {
     const partnerId = selectedPartners[orderId];
     
@@ -579,11 +501,21 @@ const RestaurantMonitoring = () => {
       return;
     }
 
-    const selectedPartner = activeDeliveryPartners.find(p => p.id === partnerId);
+    // Filter to only include active and online partners
+    const availablePartners = activeDeliveryPartners.filter(partner => 
+      partner.isActive === true && partner.isOnline === true
+    );
+
+    const selectedPartner = availablePartners.find(p => p.id === partnerId);
     if (!selectedPartner) {
-      toast.error('Selected delivery partner not found');
+      toast.error('Selected delivery partner is not available (offline or inactive)');
       return;
     }
+
+    console.log('🎯 Manual assignment initiated:');
+    console.log(`  Order ID: ${orderId}`);
+    console.log(`  Selected Partner: ${selectedPartner.displayName || selectedPartner.name} (ID: ${partnerId})`);
+    console.log(`  Partner Status - Active: ${selectedPartner.isActive}, Online: ${selectedPartner.isOnline}`);
 
     try {
       setAssigningOrders(prev => new Set([...prev, orderId]));
@@ -595,6 +527,8 @@ const RestaurantMonitoring = () => {
       });
 
       if (response.data.success) {
+        console.log('✅ Partner assignment successful');
+        
         // Immediately update local state to show assignment
         setOngoingOrders(prev => prev.map(order => {
           if (order.id === orderId) {
@@ -615,9 +549,10 @@ const RestaurantMonitoring = () => {
 
         // Call the single partner notification endpoint (only notify the assigned partner)
         try {
-          console.log('Triggering single partner assignment notification for order:', orderId);
+          console.log('📱 Sending single partner assignment notification...');
+          console.log(`  Target Partner: ${selectedPartner.displayName || selectedPartner.name} (ID: ${partnerId})`);
           
-          // Find the order to get details for notification (check both incoming and ongoing)
+          // Find the order to get details for notification
           const currentOrder = ongoingOrders.find(order => order.id === orderId) || 
                               incomingOrders.find(order => order.id === orderId);
           
@@ -629,10 +564,12 @@ const RestaurantMonitoring = () => {
             customerAddress: currentOrder?.customerAddress || currentOrder?.deliveryAddress?.address || currentOrder?.address || 'Customer Address'
           });
           
-          console.log('✅ Single partner assignment notification:', testResponse.data);
+          console.log('✅ Single partner assignment notification response:', testResponse.data);
+          console.log(`📧 Notification sent to: ${selectedPartner.displayName || selectedPartner.name}`);
           toast.success(`${selectedPartner.displayName || selectedPartner.name} assigned and notified!`);
         } catch (notificationError) {
-          console.error('Error testing single partner assignment notification:', notificationError);
+          console.error('❌ Error sending single partner assignment notification:', notificationError);
+          console.log(`❌ Failed to notify: ${selectedPartner.displayName || selectedPartner.name}`);
           toast.warn(`${selectedPartner.displayName || selectedPartner.name} assigned but notification failed`);
         }
 
@@ -649,7 +586,7 @@ const RestaurantMonitoring = () => {
         throw new Error(response.data.message || 'Failed to assign partner');
       }
     } catch (error) {
-      console.error('Error assigning delivery partner:', error);
+      console.error('❌ Error assigning delivery partner:', error);
       toast.error(error.response?.data?.message || 'Failed to assign delivery partner');
     } finally {
       setAssigningOrders(prev => {
@@ -912,7 +849,7 @@ const RestaurantMonitoring = () => {
   const getStatusStyle = (isActive) => ({
     padding: '4px 8px',
     borderRadius: '12px',
-    backgroundColor: isActive ? '#e8f8f0' : '#f5f5f5',
+    backgroundColor: isActive ? '#e8f5e8' : '#f5f5f5',
     color: isActive ? '#27ae60' : '#666',
     border: `1px solid ${isActive ? '#27ae60' : '#ddd'}`,
     fontSize: '0.8em',
@@ -1641,8 +1578,34 @@ const RestaurantMonitoring = () => {
                             🚀 Dispatched
                           </div>
                         </div>
-                      ) : activeDeliveryPartners.length > 0 ? (
+                      ) : order.orderStatus === 'declined' ? (
+                        // Hide manual assignment for declined orders
+                        <div style={{ 
+                          padding: '6px 10px', 
+                          backgroundColor: '#f8d7da', 
+                          borderRadius: '4px',
+                          border: '1px solid #f5c6cb',
+                          fontSize: '0.75em',
+                          color: '#721c24',
+                          textAlign: 'center'
+                        }}>
+                          Order Declined
+                        </div>
+                      ) : activeDeliveryPartners.filter(partner => 
+                          partner.isActive === true && partner.isOnline === true
+                        ).length > 0 ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ 
+                            padding: '6px 10px', 
+                            backgroundColor: '#d1ecf1', 
+                            borderRadius: '4px',
+                            border: '1px solid #bee5eb',
+                            fontSize: '0.75em',
+                            color: '#0c5460',
+                            textAlign: 'center'
+                          }}>
+                            ⏳ Awaiting Partner Response
+                          </div>
                           <select
                             value={selectedPartners[order.id] || ''}
                             onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
@@ -1655,12 +1618,14 @@ const RestaurantMonitoring = () => {
                             }}
                             disabled={assigningOrders.has(order.id)}
                           >
-                            <option value="">Select Partner</option>
-                            {activeDeliveryPartners.map(partner => (
-                              <option key={partner.id} value={partner.id}>
-                                {partner.displayName || partner.name}
-                              </option>
-                            ))}
+                            <option value="">Manual Assignment</option>
+                            {activeDeliveryPartners
+                              .filter(partner => partner.isActive === true && partner.isOnline === true)
+                              .map(partner => (
+                                <option key={partner.id} value={partner.id}>
+                                  {partner.displayName || partner.name} {partner.isOnline ? '🟢' : '🔴'}
+                                </option>
+                              ))}
                           </select>
                           <button
                             onClick={() => handleAssignPartner(order.id)}
@@ -1688,9 +1653,163 @@ const RestaurantMonitoring = () => {
                           color: '#856404',
                           textAlign: 'center'
                         }}>
-                          No Partners Available
+                          No Active/Online Partners Available
                         </div>
                       )}
+                    </td>
+                    <td style={styles.td}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '200px' }}>
+                        {order.partnerAssigned ? (
+                          <div style={{ 
+                            padding: '8px 12px', 
+                            backgroundColor: '#e8f5e8', 
+                            borderRadius: '6px',
+                            border: '1px solid #c3e6c3'
+                          }}>
+                            <div style={{ fontWeight: 'bold', fontSize: '0.9em', color: '#2d5f2d' }}>
+                              {order.partnerAssigned.name || order.partnerAssigned.partnerName}
+                            </div>
+                            {(order.partnerAssigned.phone) && (
+                              <div style={{ fontSize: '0.8em', color: '#666' }}>
+                                📞 {order.partnerAssigned.phone}
+                              </div>
+                            )}
+                            <div style={{ fontSize: '0.75em', color: '#2d5f2d', marginTop: '4px' }}>
+                              ✅ Partner Assigned
+                            </div>
+                            <button
+                              onClick={() => handleDispatchOrder(order.id)}
+                              style={{
+                                marginTop: '8px',
+                                padding: '6px 12px',
+                                backgroundColor: '#9b59b6',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                fontSize: '0.8em',
+                                cursor: 'pointer',
+                                width: '100%'
+                              }}
+                            >
+                              Dispatch
+                            </button>
+                          </div>
+                        ) : order.orderStatus === 'dispatched' ? (
+                          <div style={{ 
+                            padding: '8px 12px', 
+                            backgroundColor: '#e6e2ff', 
+                            borderRadius: '6px',
+                            border: '1px solid #d1c7ff'
+                          }}>
+                            <div style={{ fontWeight: 'bold', fontSize: '0.9em', color: '#6b46c1' }}>
+                              {order.partnerAssigned ? (order.partnerAssigned.name || order.partnerAssigned.partnerName) : 'Delivery Partner'}
+                            </div>
+                            {order.partnerAssigned && order.partnerAssigned.phone && (
+                              <div style={{ fontSize: '0.8em', color: '#666' }}>
+                                📞 {order.partnerAssigned.phone}
+                              </div>
+                            )}
+                            <div style={{ fontSize: '0.75em', color: '#6b46c1', marginTop: '4px' }}>
+                              🚀 Dispatched
+                            </div>
+                          </div>
+                        ) : order.orderStatus === 'declined' ? (
+                          <div style={{ 
+                            padding: '8px 12px', 
+                            backgroundColor: '#f8d7da', 
+                            borderRadius: '6px',
+                            border: '1px solid #f5c6cb'
+                          }}>
+                            <div style={{ fontSize: '0.9em', color: '#721c24', fontWeight: 'bold' }}>
+                              Order Declined
+                            </div>
+                            <div style={{ fontSize: '0.8em', color: '#721c24', marginTop: '2px' }}>
+                              No further action required
+                            </div>
+                          </div>
+                        ) : activeDeliveryPartners.filter(partner => 
+                            partner.isActive === true && partner.isOnline === true
+                          ).length > 0 ? (
+                          <div>
+                            <div style={{ 
+                              padding: '8px 12px', 
+                              backgroundColor: '#d1ecf1', 
+                              borderRadius: '6px',
+                              border: '1px solid #bee5eb',
+                              marginBottom: '8px'
+                            }}>
+                              <div style={{ fontSize: '0.9em', color: '#0c5460', fontWeight: 'bold' }}>
+                                ⏳ Awaiting Partner Response
+                              </div>
+                              <div style={{ fontSize: '0.8em', color: '#0c5460', marginTop: '2px' }}>
+                                FCM notifications sent to all active partners
+                              </div>
+                            </div>
+                            <div style={{ 
+                              padding: '4px 8px', 
+                              backgroundColor: '#f8f9fa', 
+                              borderRadius: '4px',
+                              border: '1px solid #dee2e6',
+                              marginBottom: '6px',
+                              fontSize: '0.8em',
+                              color: '#6c757d'
+                            }}>
+                              Or assign manually:
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                              <select
+                                value={selectedPartners[order.id] || ''}
+                                onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+                                style={{
+                                  flex: 1,
+                                  padding: '6px 8px',
+                                  border: '1px solid #ddd',
+                                  borderRadius: '4px',
+                                  fontSize: '0.85em',
+                                  backgroundColor: 'white'
+                                }}
+                                disabled={assigningOrders.has(order.id)}
+                              >
+                                <option value="">Select Partner</option>
+                                {activeDeliveryPartners
+                                  .filter(partner => partner.isActive === true && partner.isOnline === true)
+                                  .map(partner => (
+                                    <option key={partner.id} value={partner.id}>
+                                      {partner.displayName || partner.name} - {partner.phone || 'No phone'}
+                                    </option>
+                                  ))}
+                              </select>
+                              <button
+                                onClick={() => handleAssignPartner(order.id)}
+                                disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
+                                style={{
+                                  padding: '6px 12px',
+                                  backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  fontSize: '0.8em',
+                                  cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                                               {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ 
+                            padding: '8px 12px', 
+                            backgroundColor: '#fff3cd', 
+                            borderRadius: '6px',
+                            border: '1px solid #ffeaa7',
+                            fontSize: '0.85em',
+                            color: '#856404'
+                          }}>
+                            No Active/Online Partners Available
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td style={styles.td}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
@@ -1932,73 +2051,7 @@ const RestaurantMonitoring = () => {
                     </td>
                     <td style={styles.td}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '200px' }}>
-                        {order.assigningPartner ? (
-                          <div style={{ 
-                            padding: '8px 12px', 
-                            backgroundColor: '#fff3cd', 
-                            borderRadius: '6px',
-                            border: '1px solid #ffeaa7'
-                          }}>
-                            <div style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                              marginBottom: '8px'
-                            }}>
-                              <div style={{ 
-                                width: '16px', 
-                                height: '16px', 
-                                border: '2px solid #f39c12',
-                                borderTop: '2px solid transparent',
-                                borderRadius: '50%',
-                                animation: 'spin 1s linear infinite'
-                              }}></div>
-                              <span style={{ fontSize: '0.9em', color: '#856404', fontWeight: 'bold' }}>
-                                Assigning Partner...
-                              </span>
-                            </div>
-                            {activeDeliveryPartners.length > 0 && (
-                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                                <select
-                                  value={selectedPartners[order.id] || ''}
-                                  onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
-                                  style={{
-                                    flex: 1,
-                                    padding: '4px 6px',
-                                    border: '1px solid #ddd',
-                                    borderRadius: '4px',
-                                    fontSize: '0.8em',
-                                    backgroundColor: 'white'
-                                  }}
-                                  disabled={assigningOrders.has(order.id)}
-                                >
-                                  <option value="">Manual Assignment</option>
-                                  {activeDeliveryPartners.map(partner => (
-                                    <option key={partner.id} value={partner.id}>
-                                      {partner.displayName || partner.name}
-                                    </option>
-                                  ))}
-                                </select>
-                                <button
-                                  onClick={() => handleAssignPartner(order.id)}
-                                  disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
-                                  style={{
-                                    padding: '4px 8px',
-                                    backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    fontSize: '0.75em',
-                                    cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
-                                    whiteSpace: 'nowrap'
-                                  }}
-                                >
-                                  {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ) : order.assigningPartner && order.partnerAssigned ? (
+                        {order.partnerAssigned ? (
                           <div style={{ 
                             padding: '8px 12px', 
                             backgroundColor: '#e8f5e8', 
@@ -2052,26 +2105,7 @@ const RestaurantMonitoring = () => {
                               🚀 Dispatched
                             </div>
                           </div>
-                        ) : order.partnerAssigned ? (
-                          <div style={{ 
-                            padding: '8px 12px', 
-                            backgroundColor: '#e8f5e8', 
-                            borderRadius: '6px',
-                            border: '1px solid #c3e6c3'
-                          }}>
-                            <div style={{ fontWeight: 'bold', fontSize: '0.9em', color: '#2d5f2d' }}>
-                              {order.partnerAssigned.name || order.partnerAssigned.partnerName}
-                            </div>
-                            {(order.partnerAssigned.phone) && (
-                              <div style={{ fontSize: '0.8em', color: '#666' }}>
-                                📞 {order.partnerAssigned.phone}
-                              </div>
-                            )}
-                            <div style={{ fontSize: '0.75em', color: '#2d5f2d', marginTop: '4px' }}>
-                              ✅ Partner Assigned (Legacy)
-                            </div>
-                          </div>
-                        ) : order.assignmentError ? (
+                        ) : order.orderStatus === 'declined' ? (
                           <div style={{ 
                             padding: '8px 12px', 
                             backgroundColor: '#f8d7da', 
@@ -2079,53 +2113,15 @@ const RestaurantMonitoring = () => {
                             border: '1px solid #f5c6cb'
                           }}>
                             <div style={{ fontSize: '0.9em', color: '#721c24', fontWeight: 'bold' }}>
-                              Assignment Failed
+                              Order Declined
                             </div>
                             <div style={{ fontSize: '0.8em', color: '#721c24', marginTop: '2px' }}>
-                              {order.assignmentError}
+                              No further action required
                             </div>
-                            {activeDeliveryPartners.length > 0 && (
-                              <div style={{ marginTop: '8px', display: 'flex', gap: '6px', alignItems: 'center' }}>
-                                <select
-                                  value={selectedPartners[order.id] || ''}
-                                  onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
-                                  style={{
-                                    flex: 1,
-                                    padding: '4px 6px',
-                                    border: '1px solid #ddd',
-                                    borderRadius: '4px',
-                                    fontSize: '0.8em',
-                                    backgroundColor: 'white'
-                                  }}
-                                  disabled={assigningOrders.has(order.id)}
-                                >
-                                  <option value="">Manual Assignment</option>
-                                  {activeDeliveryPartners.map(partner => (
-                                    <option key={partner.id} value={partner.id}>
-                                      {partner.displayName || partner.name}
-                                    </option>
-                                  ))}
-                                </select>
-                                <button
-                                  onClick={() => handleAssignPartner(order.id)}
-                                  disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
-                                  style={{
-                                    padding: '4px 8px',
-                                    backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    fontSize: '0.75em',
-                                    cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
-                                    whiteSpace: 'nowrap'
-                                  }}
-                                >
-                                  {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
-                                </button>
-                              </div>
-                            )}
                           </div>
-                        ) : (order.assigningPartner || order.orderStatus === 'prepared') ? (
+                        ) : activeDeliveryPartners.filter(partner => 
+                            partner.isActive === true && partner.isOnline === true
+                          ).length > 0 ? (
                           <div>
                             <div style={{ 
                               padding: '8px 12px', 
@@ -2135,93 +2131,22 @@ const RestaurantMonitoring = () => {
                               marginBottom: '8px'
                             }}>
                               <div style={{ fontSize: '0.9em', color: '#0c5460', fontWeight: 'bold' }}>
-                                ⏳ Awaiting Auto-Assignment
+                                ⏳ Awaiting Partner Response
                               </div>
                               <div style={{ fontSize: '0.8em', color: '#0c5460', marginTop: '2px' }}>
-                                Partner will be assigned automatically
+                                FCM notifications sent to all active partners
                               </div>
                             </div>
-                            {/* Manual assignment interface alongside auto-assignment */}
-                            {activeDeliveryPartners.length > 0 && (
-                              <div>
-                                <div style={{ 
-                                  padding: '4px 8px', 
-                                  backgroundColor: '#f8f9fa', 
-                                  borderRadius: '4px',
-                                  border: '1px solid #dee2e6',
-                                  marginBottom: '6px',
-                                  fontSize: '0.8em',
-                                  color: '#6c757d'
-                                }}>
-                                  Or assign manually:
-                                </div>
-                                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                                  <select
-                                    value={selectedPartners[order.id] || ''}
-                                    onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
-                                    style={{
-                                      flex: 1,
-                                      padding: '6px 8px',
-                                      border: '1px solid #ddd',
-                                      borderRadius: '4px',
-                                      fontSize: '0.85em',
-                                      backgroundColor: 'white'
-                                    }}
-                                    disabled={assigningOrders.has(order.id)}
-                                  >
-                                    <option value="">Select Partner</option>
-                                    {activeDeliveryPartners.map(partner => (
-                                      <option key={partner.id} value={partner.id}>
-                                        {partner.displayName || partner.name} - {partner.phone || 'No phone'}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <button
-                                    onClick={() => handleAssignPartner(order.id)}
-                                    disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
-                                    style={{
-                                      padding: '6px 12px',
-                                      backgroundColor: assigningOrders.has(order.id) ? '#ccc' : '#f39c12',
-                                      color: 'white',
-                                      border: 'none',
-                                      borderRadius: '4px',
-                                      fontSize: '0.75em',
-                                      cursor: assigningOrders.has(order.id) ? 'not-allowed' : 'pointer',
-                                      whiteSpace: 'nowrap'
-                                    }}
-                                  >
-                                    {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ) : order.orderStatus === 'prepared' ? (
-                          <div style={{ 
-                            padding: '8px 12px', 
-                            backgroundColor: '#d1ecf1', 
-                            borderRadius: '6px',
-                            border: '1px solid #bee5eb'
-                          }}>
-                            <div style={{ fontSize: '0.9em', color: '#0c5460', fontWeight: 'bold' }}>
-                              ⏳ Awaiting Auto-Assignment
-                            </div>
-                            <div style={{ fontSize: '0.8em', color: '#0c5460', marginTop: '2px' }}>
-                              Partner will be assigned automatically
-                            </div>
-                          </div>
-                        ) : activeDeliveryPartners.length > 0 ? (
-                          <div>
                             <div style={{ 
-                              padding: '6px 10px', 
+                              padding: '4px 8px', 
                               backgroundColor: '#f8f9fa', 
                               borderRadius: '4px',
                               border: '1px solid #dee2e6',
-                              marginBottom: '8px'
+                              marginBottom: '6px',
+                              fontSize: '0.8em',
+                              color: '#6c757d'
                             }}>
-                              <span style={{ fontSize: '0.9em', color: '#6c757d' }}>
-                                Not Assigned
-                              </span>
+                              Or assign manually:
                             </div>
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                               <select
@@ -2238,11 +2163,13 @@ const RestaurantMonitoring = () => {
                                 disabled={assigningOrders.has(order.id)}
                               >
                                 <option value="">Select Partner</option>
-                                {activeDeliveryPartners.map(partner => (
-                                  <option key={partner.id} value={partner.id}>
-                                    {partner.displayName || partner.name} - {partner.phone || 'No phone'}
-                                  </option>
-                                ))}
+                                {activeDeliveryPartners
+                                  .filter(partner => partner.isActive === true && partner.isOnline === true)
+                                  .map(partner => (
+                                    <option key={partner.id} value={partner.id}>
+                                      {partner.displayName || partner.name} - {partner.phone || 'No phone'}
+                                    </option>
+                                  ))}
                               </select>
                               <button
                                 onClick={() => handleAssignPartner(order.id)}
@@ -2271,7 +2198,7 @@ const RestaurantMonitoring = () => {
                             fontSize: '0.85em',
                             color: '#856404'
                           }}>
-                            No Active Partners Available
+                            No Active/Online Partners Available
                           </div>
                         )}
                       </div>
@@ -2346,25 +2273,6 @@ const RestaurantMonitoring = () => {
                               }}
                             >
                               <FaTimes /> Decline
-                            </button>
-                          </>
-                        ) : order.orderStatus === 'prepared' ? (
-                          <>
-                            <button
-                              onClick={() => handleDispatchOrder(order.id)}
-                              style={{
-                                ...styles.button,
-                                backgroundColor: '#9b59b6',
-                                color: 'white',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '5px',
-                                fontSize: '12px',
-                                padding: '6px 12px'
-                              }}
-                            >
-                              🚚 Dispatch
                             </button>
                           </>
                         ) : null}
@@ -2896,7 +2804,7 @@ const RestaurantMonitoring = () => {
                         <tr key={`menu-item-${index}`}>
                           <td style={styles.tableCell}>
                             <img
-                              src={item.image || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+CiAgPHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlZWVlZWUiLz4KICA8dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBhbGlnbm1lbnQtYmFzZWxpbmU9Im1pZGRsZSIgZmlsbD0iIzk5OSI+Tm8gSW1hZ2U8L3RleHQ+Cjwvc3ZnPg=='}
+                              src={item.image || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+CiAgPHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlZWVlZWUiLz4KICA8dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBhbGlnbm1lbnQtYmFzZWxpbmU9Im1pZGRsZSIgZmlsbD0iIzk5OSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+'}
                               alt={item.name || 'Menu item'}
                               style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px' }}
                               onError={(e) => {

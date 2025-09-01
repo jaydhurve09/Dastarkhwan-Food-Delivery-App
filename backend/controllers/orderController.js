@@ -893,6 +893,7 @@ export const assignDeliveryPartnerToOrder = async (req, res) => {
       assigningPartner: false, // Set to false when partner is successfully assigned
       partnerAssigned: partnerAssignment,
       deliveryPartnerId: deliveryPartnerRef, // Document reference instead of string
+  delivery_partner_uid: partnerId, // Legacy string field for backward compatibility
       deliveryBoyName: partnerAssignment.partnerName,
       driverPositions: partnerDriverPositions, // Copy driver positions from delivery partner
       // orderStatus remains unchanged - no longer setting to 'partnerAssigned'

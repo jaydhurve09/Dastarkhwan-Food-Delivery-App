@@ -153,7 +153,7 @@ const Modal = ({ children, isOpen, onClose }) => {
   );
 };
 
-const DEFAULT_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlZWVlZWUiLz48dGV4dCB4PSI1MCIgeT0iNTAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzk5OSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+';
+const DEFAULT_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlZWVlZWUiLz48dGV4dCB4PSI1MCIgeT0iNTAiIGZvcnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzk5OSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+';
 
 const RestaurantMonitoring = () => {
   const { deliveryPartners, orders, users, fetchOrders, activeDeliveryPartners, fetchActiveDeliveryPartners } = useContext(AdminContext);
@@ -514,7 +514,7 @@ const RestaurantMonitoring = () => {
 
     console.log('🎯 Manual assignment initiated:');
     console.log(`  Order ID: ${orderId}`);
-    console.log(`  Selected Partner: ${selectedPartner.displayName || selectedPartner.name} (ID: ${partnerId})`);
+    console.log(`  Selected Partner: ${selectedPartner.display_name || selectedPartner.name} (ID: ${partnerId})`);
     console.log(`  Partner Status - Active: ${selectedPartner.isActive}, Online: ${selectedPartner.isOnline}`);
 
     try {
@@ -522,7 +522,7 @@ const RestaurantMonitoring = () => {
 
       const response = await api.patch(`/orders/${orderId}/assign-partner`, {
         partnerId: partnerId,
-        partnerName: selectedPartner.displayName || selectedPartner.name,
+        partnerName: selectedPartner.display_name || selectedPartner.name,
         phone: selectedPartner.phone
       });
 
@@ -536,8 +536,8 @@ const RestaurantMonitoring = () => {
               ...order,
               partnerAssigned: {
                 partnerId: partnerId,
-                partnerName: selectedPartner.displayName || selectedPartner.name,
-                name: selectedPartner.displayName || selectedPartner.name,
+                partnerName: selectedPartner.display_name || selectedPartner.name,
+                name: selectedPartner.display_name || selectedPartner.name,
                 phone: selectedPartner.phone
               },
               driverPositions: selectedPartner.driverPositions || { lat: null, lng: null },
@@ -550,7 +550,7 @@ const RestaurantMonitoring = () => {
         // Call the single partner notification endpoint (only notify the assigned partner)
         try {
           console.log('📱 Sending single partner assignment notification...');
-          console.log(`  Target Partner: ${selectedPartner.displayName || selectedPartner.name} (ID: ${partnerId})`);
+          console.log(`  Target Partner: ${selectedPartner.display_name || selectedPartner.name} (ID: ${partnerId})`);
           
           // Find the order to get details for notification
           const currentOrder = ongoingOrders.find(order => order.id === orderId) || 
@@ -559,18 +559,18 @@ const RestaurantMonitoring = () => {
           const testResponse = await api.post('/test/test-single-partner-notification', {
             orderId: orderId,
             deliveryPartnerId: partnerId,
-            partnerName: selectedPartner.displayName || selectedPartner.name,
+            partnerName: selectedPartner.display_name || selectedPartner.name,
             restaurantName: currentOrder?.restaurantName || 'Restaurant',
             customerAddress: currentOrder?.customerAddress || currentOrder?.deliveryAddress?.address || currentOrder?.address || 'Customer Address'
           });
           
           console.log('✅ Single partner assignment notification response:', testResponse.data);
-          console.log(`📧 Notification sent to: ${selectedPartner.displayName || selectedPartner.name}`);
-          toast.success(`${selectedPartner.displayName || selectedPartner.name} assigned and notified!`);
+          console.log(`📧 Notification sent to: ${selectedPartner.display_name || selectedPartner.name}`);
+          toast.success(`${selectedPartner.display_name || selectedPartner.name} assigned and notified!`);
         } catch (notificationError) {
           console.error('❌ Error sending single partner assignment notification:', notificationError);
-          console.log(`❌ Failed to notify: ${selectedPartner.displayName || selectedPartner.name}`);
-          toast.warn(`${selectedPartner.displayName || selectedPartner.name} assigned but notification failed`);
+          console.log(`❌ Failed to notify: ${selectedPartner.display_name || selectedPartner.name}`);
+          toast.warn(`${selectedPartner.display_name || selectedPartner.name} assigned but notification failed`);
         }
 
         // Refresh both sections to show updated status
@@ -1623,7 +1623,7 @@ const RestaurantMonitoring = () => {
                               .filter(partner => partner.isActive === true && partner.isOnline === true)
                               .map(partner => (
                                 <option key={partner.id} value={partner.id}>
-                                  {partner.displayName || partner.name} {partner.isOnline ? '🟢' : '🔴'}
+                                  {partner.display_name || partner.name} {partner.isOnline ? '🟢' : '🔴'}
                                 </option>
                               ))}
                           </select>
@@ -1775,7 +1775,7 @@ const RestaurantMonitoring = () => {
                                   .filter(partner => partner.isActive === true && partner.isOnline === true)
                                   .map(partner => (
                                     <option key={partner.id} value={partner.id}>
-                                      {partner.displayName || partner.name} - {partner.phone || 'No phone'}
+                                      {partner.display_name || partner.name} - {partner.phone || 'No phone'}
                                     </option>
                                   ))}
                               </select>
@@ -2167,7 +2167,7 @@ const RestaurantMonitoring = () => {
                                   .filter(partner => partner.isActive === true && partner.isOnline === true)
                                   .map(partner => (
                                     <option key={partner.id} value={partner.id}>
-                                      {partner.displayName || partner.name} - {partner.phone || 'No phone'}
+                                      {partner.display_name || partner.name} - {partner.phone || 'No phone'}
                                     </option>
                                   ))}
                               </select>

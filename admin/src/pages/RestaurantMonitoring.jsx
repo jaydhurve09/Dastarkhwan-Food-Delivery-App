@@ -1476,9 +1476,7 @@ const RestaurantMonitoring = () => {
                               );
                             })}
                           </p>
-                          {order.orderValue ? (
-                            <p className="text-gray-600">Total: ₹{order.orderValue}</p>
-                          ) : null}
+                         
                         </div>
                       ) : (
                         <div>

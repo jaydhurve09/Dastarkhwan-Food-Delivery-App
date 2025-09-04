@@ -64,12 +64,7 @@ function isArrived(loc, dest) {
 // ---- Card Data ----
 
 // ---- Status and Rating Data ----
-const orderStatusData = [
-  { name: "Delivered", value: 850 },
-  { name: "Pending", value: 260 },
-  { name: "Cancelled", value: 133 },
-];
-const orderStatusColors = ["#22c55e", "#fbbf24", "#ef4444"];
+const orderStatusColors = ["#22c55e", "#fbbf24", "#ef4444", "#0ea5e9", "#f59e42", "#a855f7", "#ec4899"];
 const ratingsData = [
   { name: "5 Stars", value: 320 }, { name: "4 Stars", value: 95 },
   { name: "3 Stars", value: 21 }, { name: "2 Stars", value: 7 }, { name: "1 Star", value: 3 },
@@ -124,26 +119,256 @@ function formatDate(date) {
 
 export default function Dashboard() {
   const { orders, deliveryPartners, users } = useContext(AdminContext);
-  const kpis = [
-  { label: "Total Orders", value: orders.length, icon: <FaShoppingCart size={28} color="#22c55e" />, bg: "#e7f9f2" },
-  { label: "This Month Sales", value: "₹8,700", icon: <FaRupeeSign size={24} color="#38bdf8" />, bg: "#e0f2fe" },
-  { label: "Today Sales", value: "₹1,360", icon: <FaRupeeSign size={24} color="#818cf8" />, bg: "#e0e7ff" },
-  { label: "Total Users", value: users.length, icon: <FaUsers size={28} color="#f59e42" />, bg: "#fff3e6", id: 'totalUsers' },
-  { label: "Total Delivery Partners", value: deliveryPartners.length, icon: <FaMotorcycle size={28} color="#a855f7" />, bg: "#f4e7fa", id: 'totalDeliveryPartners' },
-  { label: "Ongoing Orders", value: 37, icon: <FaBoxOpen size={27} color="#0ea5e9" />, bg: "#e0f2fe" },
-  { label: "Avg Restaurant Rating", value: "4.3", icon: <FaStar size={26} color="#fde047" />, bg: "#fffbe8" },
-  { label: "Avg Delivery Rating", value: "4.6", icon: <FaStar size={26} color="#f59e42" />, bg: "#fff7ed" },
-];
-
-  // Search
+  
+  // State hooks
   const [search, setSearch] = useState("");
- 
+  
+  // State for monthly sales calculation
+  const [monthlyStats, setMonthlyStats] = useState({
+    thisMonthSales: 0,
+    todaySales: 0,
+    ongoingOrders: 0,
+    loading: true
+  });
+
+  // State for order status distribution
+  const [orderStatusData, setOrderStatusData] = useState([
+    { name: "Delivered", value: 0 },
+    { name: "Pending", value: 0 },
+    { name: "Cancelled", value: 0 },
+    { name: "Dispatched", value: 0 },
+    { name: "Preparing", value: 0 },
+    { name: "Prepared", value: 0 },
+    { name: "Yet to be Accepted", value: 0 }
+  ]);
+
+  // State for top dishes data
+  const [topDishesLiveData, setTopDishesLiveData] = useState({
+    Today: [],
+    "This Month": [],
+    "Last 3 Months": []
+  });
+
+  // State for live sales data
+  const [liveSalesData, setLiveSalesData] = useState({
+    monthly: [],
+    daily: []
+  });
+  
   // State for user counts
   const [userCounts, setUserCounts] = useState({
     totalUsers: 0,
     totalDeliveryPartners: 0,
     loading: true
   });
+  
+  // KPI definitions
+  const kpis = [
+    { label: "Total Orders", value: orders.length, icon: <FaShoppingCart size={28} color="#22c55e" />, bg: "#e7f9f2" },
+    { label: "This Month Sales", value: monthlyStats.loading ? "..." : `₹${monthlyStats.thisMonthSales.toLocaleString('en-IN')}`, icon: <FaRupeeSign size={24} color="#38bdf8" />, bg: "#e0f2fe" },
+    { label: "Today Sales", value: monthlyStats.loading ? "..." : `₹${monthlyStats.todaySales.toLocaleString('en-IN')}`, icon: <FaRupeeSign size={24} color="#818cf8" />, bg: "#e0e7ff" },
+    { label: "Total Users", value: users.length, icon: <FaUsers size={28} color="#f59e42" />, bg: "#fff3e6", id: 'totalUsers' },
+    { label: "Total Delivery Partners", value: deliveryPartners.length, icon: <FaMotorcycle size={28} color="#a855f7" />, bg: "#f4e7fa", id: 'totalDeliveryPartners' },
+    { label: "Ongoing Orders", value: monthlyStats.loading ? "..." : monthlyStats.ongoingOrders, icon: <FaBoxOpen size={27} color="#0ea5e9" />, bg: "#e0f2fe" },
+    
+  ];
+
+  // Function to calculate this month's and today's sales and ongoing orders
+  const calculateStats = () => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    const today = now.toDateString();
+    
+    let thisMonthTotal = 0;
+    let todayTotal = 0;
+    let ongoingCount = 0;
+    
+    // Initialize status counts
+    const statusCounts = {
+      delivered: 0,
+      pending: 0,
+      cancelled: 0,
+      dispatched: 0,
+      preparing: 0,
+      prepared: 0,
+      yetToBeAccepted: 0
+    };
+    
+    // Define ongoing order statuses
+    const ongoingStatuses = ['yetToBeAccepted', 'preparing', 'prepared', 'dispatched'];
+    
+    orders.forEach(order => {
+      // Calculate ongoing orders (check both status and orderStatus fields)
+      const orderStatus = order.status || order.orderStatus;
+      if (orderStatus && ongoingStatuses.includes(orderStatus)) {
+        ongoingCount++;
+      }
+      
+      // Count order statuses
+      if (orderStatus) {
+        switch (orderStatus.toLowerCase()) {
+          case 'delivered':
+            statusCounts.delivered++;
+            break;
+          case 'pending':
+            statusCounts.pending++;
+            break;
+          case 'cancelled':
+            statusCounts.cancelled++;
+            break;
+          case 'dispatched':
+            statusCounts.dispatched++;
+            break;
+          case 'preparing':
+            statusCounts.preparing++;
+            break;
+          case 'prepared':
+            statusCounts.prepared++;
+            break;
+          case 'yettobeaccepted':
+          case 'yet to be accepted':
+          case 'yetToBeAccepted':
+            statusCounts.yetToBeAccepted++;
+            break;
+        }
+      }
+      
+      // Calculate sales if order has value and date
+      if (order.orderValue && order.createdAt) {
+        const orderDate = new Date(order.createdAt);
+        
+        // Check if order is from this month
+        if (orderDate.getMonth() === currentMonth && orderDate.getFullYear() === currentYear) {
+          thisMonthTotal += parseFloat(order.orderValue) || 0;
+        }
+        
+        // Check if order is from today
+        if (orderDate.toDateString() === today) {
+          todayTotal += parseFloat(order.orderValue) || 0;
+        }
+      }
+    });
+    
+    // Calculate top dishes
+    const dishCounts = {
+      today: {},
+      thisMonth: {},
+      last3Months: {}
+    };
+    
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    
+    orders.forEach(order => {
+      if (order.items && Array.isArray(order.items) && order.createdAt) {
+        const orderDate = new Date(order.createdAt);
+        
+        order.items.forEach(item => {
+          const dishName = item.name || item.dishName || item.itemName;
+          const quantity = parseInt(item.quantity) || 1;
+          
+          if (dishName) {
+            // Today's dishes
+            if (orderDate.toDateString() === today) {
+              dishCounts.today[dishName] = (dishCounts.today[dishName] || 0) + quantity;
+            }
+            
+            // This month's dishes
+            if (orderDate.getMonth() === currentMonth && orderDate.getFullYear() === currentYear) {
+              dishCounts.thisMonth[dishName] = (dishCounts.thisMonth[dishName] || 0) + quantity;
+            }
+            
+            // Last 3 months dishes
+            if (orderDate >= threeMonthsAgo) {
+              dishCounts.last3Months[dishName] = (dishCounts.last3Months[dishName] || 0) + quantity;
+            }
+          }
+        });
+      }
+    });
+    
+    // Convert to sorted arrays and get top 5
+    const getTopDishes = (dishObj) => {
+      return Object.entries(dishObj)
+        .map(([name, orders]) => ({ name, orders }))
+        .sort((a, b) => b.orders - a.orders)
+        .slice(0, 5);
+    };
+    
+    setTopDishesLiveData({
+      Today: getTopDishes(dishCounts.today),
+      "This Month": getTopDishes(dishCounts.thisMonth),
+      "Last 3 Months": getTopDishes(dishCounts.last3Months)
+    });
+    
+    // Calculate sales data for charts
+    const monthlySales = {};
+    const dailySales = {};
+    const last15Days = [];
+    for (let i = 14; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      last15Days.push(date);
+    }
+    
+    orders.forEach(order => {
+      if (order.orderValue && order.createdAt) {
+        const orderDate = new Date(order.createdAt);
+        const orderValue = parseFloat(order.orderValue) || 0;
+        
+        // Monthly sales (current year)
+        if (orderDate.getFullYear() === currentYear) {
+          const monthKey = orderDate.toLocaleDateString('en-US', { month: 'short' });
+          monthlySales[monthKey] = (monthlySales[monthKey] || 0) + orderValue;
+        }
+        
+        // Daily sales (last 15 days)
+        const orderDateStr = orderDate.toDateString();
+        last15Days.forEach(day => {
+          if (day.toDateString() === orderDateStr) {
+            const dayKey = day.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+            dailySales[dayKey] = (dailySales[dayKey] || 0) + orderValue;
+          }
+        });
+      }
+    });
+    
+    // Convert to chart format
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthlyChartData = monthNames.map(month => ({
+      month,
+      sales: monthlySales[month] || 0
+    }));
+    
+    const dailyChartData = last15Days.map(day => ({
+      date: day.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+      sales: dailySales[day.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })] || 0
+    }));
+    
+    setLiveSalesData({
+      monthly: monthlyChartData,
+      daily: dailyChartData
+    });
+    
+    // Update order status data
+    setOrderStatusData([
+      { name: "Delivered", value: statusCounts.delivered },
+      { name: "Pending", value: statusCounts.pending },
+      { name: "Cancelled", value: statusCounts.cancelled },
+      { name: "Dispatched", value: statusCounts.dispatched },
+      { name: "Preparing", value: statusCounts.preparing },
+      { name: "Prepared", value: statusCounts.prepared },
+      { name: "Yet to be Accepted", value: statusCounts.yetToBeAccepted }
+    ].filter(item => item.value > 0)); // Only show statuses with orders
+    
+    setMonthlyStats({
+      thisMonthSales: thisMonthTotal,
+      todaySales: todayTotal,
+      ongoingOrders: ongoingCount,
+      loading: false
+    });
+  };
 
   // Fetch user counts on component mount
   useEffect(() => {
@@ -176,6 +401,13 @@ export default function Dashboard() {
     fetchUserCounts();
   }, []);
 
+  // Calculate stats whenever orders change
+  useEffect(() => {
+    if (orders && orders.length >= 0) {
+      calculateStats();
+    }
+  }, [orders]);
+
   // Update KPIs with real data
   const updatedKpis = kpis.map(kpi => {
     if (kpi.id === 'totalUsers') {
@@ -189,24 +421,26 @@ export default function Dashboard() {
 
   // Dishes
   const [dishRange, setDishRange] = useState("Today");
-  const filteredDishes = topDishesData[dishRange].filter(d =>
+  const currentTopDishes = topDishesLiveData[dishRange] || [];
+  const filteredDishes = currentTopDishes.filter(d =>
     d.name.toLowerCase().includes(search.toLowerCase())
   );
 
   // Sales time range toggles
   const [salesMode, setSalesMode] = useState("Monthly");
-  const [dailyRange, setDailyRange] = useState([0, salesDataDaily.length - 1]); // default: all 15 days
-  const dailyData = salesDataDaily.slice(dailyRange[0], dailyRange[1] + 1);
+  const [dailyRange, setDailyRange] = useState([0, (liveSalesData.daily.length || 15) - 1]);
+  const dailyData = liveSalesData.daily.slice(dailyRange[0], dailyRange[1] + 1);
+  const monthlyData = liveSalesData.monthly;
 
   // For date picker: disable selection not matching daily data
-  const dailyDates = salesDataDaily.map((d, i) => ({
-    ...d,
-    dateObj: new Date(`2024-07-${8 + i}`) // Just for demo
-  }));
-
-  // For Monthly, use full year
-  const [monthlyRange, setMonthlyRange] = useState([0, salesDataMonthly.length - 1]);
-  const monthlyData = salesDataMonthly.slice(monthlyRange[0], monthlyRange[1] + 1);
+  const dailyDates = liveSalesData.daily.map((d, i) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (liveSalesData.daily.length - 1 - i));
+    return {
+      ...d,
+      dateObj: date
+    };
+  });
 
   return (
     <div style={{ padding: "0 10px" }}>
@@ -409,6 +643,14 @@ export default function Dashboard() {
               No dishes found.
             </div>
           )}
+          {!search && currentTopDishes.length === 0 && (
+            <div style={{
+              textAlign: "center", color: "#94a3b8", marginTop: 10, fontWeight: 500,
+              fontSize: 15
+            }}>
+              No orders found for {dishRange.toLowerCase()}.
+            </div>
+          )}
         </motion.div>
       </div>
 
@@ -466,29 +708,33 @@ export default function Dashboard() {
             {/* Range slider for daily date selection */}
             <div style={{ display: "flex", gap: 12, alignItems: "center", margin: "10px 0" }}>
               <span style={{ fontSize: 13, color: "#666" }}>From</span>
-              <DatePicker
-                selected={dailyDates[dailyRange[0]].dateObj}
-                onChange={date => {
-                  const idx = dailyDates.findIndex(d => d.dateObj.getDate() === date.getDate());
-                  if (idx !== -1 && idx <= dailyRange[1]) setDailyRange([idx, dailyRange[1]]);
-                }}
-                includeDates={dailyDates.map(d => d.dateObj)}
-                dateFormat="dd MMM"
-                placeholderText="Start"
-                style={{ minWidth: 120 }}
-              />
+              {dailyDates.length > 0 && (
+                <DatePicker
+                  selected={dailyDates[dailyRange[0]]?.dateObj}
+                  onChange={date => {
+                    const idx = dailyDates.findIndex(d => d.dateObj.getDate() === date.getDate());
+                    if (idx !== -1 && idx <= dailyRange[1]) setDailyRange([idx, dailyRange[1]]);
+                  }}
+                  includeDates={dailyDates.map(d => d.dateObj)}
+                  dateFormat="dd MMM"
+                  placeholderText="Start"
+                  style={{ minWidth: 120 }}
+                />
+              )}
               <span style={{ fontSize: 13, color: "#666" }}>To</span>
-              <DatePicker
-                selected={dailyDates[dailyRange[1]].dateObj}
-                onChange={date => {
-                  const idx = dailyDates.findIndex(d => d.dateObj.getDate() === date.getDate());
-                  if (idx !== -1 && idx >= dailyRange[0]) setDailyRange([dailyRange[0], idx]);
-                }}
-                includeDates={dailyDates.map(d => d.dateObj)}
-                dateFormat="dd MMM"
-                placeholderText="End"
-                style={{ minWidth: 120 }}
-              />
+              {dailyDates.length > 0 && (
+                <DatePicker
+                  selected={dailyDates[dailyRange[1]]?.dateObj}
+                  onChange={date => {
+                    const idx = dailyDates.findIndex(d => d.dateObj.getDate() === date.getDate());
+                    if (idx !== -1 && idx >= dailyRange[0]) setDailyRange([dailyRange[0], idx]);
+                  }}
+                  includeDates={dailyDates.map(d => d.dateObj)}
+                  dateFormat="dd MMM"
+                  placeholderText="End"
+                  style={{ minWidth: 120 }}
+                />
+              )}
             </div>
             <div style={{ width: "100%", height: 220 }}>
               <ResponsiveContainer width="100%" height="100%">

@@ -1002,7 +1002,7 @@ const assignDeliveryPartner = async (req, res) => {
       data: {
         orderId,
         deliveryPartnerRef: partnerId,
-        orderStatus: 'partnerAssigned'
+       
       }
     });
 

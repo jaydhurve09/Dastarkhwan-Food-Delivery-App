@@ -992,7 +992,7 @@ const assignDeliveryPartner = async (req, res) => {
       },
       deliveryBoyName: partnerData.displayName || partnerData.name || 'Unknown',
       driverPositions: partnerDriverPositions, // Copy driver positions from delivery partner
-      orderStatus: 'partnerAssigned',
+
       updatedAt: new Date()
     });
 

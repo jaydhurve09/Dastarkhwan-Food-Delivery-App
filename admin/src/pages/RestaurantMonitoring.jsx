@@ -1246,51 +1246,89 @@ const RestaurantMonitoring = () => {
   const [menuItemNameCache, setMenuItemNameCache] = useState({});
 
   const extractMenuItemId = (ref) => {
+    console.log('🔍 Extracting menu item ID from:', ref);
     if (!ref) return null;
+    
+    // Handle Firestore DocumentReference object with _path property
+    if (ref && ref._path && ref._path.segments) {
+      const segments = ref._path.segments;
+      const id = segments[segments.length - 1];
+      console.log('📝 Extracted ID from _path.segments:', id);
+      return id;
+    }
+    
+    // Handle different reference formats
     if (typeof ref === 'string') {
+      // Handle Firestore document reference path like "menuItems/abc123" or "/menuItems/abc123"
       const parts = ref.split('/');
-      return parts[parts.length - 1] || null;
+      const id = parts[parts.length - 1];
+      console.log('📝 Extracted ID from string:', id);
+      return id; // Get the last part (document ID)
     }
-    if (ref._path?.segments) {
-      const seg = ref._path.segments;
-      return seg[seg.length - 1] || null;
+    
+    // Handle Firestore DocumentReference object
+    if (ref && ref.id) {
+      console.log('📝 Extracted ID from object.id:', ref.id);
+      return ref.id;
     }
-    if (ref.path && typeof ref.path === 'string') {
+    
+    // Handle path property
+    if (ref && ref.path && typeof ref.path === 'string') {
       const parts = ref.path.split('/');
-      return parts[parts.length - 1] || null;
+      const id = parts[parts.length - 1];
+      console.log('📝 Extracted ID from object.path:', id);
+      return id;
     }
-    if (ref.id) return ref.id;
+    
+    console.log('❌ Could not extract ID from:', ref);
     return null;
   };
 
   const getMenuItemName = async (id) => {
+    console.log('🍽️ Fetching menu item name for ID:', id);
     if (!id) return null;
-    if (menuItemNameCache[id]) return menuItemNameCache[id];
+    if (menuItemNameCache[id]) {
+      console.log('✅ Found in cache:', menuItemNameCache[id]);
+      return menuItemNameCache[id];
+    }
     try {
+      console.log('🌐 Making API call to:', `${API_BASE_URL}/menu-items/${id}`);
       const res = await axios.get(`${API_BASE_URL}/menu-items/${id}`);
+      console.log('📡 API response:', res.data);
       const name = res.data?.name || res.data?.data?.name;
       if (name) {
+        console.log('✅ Menu item name found:', name);
         setMenuItemNameCache((prev) => ({ ...prev, [id]: name }));
+      } else {
+        console.log('❌ No name found in response');
       }
       return name || null;
     } catch (e) {
-      console.warn('Failed to resolve menu item name for', id, e?.message);
+      console.error(`❌ Error fetching menu item ${id}:`, e);
+      console.error('Error details:', e.response?.data);
       return null;
     }
   };
 
   useEffect(() => {
     const resolveProductNames = async () => {
+      console.log('🔄 Resolving product names for incoming orders:', incomingOrders);
       const idsToFetch = new Set();
       (incomingOrders || []).forEach((order) => {
+        console.log('📦 Processing order:', order.orderId || order.id);
         const products = order?.products || [];
+        console.log('🛍️ Order products:', products);
         products.forEach((p) => {
           const id = extractMenuItemId(
-            p?.menuItem || p?.menuItemRef || p?.itemRef || p?.itemId || p?.menuItemId || p?.productId
+            p?.productRef || p?.menuItem || p?.menuItemRef || p?.itemRef || p?.itemId || p?.menuItemId || p?.productId
           );
-          if (id && !menuItemNameCache[id]) idsToFetch.add(id);
+          if (id && !menuItemNameCache[id]) {
+            console.log('➕ Adding ID to fetch:', id);
+            idsToFetch.add(id);
+          }
         });
       });
+      console.log('📋 IDs to fetch:', [...idsToFetch]);
       if (idsToFetch.size > 0) {
         await Promise.all([...idsToFetch].map((id) => getMenuItemName(id)));
       }
@@ -1306,7 +1344,7 @@ const RestaurantMonitoring = () => {
         const products = order?.products || [];
         products.forEach((p) => {
           const id = extractMenuItemId(
-            p?.menuItem || p?.menuItemRef || p?.itemRef || p?.itemId || p?.menuItemId || p?.productId
+            p?.productRef || p?.menuItem || p?.menuItemRef || p?.itemRef || p?.itemId || p?.menuItemId || p?.productId
           );
           if (id && !menuItemNameCache[id]) idsToFetch.add(id);
         });
@@ -1464,7 +1502,7 @@ const RestaurantMonitoring = () => {
                           <p className="font-medium">
                             {order.products.map((p, idx) => {
                               const id = extractMenuItemId(
-                                p?.menuItem || p?.menuItemRef || p?.itemRef || p?.itemId || p?.menuItemId || p?.productId
+                                p?.productRef || p?.menuItem || p?.menuItemRef || p?.itemRef || p?.itemId || p?.menuItemId || p?.productId
                               );
                               const name = p?.name || p?.itemName || p?.menuItemName || p?.item?.name || p?.product?.name || (id ? menuItemNameCache[id] : null) || 'Item';
                               const qty = p?.quantity || p?.qty || 1;
@@ -2006,7 +2044,7 @@ const RestaurantMonitoring = () => {
                           <p className="font-medium">
                             {order.products.map((p, idx) => {
                               const id = extractMenuItemId(
-                                p?.menuItem || p?.menuItemRef || p?.itemRef || p?.itemId || p?.menuItemId || p?.productId
+                                p?.productRef || p?.menuItem || p?.menuItemRef || p?.itemRef || p?.itemId || p?.menuItemId || p?.productId
                               );
                               const name = p?.name || p?.itemName || p?.menuItemName || p?.item?.name || p?.product?.name || (id ? menuItemNameCache[id] : null) || 'Item';
                               const qty = p?.quantity || p?.qty || 1;

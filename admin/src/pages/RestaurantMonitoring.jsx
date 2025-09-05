@@ -1049,32 +1049,39 @@ const RestaurantMonitoring = () => {
         )
         : [];
   
-      const categoryData = {
-        name: newCategory.name,
-        isActive: newCategory.isActive,
-        hasSubcategories: newCategory.hasSubcategories,
-        subCategories: formattedSubCategories,
-      };
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append('name', newCategory.name);
+      formData.append('isActive', newCategory.isActive);
+      formData.append('hasSubcategories', newCategory.hasSubcategories);
+      formData.append('subCategories', JSON.stringify(formattedSubCategories));
+      
+      // Add image file if selected
+      if (newCategory.imageFile) {
+        formData.append('image', newCategory.imageFile);
+      }
   
       const response = await axios.post(
         `${API_BASE_URL}/menu-categories`,
-        categoryData,
+        formData,
         {
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': 'multipart/form-data',
             'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
           }
         }
       );
   
-      setCategories([...categories, response.data]);
+      setCategories([...categories, response.data.data]);
       setSuccess('Category added successfully!');
       setCategoryModalOpen(false);
       setNewCategory({
         name: '',
         isActive: true,
         hasSubcategories: false,
-        subCategories: []
+        subCategories: [],
+        imageFile: null,
+        imagePreview: null
       });
       toast.success('Category added successfully!');
     } catch (error) {
@@ -1103,24 +1110,31 @@ const RestaurantMonitoring = () => {
         )
         : [];
 
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append('name', newCategory.name);
+      formData.append('isActive', newCategory.isActive);
+      formData.append('hasSubcategories', newCategory.hasSubcategories);
+      formData.append('subCategories', JSON.stringify(formattedSubCategories));
+      
+      // Add image file if selected
+      if (newCategory.imageFile) {
+        formData.append('image', newCategory.imageFile);
+      }
+
       const response = await axios.put(
         `${API_BASE_URL}/menu-categories/${editingCategory.id}`,
-        {
-          name: newCategory.name,
-          isActive: newCategory.isActive,
-          hasSubcategories: newCategory.hasSubcategories,
-          subCategories: formattedSubCategories,
-        },
+        formData,
         {
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': 'multipart/form-data',
             'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
           }
         }
       );
 
       setCategories(categories.map(cat =>
-        cat.id === editingCategory.id ? response.data : cat
+        cat.id === editingCategory.id ? response.data.data : cat
       ));
       setSuccess('Category updated successfully!');
       setCategoryModalOpen(false);
@@ -1231,7 +1245,11 @@ const RestaurantMonitoring = () => {
 
   const handleEditCategory = (category) => {
     setEditingCategory(category);
-    setNewCategory(category);
+    setNewCategory({
+      ...category,
+      imageFile: null,
+      imagePreview: null
+    });
     setCategoryModalOpen(true);
   };
 
@@ -2186,7 +2204,9 @@ const RestaurantMonitoring = () => {
             name: '',
             isActive: true,
             hasSubcategories: false,
-            subCategories: []
+            subCategories: [],
+            imageFile: null,
+            imagePreview: null
           });
           setSubCategoryInput('');
           setError('');
@@ -2210,6 +2230,126 @@ const RestaurantMonitoring = () => {
                 placeholder="e.g., Main Course, Desserts"
                 required
               />
+            </div>
+
+            {/* Category Image Upload */}
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Category Image</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      setNewCategory(prev => ({ ...prev, imageFile: file }));
+                      // Create preview
+                      const reader = new FileReader();
+                      reader.onload = (e) => {
+                        setNewCategory(prev => ({ ...prev, imagePreview: e.target.result }));
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  style={{
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    backgroundColor: '#fff'
+                  }}
+                />
+                {(newCategory.imagePreview || newCategory.image) && (
+                  <div style={{ position: 'relative', width: '100px', height: '100px' }}>
+                    <img
+                      src={newCategory.imagePreview || newCategory.image}
+                      alt="Category preview"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        borderRadius: '8px',
+                        border: '1px solid #ddd'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        console.log('Remove button clicked');
+                        console.log('editingCategory:', editingCategory);
+                        console.log('newCategory:', newCategory);
+                        
+                        // Check if we're removing an existing image from an existing category
+                        const hasExistingImage = editingCategory && editingCategory.id && (editingCategory.image || editingCategory.imageFileName);
+                        const isNewlySelectedImage = newCategory.imageFile || newCategory.imagePreview;
+                        
+                        console.log('hasExistingImage:', hasExistingImage);
+                        console.log('isNewlySelectedImage:', isNewlySelectedImage);
+                        
+                        // If there's an existing image and we're not just removing a newly selected preview
+                        if (hasExistingImage && (!isNewlySelectedImage || (newCategory.image && !newCategory.imageFile))) {
+                          try {
+                            console.log('Calling delete API for category:', editingCategory.id);
+                            const response = await axios.delete(
+                              `${API_BASE_URL}/menu-categories/${editingCategory.id}/image`,
+                              {
+                                headers: {
+                                  'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+                                }
+                              }
+                            );
+                            console.log('Delete API response:', response.data);
+                            
+                            // Update the categories list to reflect the change
+                            setCategories(categories.map(cat =>
+                              cat.id === editingCategory.id 
+                                ? { ...cat, image: null, imageFileName: null }
+                                : cat
+                            ));
+                            // Update the editing category
+                            setEditingCategory(prev => ({ ...prev, image: null, imageFileName: null }));
+                            toast.success('Image deleted from storage');
+                          } catch (error) {
+                            console.error('Error deleting image from Firebase:', error);
+                            console.error('Error details:', error.response?.data);
+                            toast.error('Failed to delete image from storage');
+                            return; // Don't clear the form if API call failed
+                          }
+                        }
+                        
+                        setNewCategory(prev => ({ 
+                          ...prev, 
+                          imageFile: null, 
+                          imagePreview: null,
+                          image: null
+                        }));
+                        // Also clear the file input
+                        const fileInput = document.querySelector('input[type="file"]');
+                        if (fileInput) {
+                          fileInput.value = '';
+                        }
+                      }}
+                      style={{
+                        position: 'absolute',
+                        top: '-8px',
+                        right: '-8px',
+                        width: '24px',
+                        height: '24px',
+                        borderRadius: '50%',
+                        backgroundColor: '#dc3545',
+                        color: 'white',
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '14px'
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div style={{ ...styles.formGroup, display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '6px' }}>
@@ -2321,7 +2461,9 @@ const RestaurantMonitoring = () => {
                     name: '',
                     isActive: true,
                     hasSubcategories: false,
-                    subCategories: []
+                    subCategories: [],
+                    imageFile: null,
+                    imagePreview: null
                   });
                   setSubCategoryInput('');
                 }}
@@ -2922,6 +3064,7 @@ const RestaurantMonitoring = () => {
                   <table style={styles.table} className="responsive-table">
                     <thead>
                       <tr>
+                        <th style={styles.th}>Image</th>
                         <th style={styles.th}>Name</th>
                         <th style={styles.th}>Subcategories</th>
                         <th style={styles.th}>Status</th>
@@ -2937,6 +3080,17 @@ const RestaurantMonitoring = () => {
 
                         return (
                           <tr key={category.id || category._id}>
+                            <td style={styles.td}>
+                              <img
+                                src={category.image || 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+CiAgPHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlZWVlZWUiLz4KICA8dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBhbGlnbm1lbnQtYmFzZWxpbmU9Im1pZGRsZSIgZmlsbD0iIzk5OSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+'}
+                                alt={category.name || 'Category'}
+                                style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px' }}
+                                onError={(e) => {
+                                  e.target.onerror = null;
+                                  e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlZWVlZWUiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBhbGlnbm1lbnQtYmFzZWxpbmU9Im1pZGRsZSIgZmlsbD0iIzk5OSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+';
+                                }}
+                              />
+                            </td>
                             <td style={styles.td}>
                               <div style={{ fontWeight: 'bold' }}>{category.name}</div>
                             </td>

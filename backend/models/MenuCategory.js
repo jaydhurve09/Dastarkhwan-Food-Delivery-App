@@ -8,6 +8,7 @@ export class MenuCategory extends BaseModel {
     this.name = data.name || ''; // Required
     this.description = data.description || ''; // Optional
     this.image = data.image || ''; // Optional
+    this.imageFileName = data.imageFileName || ''; // Firebase Storage filename
     this.isActive = data.isActive !== undefined ? data.isActive : true; // For soft delete
     this.subCategories = data.subCategories || []; // Array of subcategories
     this.createdAt = data.createdAt || new Date();
@@ -20,6 +21,7 @@ export class MenuCategory extends BaseModel {
       name: this.name,
       description: this.description,
       image: this.image,
+      imageFileName: this.imageFileName,
       isActive: this.isActive,
       subCategories: this.subCategories,
       createdAt: this.createdAt,

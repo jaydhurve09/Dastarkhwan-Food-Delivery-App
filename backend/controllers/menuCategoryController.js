@@ -1,21 +1,83 @@
 import { MenuCategory } from '../models/MenuCategory.js';
 import ErrorResponse from '../utils/errorResponse.js';
+import { db, storage } from '../config/firebase.js';
 import path from 'path';
-import fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
 
-// Helper to handle file upload
-const handleFileUpload = (file, oldImagePath = null) => {
-  // If there's an old image and it exists, delete it
-  if (oldImagePath && fs.existsSync(oldImagePath)) {
-    try {
-      fs.unlinkSync(oldImagePath);
-    } catch (error) {
-      console.error('Error deleting old image:', error);
-    }
+// Helper to upload file to Firebase Storage
+const uploadToFirebaseStorage = async (file, folder = 'menu-categories') => {
+  if (!file) return null;
+
+  try {
+    const bucket = storage.bucket();
+    const fileExt = path.extname(file.originalname);
+    const fileName = `${folder}/${uuidv4()}${fileExt}`;
+    
+    const fileUpload = bucket.file(fileName);
+    
+    const stream = fileUpload.createWriteStream({
+      metadata: {
+        contentType: file.mimetype,
+      },
+    });
+
+    return new Promise((resolve, reject) => {
+      stream.on('error', (error) => {
+        console.error('Firebase Storage upload error:', error);
+        reject(error);
+      });
+
+      stream.on('finish', async () => {
+        try {
+          // Make the file publicly accessible
+          await fileUpload.makePublic();
+          
+          // Get the public URL
+          const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+          resolve({
+            fileName,
+            publicUrl
+          });
+        } catch (error) {
+          console.error('Error making file public:', error);
+          reject(error);
+        }
+      });
+
+      stream.end(file.buffer);
+    });
+  } catch (error) {
+    console.error('Firebase Storage upload error:', error);
+    throw error;
+  }
+};
+
+// Helper to delete file from Firebase Storage
+const deleteFromFirebaseStorage = async (fileName) => {
+  if (!fileName) {
+    console.log('No fileName provided for deletion');
+    return;
   }
 
-  // Return the new file path or null if no file
-  return file ? path.join('uploads/categories', file.filename) : null;
+  try {
+    console.log('Attempting to delete file:', fileName);
+    const bucket = storage.bucket();
+    const file = bucket.file(fileName);
+    
+    const [exists] = await file.exists();
+    console.log(`File ${fileName} exists:`, exists);
+    
+    if (exists) {
+      await file.delete();
+      console.log(`File ${fileName} deleted from Firebase Storage successfully`);
+    } else {
+      console.log(`File ${fileName} does not exist in Firebase Storage`);
+    }
+  } catch (error) {
+    console.error('Error deleting file from Firebase Storage:', error);
+    console.error('Error details:', error.message);
+    // Don't throw error as this is cleanup operation
+  }
 };
 
 // Create a new category
@@ -23,15 +85,18 @@ const createCategory = async (req, res, next) => {
   try {
     const { name, description, isActive, subCategories } = req.body;
     
-    // Handle file upload if exists
-    const imagePath = req.file ? handleFileUpload(req.file) : null;
+    // Handle file upload
+    const fileUploadResult = req.file ? await uploadToFirebaseStorage(req.file) : null;
 
     const categoryData = {
       name,
       description: description || '',
       isActive: isActive !== 'false',
       subCategories: Array.isArray(subCategories) ? subCategories : [],
-      ...(imagePath && { image: `${process.env.BASE_URL || 'http://localhost:5000'}/${imagePath.replace(/\\/g, '/')}` })
+      ...(fileUploadResult && { 
+        image: fileUploadResult.publicUrl,
+        imageFileName: fileUploadResult.fileName
+      })
     };
 
     const category = new MenuCategory(categoryData);
@@ -44,11 +109,7 @@ const createCategory = async (req, res, next) => {
   } catch (error) {
     // Clean up uploaded file if there was an error
     if (req.file?.path) {
-      try {
-        fs.unlinkSync(req.file.path);
-      } catch (err) {
-        console.error('Error cleaning up file after error:', err);
-      }
+      // fs.unlinkSync(req.file.path); // Not needed with Firebase Storage
     }
     next(error);
   }
@@ -66,12 +127,15 @@ const updateCategory = async (req, res, next) => {
       return next(new ErrorResponse(`Category not found with id of ${id}`, 404));
     }
 
-    // Handle file upload if there's a new file
-    const oldImagePath = existingCategory.image ? 
-      path.join(process.cwd(), existingCategory.image.replace(process.env.BASE_URL || 'http://localhost:5000', '')) : 
-      null;
-      
-    const imagePath = req.file ? handleFileUpload(req.file, oldImagePath) : null;
+    // Handle file upload if new file is provided
+    const fileUploadResult = req.file 
+      ? await uploadToFirebaseStorage(req.file) 
+      : null;
+
+    // Delete existing image if new file is provided
+    if (fileUploadResult && existingCategory.imageFileName) {
+      await deleteFromFirebaseStorage(existingCategory.imageFileName);
+    }
 
     const updateData = {
       name: name || existingCategory.name,
@@ -87,9 +151,10 @@ const updateCategory = async (req, res, next) => {
         : [subCategories];
     }
 
-    // Add image path if there's a new image
-    if (imagePath) {
-      updateData.image = `${process.env.BASE_URL || 'http://localhost:5000'}/${imagePath.replace(/\\/g, '/')}`;
+    // Add image data if there's a new image
+    if (fileUploadResult) {
+      updateData.image = fileUploadResult.publicUrl;
+      updateData.imageFileName = fileUploadResult.fileName;
     }
 
     // Update the category using Firestore
@@ -109,11 +174,7 @@ const updateCategory = async (req, res, next) => {
   } catch (error) {
     // Clean up uploaded file if there was an error
     if (req.file?.path) {
-      try {
-        fs.unlinkSync(req.file.path);
-      } catch (err) {
-        console.error('Error cleaning up file after error:', err);
-      }
+      // fs.unlinkSync(req.file.path); // Not needed with Firebase Storage
     }
     next(error);
   }
@@ -168,16 +229,9 @@ const deleteCategory = async (req, res, next) => {
       return next(new ErrorResponse('Category not found', 404));
     }
 
-    // Delete the image file if it exists
-    if (category.image) {
-      const imagePath = path.join(process.cwd(), category.image.replace(process.env.BASE_URL || 'http://localhost:5000', ''));
-      if (fs.existsSync(imagePath)) {
-        try {
-          fs.unlinkSync(imagePath);
-        } catch (error) {
-          console.error('Error deleting category image:', error);
-        }
-      }
+    // Delete image from Firebase Storage if exists
+    if (category.imageFileName) {
+      await deleteFromFirebaseStorage(category.imageFileName);
     }
     
     // Delete the category document
@@ -273,12 +327,83 @@ const removeSubcategory = async (req, res) => {
   }
 };
 
+// Delete category image
+const deleteCategoryImage = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    console.log('Delete category image API called for ID:', id);
+    
+    // Get the existing category first
+    const existingCategory = await MenuCategory.findById(id);
+    console.log('Existing category found:', existingCategory);
+    
+    if (!existingCategory) {
+      return next(new ErrorResponse(`Category not found with id of ${id}`, 404));
+    }
+
+    // Delete image from Firebase Storage if exists
+    if (existingCategory.imageFileName) {
+      console.log('Deleting image from Firebase Storage using imageFileName:', existingCategory.imageFileName);
+      await deleteFromFirebaseStorage(existingCategory.imageFileName);
+      console.log('Image deleted from Firebase Storage successfully');
+    } else if (existingCategory.image) {
+      // Fallback: try to extract filename from image URL for older records
+      console.log('No imageFileName found, trying to extract from image URL:', existingCategory.image);
+      try {
+        const imageUrl = existingCategory.image;
+        // Extract filename from Firebase Storage URL
+        // URL format: https://storage.googleapis.com/bucket-name/folder/filename
+        const urlParts = imageUrl.split('/');
+        const fileName = urlParts[urlParts.length - 1];
+        if (fileName && fileName.includes('menu-categories/')) {
+          console.log('Extracted filename for deletion:', fileName);
+          await deleteFromFirebaseStorage(fileName);
+        } else {
+          // Try to construct the path
+          const pathMatch = imageUrl.match(/menu-categories%2F([^?]+)/);
+          if (pathMatch) {
+            const decodedFileName = `menu-categories/${decodeURIComponent(pathMatch[1])}`;
+            console.log('Constructed filename for deletion:', decodedFileName);
+            await deleteFromFirebaseStorage(decodedFileName);
+          }
+        }
+      } catch (error) {
+        console.error('Error extracting filename from URL:', error);
+      }
+    } else {
+      console.log('No image or imageFileName found, skipping Firebase deletion');
+    }
+
+    // Update category to remove image references
+    const categoryToUpdate = new MenuCategory({
+      ...existingCategory,
+      image: null,
+      imageFileName: null,
+      updatedAt: new Date()
+    });
+    categoryToUpdate.id = id;
+    
+    const updatedCategory = await categoryToUpdate.save();
+    console.log('Category updated successfully:', updatedCategory);
+
+    res.status(200).json({
+      success: true,
+      data: updatedCategory,
+      message: 'Category image deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error in deleteCategoryImage:', error);
+    next(error);
+  }
+};
+
 export {
   createCategory,
   updateCategory,
   getCategories,
   getCategory,
   deleteCategory,
+  deleteCategoryImage,
   addSubcategory,
   updateSubcategory,
   removeSubcategory

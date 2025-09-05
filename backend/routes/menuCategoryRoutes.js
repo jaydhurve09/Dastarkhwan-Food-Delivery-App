@@ -6,12 +6,14 @@ import {
   getCategory,
   updateCategory,
   deleteCategory,
+  deleteCategoryImage,
   addSubcategory,
   updateSubcategory,
   removeSubcategory
 } from '../controllers/menuCategoryController.js';
 import { protect, admin } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validationMiddleware.js';
+import { upload } from '../config/fileUpload.js';
 
 const router = express.Router();
 
@@ -83,11 +85,13 @@ router.use(protect);
 router.use(admin);
 
 router.post('/', 
+  upload.single('image'),
   validate(categoryValidation),
   createCategory
 );
 
 router.put('/:id', 
+  upload.single('image'),
   validate([
     param('id').notEmpty().withMessage('Category ID is required'),
     ...categoryValidation
@@ -100,6 +104,13 @@ router.delete('/:id',
     param('id').notEmpty().withMessage('Category ID is required')
   ]),
   deleteCategory
+);
+
+router.delete('/:id/image', 
+  validate([
+    param('id').notEmpty().withMessage('Category ID is required')
+  ]),
+  deleteCategoryImage
 );
 
 // Subcategory routes

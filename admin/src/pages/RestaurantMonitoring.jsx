@@ -253,7 +253,7 @@ const RestaurantMonitoring = () => {
     const orderId = (order.orderId || order.id || '').toString().toLowerCase();
     const customerName = (order.userInfo?.display_name || order.userInfo?.name || '').toLowerCase();
     const status = (order.orderStatus || '').toLowerCase();
-    const total = (order.orderValue || 0).toString();
+    const total = (order.orderTotal || 0).toString();
     const date = order.order_Date ? new Date(order.order_Date.seconds * 1000).toLocaleDateString().toLowerCase() : '';
     const items = order.products ? order.products.map(p => (p.name || '').toLowerCase()).join(' ') : '';
     
@@ -281,7 +281,7 @@ const RestaurantMonitoring = () => {
     const orderId = (order.orderId || order.id || '').toString().toLowerCase();
     const customerName = (order.userInfo?.display_name || order.userInfo?.name || '').toLowerCase();
     const status = (order.orderStatus || '').toLowerCase();
-    const total = (order.orderValue || 0).toString();
+    const total = (order.orderTotal || 0).toString();
     const date = order.order_Date ? new Date(order.order_Date.seconds * 1000).toLocaleDateString().toLowerCase() : '';
     const items = order.products ? order.products.map(p => (p.name || '').toLowerCase()).join(' ') : '';
     const partnerName = order.partnerAssigned?.partnerName?.toLowerCase() || '';
@@ -1547,7 +1547,7 @@ const RestaurantMonitoring = () => {
                       )}
                     </td>
                     <td style={styles.td}>
-                      ₹{order.orderValue?.toFixed(2) || '0.00'}
+                      ₹{order.orderTotal?.toFixed(2) || '0.00'}
                     </td>
                     <td style={styles.td}>
                       <div style={{ fontSize: '0.8em', color: '#666' }}>
@@ -1922,8 +1922,8 @@ const RestaurantMonitoring = () => {
                               );
                             })}
                           </p>
-                          {order.orderValue ? (
-                            <p className="text-gray-600">Total: ₹{order.orderValue}</p>
+                          {order.orderTotal ? (
+                            <p className="text-gray-600">Total: ₹{order.orderTotal}</p>
                           ) : null}
                         </div>
                       ) : (
@@ -1939,7 +1939,7 @@ const RestaurantMonitoring = () => {
                       )}
                     </td>
                     <td style={styles.td}>
-                      ₹{order.orderValue?.toFixed(2) || '0.00'}
+                      ₹{order.orderTotal?.toFixed(2) || '0.00'}
                     </td>
                     <td style={styles.td}>
                       <div style={{ fontSize: '0.8em', color: '#666' }}>

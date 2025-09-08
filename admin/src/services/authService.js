@@ -28,24 +28,33 @@ const login = async (email, password) => {
 };
 
 const logout = async () => {
+  console.log('AuthService: Starting logout process');
   try {
-    // Call backend logout endpoint
-    const response = await api.post(
-      `${API_URL}/admin/logout`,
-      {}
-    );
-
-    // Clear local storage
+    // Clear local storage first to ensure immediate logout
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminUser');
     
     // Clear any existing cookies
     document.cookie = 'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
     
-    return response.data;
+    console.log('AuthService: Local storage cleared');
+    
+    // Try to call backend logout endpoint, but don't wait for it if it fails
+    try {
+      const response = await api.post(
+        `${API_URL}/admin/logout`,
+        {}
+      );
+      console.log('AuthService: Backend logout successful');
+      return response.data;
+    } catch (apiError) {
+      console.warn('AuthService: Backend logout failed, but local logout completed:', apiError.message);
+      // Don't throw here, local logout is more important
+      return { message: 'Local logout completed' };
+    }
   } catch (error) {
     console.error('Logout error:', error.response?.data || error.message);
-    // Even if the API call fails, we should still clear local storage
+    // Even if everything fails, ensure local storage is cleared
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminUser');
     document.cookie = 'token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
@@ -71,10 +80,16 @@ const isTokenExpired = (token) => {
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
     const payload = JSON.parse(window.atob(base64));
     
+    console.log('Token payload:', payload);
+    console.log('Token exp:', payload.exp);
+    console.log('Current time:', Date.now() / 1000);
+    console.log('Token expired:', payload.exp < Date.now() / 1000);
+    
     // Check if token is expired
-    return payload.exp * 1000 < Date.now();
+    return payload.exp < Date.now() / 1000;
   } catch (error) {
     console.error('Error checking token expiration:', error);
+    console.error('Token that failed:', token);
     return true; // If there's an error, assume token is invalid
   }
 };

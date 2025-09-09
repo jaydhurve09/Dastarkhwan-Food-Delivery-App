@@ -2845,12 +2845,14 @@ const RestaurantMonitoring = () => {
                           </td>
                           <td style={styles.tableCell}>
                             {(() => {
-                              const category = categories.find(cat => cat.id === item.categoryId);
+                              // Extract string ID from Firestore DocumentReference if needed
+                              const categoryId = extractIdFromDocRef(item.categoryId);
+                              const category = categories.find(cat => cat.id === categoryId);
                               if (category) {
                                 return category.name;
                               }
                               // Fallback: if categoryId doesn't match, show the categoryId or categoryName if available
-                              return item.categoryName || item.categoryId || 'Unknown Category';
+                              return item.categoryName || categoryId || 'Unknown Category';
                             })()}
                           </td>
                           <td style={styles.tableCell}>₹{item.price ? parseFloat(item.price).toFixed(2) : '0.00'}</td>

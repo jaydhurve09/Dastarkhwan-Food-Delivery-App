@@ -6,6 +6,35 @@ import { AiFillShop, AiOutlineUserDelete } from "react-icons/ai";
 import { motion, AnimatePresence } from "framer-motion";
 import { AdminContext } from "../contexts/adminContext";
 import { sendReply,updateStatus } from "../services/feedbackAndComplaints";
+
+// Helper function to extract string ID from Firestore DocumentReference
+const extractIdFromDocRef = (docRef) => {
+  if (!docRef) return null;
+  
+  // Handle Firestore DocumentReference object with _path property
+  if (docRef && docRef._path && docRef._path.segments) {
+    const segments = docRef._path.segments;
+    return segments[segments.length - 1];
+  }
+  
+  // Handle string IDs (already extracted)
+  if (typeof docRef === 'string') {
+    return docRef;
+  }
+  
+  // Handle Firestore DocumentReference object with id property
+  if (docRef && docRef.id) {
+    return docRef.id;
+  }
+  
+  // Handle path property
+  if (docRef && docRef.path && typeof docRef.path === 'string') {
+    const parts = docRef.path.split('/');
+    return parts[parts.length - 1];
+  }
+  
+  return docRef;
+};
 // --- DUMMY DATA --- (Restaurant and Delivery reviews, Complaints with Issue Type, Order ID)
 
 
@@ -210,8 +239,10 @@ export default function FeedbackAndComplaints() {
           ? feedback.filter(item => item.type === "restaurant")
           : feedback.filter(item => item.type === "delivery") 
             ).map((r, idx) => {
-            const userName = users.find(user => user.id === r.userId)?.name || r.userId;
-            const deliveryPartnerName = deliveryPartners.find(dp => dp.id === r.deliveryPartnerId)?.name || "Unknown Delivery Partner";
+            const userId = extractIdFromDocRef(r.userId);
+            const deliveryPartnerId = extractIdFromDocRef(r.deliveryPartnerId);
+            const userName = users.find(user => user.id === userId)?.name || userId;
+            const deliveryPartnerName = deliveryPartners.find(dp => dp.id === deliveryPartnerId)?.name || "Unknown Delivery Partner";
 
             return (
               <motion.div
@@ -367,10 +398,13 @@ export default function FeedbackAndComplaints() {
       >
         <AnimatePresence>
           {complaints.map((c, idx) => {
-            const userName = users.find(user => user.id === c.userId)?.name || c.userId;
-            const deliveryPartnerName = deliveryPartners.find(dp => dp.id === c.deliveryPartnerId)?.name || "Unknown Delivery Partner";
+            const userId = extractIdFromDocRef(c.userId);
+            const deliveryPartnerId = extractIdFromDocRef(c.deliveryPartnerId);
+            const orderId = extractIdFromDocRef(c.orderId);
+            const userName = users.find(user => user.id === userId)?.name || userId;
+            const deliveryPartnerName = deliveryPartners.find(dp => dp.id === deliveryPartnerId)?.name || "Unknown Delivery Partner";
             
-            const orderNumber = orders.find(order => order.id === c.orderId)?.orderNumber || "Unknown Order";
+            const orderNumber = orders.find(order => order.id === orderId)?.orderNumber || "Unknown Order";
             return (
               <motion.div
                 key={c.id}

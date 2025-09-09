@@ -1239,13 +1239,25 @@ const RestaurantMonitoring = () => {
 
   const handleDeleteCategory = async (id) => {
     try {
-      const response = await axios.delete(`${API_BASE_URL}/menu-categories/${id}`);
+      const token = localStorage.getItem('adminToken');
+      
+      if (!token) {
+        toast.error('Authentication token not found. Please login again.');
+        return;
+      }
+      
+      const response = await axios.delete(`${API_BASE_URL}/menu-categories/${id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       console.log('Category deleted:', response);
       toast.success('Category deleted successfully!');
       setCategories(prevCategories => prevCategories.filter(category => category.id !== id));
     } catch (error) {
       console.error('Error deleting category:', error);
-      toast.error('Failed to delete category');
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Failed to delete category';
+      toast.error(errorMessage);
     }
   };
 

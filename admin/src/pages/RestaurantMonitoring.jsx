@@ -163,7 +163,7 @@ const RestaurantMonitoring = () => {
   const [reviews] = useState(initialReviews);
   const [operatingHours, setOperatingHours] = useState(initialHours);
   const [isOnline, setIsOnline] = useState(true);
- 
+
   const [profile, setProfile] = useState({
     name: 'Dastarkhwan Restaurant',
     deliveryTime: '30-45 min',
@@ -239,7 +239,7 @@ const RestaurantMonitoring = () => {
   const [isLoadingOngoing, setIsLoadingOngoing] = useState(true); // New loading state
   const [ordersError, setOrdersError] = useState(null);
   const [autoAssignPartners, setAutoAssignPartners] = useState(true); // Auto-assignment toggle
-  
+
   // Search state variables
   const [incomingOrdersSearch, setIncomingOrdersSearch] = useState('');
   const [ongoingOrdersSearch, setOngoingOrdersSearch] = useState('');
@@ -248,7 +248,7 @@ const RestaurantMonitoring = () => {
   // Filter functions for search
   const filteredIncomingOrders = incomingOrders.filter(order => {
     if (!incomingOrdersSearch.trim()) return true;
-    
+
     const searchTerm = incomingOrdersSearch.toLowerCase();
     const orderId = (order.orderId || order.id || '').toString().toLowerCase();
     const customerName = (order.userInfo?.display_name || order.userInfo?.name || '').toLowerCase();
@@ -256,13 +256,13 @@ const RestaurantMonitoring = () => {
     const total = (order.orderTotal || 0).toString();
     const date = order.order_Date ? new Date(order.order_Date.seconds * 1000).toLocaleDateString().toLowerCase() : '';
     const items = order.products ? order.products.map(p => (p.name || '').toLowerCase()).join(' ') : '';
-    
-    return orderId.includes(searchTerm) || 
-           customerName.includes(searchTerm) || 
-           status.includes(searchTerm) || 
-           total.includes(searchTerm) || 
-           date.includes(searchTerm) || 
-           items.includes(searchTerm);
+
+    return orderId.includes(searchTerm) ||
+      customerName.includes(searchTerm) ||
+      status.includes(searchTerm) ||
+      total.includes(searchTerm) ||
+      date.includes(searchTerm) ||
+      items.includes(searchTerm);
   });
 
   const filteredOngoingOrders = ongoingOrders.filter(order => {
@@ -273,10 +273,10 @@ const RestaurantMonitoring = () => {
     if (deliveryPartnerFilter === 'unassigned' && (order.assigningPartner || order.partnerAssigned)) {
       return false;
     }
-    
+
     // Filter by search term
     if (!ongoingOrdersSearch.trim()) return true;
-    
+
     const searchTerm = ongoingOrdersSearch.toLowerCase();
     const orderId = (order.orderId || order.id || '').toString().toLowerCase();
     const customerName = (order.userInfo?.display_name || order.userInfo?.name || '').toLowerCase();
@@ -285,14 +285,14 @@ const RestaurantMonitoring = () => {
     const date = order.order_Date ? new Date(order.order_Date.seconds * 1000).toLocaleDateString().toLowerCase() : '';
     const items = order.products ? order.products.map(p => (p.name || '').toLowerCase()).join(' ') : '';
     const partnerName = order.partnerAssigned?.partnerName?.toLowerCase() || '';
-    
-    return orderId.includes(searchTerm) || 
-           customerName.includes(searchTerm) || 
-           status.includes(searchTerm) || 
-           total.includes(searchTerm) || 
-           date.includes(searchTerm) || 
-           items.includes(searchTerm) ||
-           partnerName.includes(searchTerm);
+
+    return orderId.includes(searchTerm) ||
+      customerName.includes(searchTerm) ||
+      status.includes(searchTerm) ||
+      total.includes(searchTerm) ||
+      date.includes(searchTerm) ||
+      items.includes(searchTerm) ||
+      partnerName.includes(searchTerm);
   });
 
   // Fetch all orderedProduct documents from users subcollection
@@ -300,9 +300,9 @@ const RestaurantMonitoring = () => {
     try {
       setIsLoadingOrders(true);
       setOrdersError(null);
-      
+
       const response = await api.get('/orders/yet-to-be-accepted');
-      
+
       if (response.data) {
         console.log('Orders fetched:', response.data);
         console.log('First order structure:', response.data[0]);
@@ -325,9 +325,9 @@ const RestaurantMonitoring = () => {
     try {
       setIsLoadingOngoing(true);
       setOrdersError(null);
-      
+
       const response = await api.get('/orders/ongoing');
-      
+
       if (response.data) {
         console.log('Ongoing orders fetched:', response.data);
         setOngoingOrders(response.data);
@@ -348,22 +348,22 @@ const RestaurantMonitoring = () => {
   const handleAcceptOrderWithNotification = async (orderId) => {
     try {
       console.log('Accepting order and notifying all delivery partners:', orderId);
-      
+
       // Log which partners are eligible for notifications
-      const eligiblePartners = activeDeliveryPartners.filter(partner => 
+      const eligiblePartners = activeDeliveryPartners.filter(partner =>
         partner.isActive === true && partner.isOnline === true
       );
       console.log('📋 Eligible partners for notification (active & online):');
       eligiblePartners.forEach(partner => {
         console.log(`  - ${partner.displayName || partner.name} (ID: ${partner.id}) - Active: ${partner.isActive}, Online: ${partner.isOnline}`);
       });
-      
+
       // Call the new backend endpoint that accepts order and notifies all active partners
       const response = await api.patch(`/orders/${orderId}/accept-and-notify`);
-      
+
       if (response.data.success) {
         const { data, notifiedPartners, message } = response.data;
-        
+
         console.log('✅ Order accepted successfully:', data);
         console.log('📱 Notification sent to partners:');
         if (notifiedPartners && Array.isArray(notifiedPartners)) {
@@ -374,23 +374,23 @@ const RestaurantMonitoring = () => {
           console.log('  ℹ️ No partner notification details returned from server');
         }
         console.log(`📊 Total partners notified: ${notifiedPartners?.length || 0}`);
-        
+
         // Update local state - move order from incoming to ongoing
         const acceptedOrder = incomingOrders.find(order => order.id === orderId);
         if (acceptedOrder) {
           // Don't auto-assign partner, just move to ongoing with preparing status
-          const updatedOrder = { 
-            ...acceptedOrder, 
+          const updatedOrder = {
+            ...acceptedOrder,
             orderStatus: 'preparing',
             assigningPartner: false // Don't show auto-assignment loading
           };
           setOngoingOrders(prev => [...prev, updatedOrder]);
           setIncomingOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
-          
+
           // Show success message with notification count
           toast.success(`${message} - Order moved to preparing! Delivery partners will respond if available.`);
         }
-        
+
         // Refresh both sections to ensure data consistency
         await fetchYetToBeAcceptedOrders();
         await fetchOngoingOrders();
@@ -415,7 +415,7 @@ const RestaurantMonitoring = () => {
           const currentOrder = ongoingOrders.find(order => order.id === orderId);
           if (currentOrder && currentOrder.partnerAssigned) {
             console.log('Triggering mark as prepared notification for order:', orderId);
-            
+
             // Call test endpoint instead of Cloud Function for now
             const testResponse = await api.post('/test/test-mark-prepared', {
               orderId: orderId,
@@ -424,7 +424,7 @@ const RestaurantMonitoring = () => {
               customerAddress: currentOrder.customerAddress || currentOrder.address,
               orderDetails: JSON.stringify(currentOrder.items || currentOrder.orderDetails || [])
             });
-            
+
             console.log('✅ Mark as prepared test response:', testResponse.data);
             toast.success('Order marked as prepared and delivery partner trigger tested!');
           } else {
@@ -495,14 +495,14 @@ const RestaurantMonitoring = () => {
   // Handle delivery partner assignment with filtering for active/online partners
   const handleAssignPartner = async (orderId) => {
     const partnerId = selectedPartners[orderId];
-    
+
     if (!partnerId) {
       toast.error('Please select a delivery partner first');
       return;
     }
 
     // Filter to only include active and online partners
-    const availablePartners = activeDeliveryPartners.filter(partner => 
+    const availablePartners = activeDeliveryPartners.filter(partner =>
       partner.isActive === true && partner.isOnline === true
     );
 
@@ -528,7 +528,7 @@ const RestaurantMonitoring = () => {
 
       if (response.data.success) {
         console.log('✅ Partner assignment successful');
-        
+
         // Immediately update local state to show assignment
         setOngoingOrders(prev => prev.map(order => {
           if (order.id === orderId) {
@@ -551,11 +551,11 @@ const RestaurantMonitoring = () => {
         try {
           console.log('📱 Sending single partner assignment notification...');
           console.log(`  Target Partner: ${selectedPartner.display_name || selectedPartner.name} (ID: ${partnerId})`);
-          
+
           // Find the order to get details for notification
-          const currentOrder = ongoingOrders.find(order => order.id === orderId) || 
-                              incomingOrders.find(order => order.id === orderId);
-          
+          const currentOrder = ongoingOrders.find(order => order.id === orderId) ||
+            incomingOrders.find(order => order.id === orderId);
+
           const testResponse = await api.post('/test/test-single-partner-notification', {
             orderId: orderId,
             deliveryPartnerId: partnerId,
@@ -563,7 +563,7 @@ const RestaurantMonitoring = () => {
             restaurantName: currentOrder?.restaurantName || 'Restaurant',
             customerAddress: currentOrder?.customerAddress || currentOrder?.deliveryAddress?.address || currentOrder?.address || 'Customer Address'
           });
-          
+
           console.log('✅ Single partner assignment notification response:', testResponse.data);
           console.log(`📧 Notification sent to: ${selectedPartner.display_name || selectedPartner.name}`);
           toast.success(`${selectedPartner.display_name || selectedPartner.name} assigned and notified!`);
@@ -601,9 +601,9 @@ const RestaurantMonitoring = () => {
   const handleDispatchOrder = async (orderId) => {
     try {
       console.log('Dispatching order:', orderId);
-      
+
       const response = await api.patch(`/orders/${orderId}/dispatch`);
-      
+
       if (response.data.success) {
         toast.success('Order dispatched successfully!');
         // Refresh both sections to show updated status
@@ -638,7 +638,7 @@ const RestaurantMonitoring = () => {
       fontWeight: '600',
       textTransform: 'capitalize'
     };
-  
+
     switch (status) {
       case 'yetToBeAccepted':
         return { ...baseStyle, backgroundColor: '#f39c12', color: 'white' };
@@ -727,14 +727,14 @@ const RestaurantMonitoring = () => {
     requestFormData.append('description', formData.get('description') || '');
     requestFormData.append('tags', JSON.stringify(formattedTags));
     requestFormData.append('isActive', 'true');
-    
+
     // Handle addOns properly - send as individual entries for FormData
     const addOnsArray = hasSubDishes && currentSubDishes.length > 0 ? currentSubDishes : [];
     addOnsArray.forEach((addOn, index) => {
       requestFormData.append(`addOns[${index}][name]`, addOn.name);
       requestFormData.append(`addOns[${index}][price]`, addOn.price);
     });
-    
+
     // Add image file if selected
     const imageFile = formData.get('image');
     if (imageFile && imageFile.size > 0) {
@@ -948,7 +948,7 @@ const RestaurantMonitoring = () => {
   //     const selectedCategory = categories.find(cat => cat.id === editingItem.categoryId);
   //     if (selectedCategory) {
   //       setCurrentSubCategories(selectedCategory.subCategories || []);
-        
+
   //       // If the category has subcategories and the editing item has a subcategory, select it
   //       if (selectedCategory.subCategories && selectedCategory.subCategories.length > 0 && editingItem.subCategory) {
   //         setSelectedSubCategory(editingItem.subCategory);
@@ -971,14 +971,14 @@ const RestaurantMonitoring = () => {
       const itemPrice = editingItem.price || 0;
       setPrice(itemPrice ? parseFloat(itemPrice).toFixed(2) : '');
       setFoodType(editingItem.isVeg === true ? 'Veg' : 'Non-Veg');
-  
+
       const tagsSet = new Set(editingItem.tags || []);
       setSelectedRecommendationTags(tagsSet);
-      
+
       const addOns = editingItem.addOns || [];
       setHasSubDishes(addOns.length > 0);
       setCurrentSubDishes(addOns);
-  
+
       // Find the category for the item and set subcategories
       const selectedCategory = categories.find(cat => cat.id === editingItem.categoryId);
       if (selectedCategory) {
@@ -1040,7 +1040,7 @@ const RestaurantMonitoring = () => {
     try {
       setIsLoading(true);
       setError('');
-  
+
       // Format subcategories as an array of strings
       const formattedSubCategories = newCategory.hasSubcategories
         ? (Array.isArray(newCategory.subCategories)
@@ -1048,19 +1048,22 @@ const RestaurantMonitoring = () => {
           : (newCategory.subCategories || '').split(',').map(s => s.trim()).filter(Boolean)
         )
         : [];
-  
+
       // Create FormData for file upload
       const formData = new FormData();
       formData.append('name', newCategory.name);
       formData.append('isActive', newCategory.isActive);
       formData.append('hasSubcategories', newCategory.hasSubcategories);
-      formData.append('subCategories', JSON.stringify(formattedSubCategories));
-      
+      // Send subcategories as individual array elements instead of JSON string
+      formattedSubCategories.forEach((subCat, index) => {
+        formData.append(`subCategories[${index}]`, subCat);
+      });
+
       // Add image file if selected
       if (newCategory.imageFile) {
         formData.append('image', newCategory.imageFile);
       }
-  
+
       const response = await axios.post(
         `${API_BASE_URL}/menu-categories`,
         formData,
@@ -1071,7 +1074,7 @@ const RestaurantMonitoring = () => {
           }
         }
       );
-  
+
       setCategories([...categories, response.data.data]);
       setSuccess('Category added successfully!');
       setCategoryModalOpen(false);
@@ -1115,8 +1118,11 @@ const RestaurantMonitoring = () => {
       formData.append('name', newCategory.name);
       formData.append('isActive', newCategory.isActive);
       formData.append('hasSubcategories', newCategory.hasSubcategories);
-      formData.append('subCategories', JSON.stringify(formattedSubCategories));
-      
+      // Send subcategories as individual array elements instead of JSON string
+      formattedSubCategories.forEach((subCat, index) => {
+        formData.append(`subCategories[${index}]`, subCat);
+      });
+
       // Add image file if selected
       if (newCategory.imageFile) {
         formData.append('image', newCategory.imageFile);
@@ -1173,7 +1179,7 @@ const RestaurantMonitoring = () => {
 
       console.log('Fetched menu items:', items);
       console.log('Available categories:', categories);
-      
+
       // Log category matching for debugging
       items.forEach(item => {
         const matchedCategory = categories.find(cat => cat.id === item.categoryId);
@@ -1204,18 +1210,18 @@ const RestaurantMonitoring = () => {
       const itemId = typeof id === 'object' && id._path ? id._path.segments[id._path.segments.length - 1] : id;
       console.log('Deleting menu item with ID:', itemId);
       const token = localStorage.getItem('adminToken');
-      
+
       if (!token) {
         toast.error('Authentication token not found. Please login again.');
         return;
       }
-      
+
       const response = await axios.delete(`${API_BASE_URL}/menu-items/${itemId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
-      
+
       console.log('Menu item deleted:', response);
       toast.success('Menu item deleted successfully!');
       setMenuItems(prevItems => prevItems.filter(item => {
@@ -1225,7 +1231,7 @@ const RestaurantMonitoring = () => {
     } catch (error) {
       console.error('Error deleting menu item:', error);
       console.error('Error response:', error.response?.data);
-      
+
       const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Failed to delete menu item';
       toast.error(errorMessage);
     }
@@ -1266,7 +1272,7 @@ const RestaurantMonitoring = () => {
   const extractMenuItemId = (ref) => {
     console.log('🔍 Extracting menu item ID from:', ref);
     if (!ref) return null;
-    
+
     // Handle Firestore DocumentReference object with _path property
     if (ref && ref._path && ref._path.segments) {
       const segments = ref._path.segments;
@@ -1274,7 +1280,7 @@ const RestaurantMonitoring = () => {
       console.log('📝 Extracted ID from _path.segments:', id);
       return id;
     }
-    
+
     // Handle different reference formats
     if (typeof ref === 'string') {
       // Handle Firestore document reference path like "menuItems/abc123" or "/menuItems/abc123"
@@ -1283,13 +1289,13 @@ const RestaurantMonitoring = () => {
       console.log('📝 Extracted ID from string:', id);
       return id; // Get the last part (document ID)
     }
-    
+
     // Handle Firestore DocumentReference object
     if (ref && ref.id) {
       console.log('📝 Extracted ID from object.id:', ref.id);
       return ref.id;
     }
-    
+
     // Handle path property
     if (ref && ref.path && typeof ref.path === 'string') {
       const parts = ref.path.split('/');
@@ -1297,7 +1303,7 @@ const RestaurantMonitoring = () => {
       console.log('📝 Extracted ID from object.path:', id);
       return id;
     }
-    
+
     console.log('❌ Could not extract ID from:', ref);
     return null;
   };
@@ -1385,7 +1391,7 @@ const RestaurantMonitoring = () => {
             <label style={{ fontSize: '14px', color: '#666', fontWeight: '500' }}>
               Auto-assign Partners:
             </label>
-            <label style={{ 
+            <label style={{
               position: 'relative',
               display: 'inline-block',
               width: '50px',
@@ -1423,8 +1429,8 @@ const RestaurantMonitoring = () => {
                 }}></span>
               </span>
             </label>
-            <span style={{ 
-              fontSize: '12px', 
+            <span style={{
+              fontSize: '12px',
               color: autoAssignPartners ? '#4CAF50' : '#999',
               fontWeight: '500',
               minWidth: '30px'
@@ -1432,7 +1438,7 @@ const RestaurantMonitoring = () => {
               {autoAssignPartners ? 'ON' : 'OFF'}
             </span>
           </div>
-          <button 
+          <button
             onClick={fetchYetToBeAcceptedOrders}
             style={{
               ...styles.button,
@@ -1444,7 +1450,7 @@ const RestaurantMonitoring = () => {
               borderRadius: '60px',
             }}
           >
-            <MdOutlineRefresh size={20}/>
+            <MdOutlineRefresh size={20} />
           </button>
         </div>
       </div>
@@ -1470,7 +1476,7 @@ const RestaurantMonitoring = () => {
           onBlur={(e) => e.target.style.borderColor = '#ddd'}
         />
       </div>
-  
+
       {isLoadingOrders ? (
         <div style={{ textAlign: 'center', padding: '20px' }}>Loading orders...</div>
       ) : (
@@ -1532,7 +1538,7 @@ const RestaurantMonitoring = () => {
                               );
                             })}
                           </p>
-                         
+
                         </div>
                       ) : (
                         <div>
@@ -1562,9 +1568,9 @@ const RestaurantMonitoring = () => {
                     <td style={styles.td}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '200px' }}>
                         {order.partnerAssigned ? (
-                          <div style={{ 
-                            padding: '8px 12px', 
-                            backgroundColor: '#e8f5e8', 
+                          <div style={{
+                            padding: '8px 12px',
+                            backgroundColor: '#e8f5e8',
                             borderRadius: '6px',
                             border: '1px solid #c3e6c3'
                           }}>
@@ -1597,9 +1603,9 @@ const RestaurantMonitoring = () => {
                             </button>
                           </div>
                         ) : order.orderStatus === 'dispatched' ? (
-                          <div style={{ 
-                            padding: '8px 12px', 
-                            backgroundColor: '#e6e2ff', 
+                          <div style={{
+                            padding: '8px 12px',
+                            backgroundColor: '#e6e2ff',
                             borderRadius: '6px',
                             border: '1px solid #d1c7ff'
                           }}>
@@ -1616,9 +1622,9 @@ const RestaurantMonitoring = () => {
                             </div>
                           </div>
                         ) : order.orderStatus === 'declined' ? (
-                          <div style={{ 
-                            padding: '8px 12px', 
-                            backgroundColor: '#f8d7da', 
+                          <div style={{
+                            padding: '8px 12px',
+                            backgroundColor: '#f8d7da',
                             borderRadius: '6px',
                             border: '1px solid #f5c6cb'
                           }}>
@@ -1629,13 +1635,13 @@ const RestaurantMonitoring = () => {
                               No further action required
                             </div>
                           </div>
-                        ) : activeDeliveryPartners.filter(partner => 
-                            partner.isActive === true && partner.isOnline === true
-                          ).length > 0 ? (
+                        ) : activeDeliveryPartners.filter(partner =>
+                          partner.isActive === true && partner.isOnline === true
+                        ).length > 0 ? (
                           <div>
-                            <div style={{ 
-                              padding: '8px 12px', 
-                              backgroundColor: '#d1ecf1', 
+                            <div style={{
+                              padding: '8px 12px',
+                              backgroundColor: '#d1ecf1',
                               borderRadius: '6px',
                               border: '1px solid #bee5eb',
                               marginBottom: '8px'
@@ -1647,9 +1653,9 @@ const RestaurantMonitoring = () => {
                                 FCM notifications sent to all active partners
                               </div>
                             </div>
-                            <div style={{ 
-                              padding: '4px 8px', 
-                              backgroundColor: '#f8f9fa', 
+                            <div style={{
+                              padding: '4px 8px',
+                              backgroundColor: '#f8f9fa',
                               borderRadius: '4px',
                               border: '1px solid #dee2e6',
                               marginBottom: '6px',
@@ -1695,14 +1701,14 @@ const RestaurantMonitoring = () => {
                                   whiteSpace: 'nowrap'
                                 }}
                               >
-                                                               {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
+                                {assigningOrders.has(order.id) ? 'Assigning...' : 'Assign'}
                               </button>
                             </div>
                           </div>
                         ) : (
-                          <div style={{ 
-                            padding: '8px 12px', 
-                            backgroundColor: '#fff3cd', 
+                          <div style={{
+                            padding: '8px 12px',
+                            backgroundColor: '#fff3cd',
                             borderRadius: '6px',
                             border: '1px solid #ffeaa7',
                             fontSize: '0.85em',
@@ -1802,7 +1808,7 @@ const RestaurantMonitoring = () => {
     <div style={{ ...styles.card, gridColumn: '1 / -1' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <h2 style={styles.cardTitle}>Ongoing Orders</h2>
-        <button 
+        <button
           onClick={fetchOngoingOrders}
           style={{
             ...styles.button,
@@ -1814,7 +1820,7 @@ const RestaurantMonitoring = () => {
             borderRadius: '60px',
           }}
         >
-          <MdOutlineRefresh size={20}/>
+          <MdOutlineRefresh size={20} />
         </button>
       </div>
 
@@ -1860,7 +1866,7 @@ const RestaurantMonitoring = () => {
           />
         </div>
       </div>
-  
+
       {isLoadingOngoing ? (
         <div style={{ textAlign: 'center', padding: '20px' }}>Loading orders...</div>
       ) : (
@@ -1954,9 +1960,9 @@ const RestaurantMonitoring = () => {
                     <td style={styles.td}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '200px' }}>
                         {order.partnerAssigned ? (
-                          <div style={{ 
-                            padding: '8px 12px', 
-                            backgroundColor: '#e8f5e8', 
+                          <div style={{
+                            padding: '8px 12px',
+                            backgroundColor: '#e8f5e8',
                             borderRadius: '6px',
                             border: '1px solid #c3e6c3'
                           }}>
@@ -1989,9 +1995,9 @@ const RestaurantMonitoring = () => {
                             </button>
                           </div>
                         ) : order.orderStatus === 'dispatched' ? (
-                          <div style={{ 
-                            padding: '8px 12px', 
-                            backgroundColor: '#e6e2ff', 
+                          <div style={{
+                            padding: '8px 12px',
+                            backgroundColor: '#e6e2ff',
                             borderRadius: '6px',
                             border: '1px solid #d1c7ff'
                           }}>
@@ -2008,9 +2014,9 @@ const RestaurantMonitoring = () => {
                             </div>
                           </div>
                         ) : order.orderStatus === 'declined' ? (
-                          <div style={{ 
-                            padding: '8px 12px', 
-                            backgroundColor: '#f8d7da', 
+                          <div style={{
+                            padding: '8px 12px',
+                            backgroundColor: '#f8d7da',
                             borderRadius: '6px',
                             border: '1px solid #f5c6cb'
                           }}>
@@ -2021,13 +2027,13 @@ const RestaurantMonitoring = () => {
                               No further action required
                             </div>
                           </div>
-                        ) : activeDeliveryPartners.filter(partner => 
-                            partner.isActive === true && partner.isOnline === true
-                          ).length > 0 ? (
+                        ) : activeDeliveryPartners.filter(partner =>
+                          partner.isActive === true && partner.isOnline === true
+                        ).length > 0 ? (
                           <div>
-                            <div style={{ 
-                              padding: '8px 12px', 
-                              backgroundColor: '#d1ecf1', 
+                            <div style={{
+                              padding: '8px 12px',
+                              backgroundColor: '#d1ecf1',
                               borderRadius: '6px',
                               border: '1px solid #bee5eb',
                               marginBottom: '8px'
@@ -2039,9 +2045,9 @@ const RestaurantMonitoring = () => {
                                 FCM notifications sent to all active partners
                               </div>
                             </div>
-                            <div style={{ 
-                              padding: '4px 8px', 
-                              backgroundColor: '#f8f9fa', 
+                            <div style={{
+                              padding: '4px 8px',
+                              backgroundColor: '#f8f9fa',
                               borderRadius: '4px',
                               border: '1px solid #dee2e6',
                               marginBottom: '6px',
@@ -2092,9 +2098,9 @@ const RestaurantMonitoring = () => {
                             </div>
                           </div>
                         ) : (
-                          <div style={{ 
-                            padding: '8px 12px', 
-                            backgroundColor: '#fff3cd', 
+                          <div style={{
+                            padding: '8px 12px',
+                            backgroundColor: '#fff3cd',
                             borderRadius: '6px',
                             border: '1px solid #ffeaa7',
                             fontSize: '0.85em',
@@ -2277,14 +2283,14 @@ const RestaurantMonitoring = () => {
                         console.log('Remove button clicked');
                         console.log('editingCategory:', editingCategory);
                         console.log('newCategory:', newCategory);
-                        
+
                         // Check if we're removing an existing image from an existing category
                         const hasExistingImage = editingCategory && editingCategory.id && (editingCategory.image || editingCategory.imageFileName);
                         const isNewlySelectedImage = newCategory.imageFile || newCategory.imagePreview;
-                        
+
                         console.log('hasExistingImage:', hasExistingImage);
                         console.log('isNewlySelectedImage:', isNewlySelectedImage);
-                        
+
                         // If there's an existing image and we're not just removing a newly selected preview
                         if (hasExistingImage && (!isNewlySelectedImage || (newCategory.image && !newCategory.imageFile))) {
                           try {
@@ -2298,10 +2304,10 @@ const RestaurantMonitoring = () => {
                               }
                             );
                             console.log('Delete API response:', response.data);
-                            
+
                             // Update the categories list to reflect the change
                             setCategories(categories.map(cat =>
-                              cat.id === editingCategory.id 
+                              cat.id === editingCategory.id
                                 ? { ...cat, image: null, imageFileName: null }
                                 : cat
                             ));
@@ -2315,10 +2321,10 @@ const RestaurantMonitoring = () => {
                             return; // Don't clear the form if API call failed
                           }
                         }
-                        
-                        setNewCategory(prev => ({ 
-                          ...prev, 
-                          imageFile: null, 
+
+                        setNewCategory(prev => ({
+                          ...prev,
+                          imageFile: null,
                           imagePreview: null,
                           image: null
                         }));
@@ -2377,7 +2383,7 @@ const RestaurantMonitoring = () => {
                     placeholder="Enter subcategory name"
                     style={styles.input}
                   />
-                  <button 
+                  <button
                     type="button"
                     onClick={handleAddSubCategory}
                     style={{
@@ -2399,8 +2405,8 @@ const RestaurantMonitoring = () => {
                     <p style={{ margin: '5px 0 8px 0', fontSize: '0.9rem', color: '#666' }}>Current Subcategories:</p>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                       {newCategory.subCategories.map((subCat, index) => (
-                        <div 
-                          key={index} 
+                        <div
+                          key={index}
                           style={{
                             backgroundColor: '#e9ecef',
                             padding: '4px 10px',
@@ -2412,7 +2418,7 @@ const RestaurantMonitoring = () => {
                           }}
                         >
                           {subCat}
-                          <button 
+                          <button
                             type="button"
                             onClick={() => handleRemoveSubCategory(index)}
                             style={{
@@ -2873,7 +2879,7 @@ const RestaurantMonitoring = () => {
                                   // Extract string ID from DocumentReference if needed
                                   const categoryId = extractIdFromDocRef(item.categoryId);
                                   const category = categories.find(c => c.id === categoryId);
-                                  
+
                                   setEditingItem({
                                     ...item,
                                     categoryId: categoryId // Store as string ID for form compatibility

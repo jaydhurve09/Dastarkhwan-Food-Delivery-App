@@ -128,6 +128,7 @@ export default function Dashboard() {
     thisMonthSales: 0,
     todaySales: 0,
     ongoingOrders: 0,
+    totalOrders: 0,
     loading: true
   });
 
@@ -164,7 +165,7 @@ export default function Dashboard() {
   
   // KPI definitions
   const kpis = [
-    { label: "Total Orders", value: orders.length, icon: <FaShoppingCart size={28} color="#22c55e" />, bg: "#e7f9f2" },
+    { label: "Total Orders", value: monthlyStats.loading ? "..." : monthlyStats.totalOrders, icon: <FaShoppingCart size={28} color="#22c55e" />, bg: "#e7f9f2" },
     { label: "This Month Sales", value: monthlyStats.loading ? "..." : `₹${monthlyStats.thisMonthSales.toLocaleString('en-IN')}`, icon: <FaRupeeSign size={24} color="#38bdf8" />, bg: "#e0f2fe" },
     { label: "Today Sales", value: monthlyStats.loading ? "..." : `₹${monthlyStats.todaySales.toLocaleString('en-IN')}`, icon: <FaRupeeSign size={24} color="#818cf8" />, bg: "#e0e7ff" },
     { label: "Total Users", value: users.length, icon: <FaUsers size={28} color="#f59e42" />, bg: "#fff3e6", id: 'totalUsers' },
@@ -183,6 +184,7 @@ export default function Dashboard() {
     let thisMonthTotal = 0;
     let todayTotal = 0;
     let ongoingCount = 0;
+    let totalOrdersCount = 0;
     
     // Initialize status counts
     const statusCounts = {
@@ -195,14 +197,18 @@ export default function Dashboard() {
       yetToBeAccepted: 0
     };
     
-    // Define ongoing order statuses
-    const ongoingStatuses = ['yetToBeAccepted', 'preparing', 'prepared', 'dispatched'];
-    
     orders.forEach(order => {
-      // Calculate ongoing orders (check both status and orderStatus fields)
+      // Get order status (check both status and orderStatus fields)
       const orderStatus = order.status || order.orderStatus;
-      if (orderStatus && ongoingStatuses.includes(orderStatus)) {
+      
+      // Calculate ongoing orders: orders that do NOT have orderStatus as "yetToBeAccepted", "delivered", or "declined"
+      if (orderStatus && !['yetToBeAccepted', 'delivered', 'declined'].includes(orderStatus)) {
         ongoingCount++;
+      }
+      
+      // Calculate total orders: orders that do NOT have orderStatus as "yetToBeAccepted" or "declined"
+      if (orderStatus && !['yetToBeAccepted', 'declined'].includes(orderStatus)) {
+        totalOrdersCount++;
       }
       
       // Count order statuses
@@ -366,6 +372,7 @@ export default function Dashboard() {
       thisMonthSales: thisMonthTotal,
       todaySales: todayTotal,
       ongoingOrders: ongoingCount,
+      totalOrders: totalOrdersCount,
       loading: false
     });
   };

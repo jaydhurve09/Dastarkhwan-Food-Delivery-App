@@ -176,10 +176,28 @@ export default function Dashboard() {
 
   // Function to calculate this month's and today's sales and ongoing orders
   const calculateStats = () => {
+    // Get current date dynamically from system
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
-    const today = now.toDateString();
+    const today = new Date();
+    const todayString = today.toLocaleDateString(); // Get local date string
+    
+    console.log('Current date info:', {
+      currentMonth: currentMonth,
+      currentYear: currentYear,
+      today: today,
+      totalOrders: orders.length
+    });
+    
+    console.log('First few orders sample:', orders.slice(0, 3).map(order => ({
+      orderId: order.orderId,
+      orderStatus: order.orderStatus,
+      status: order.status,
+      orderValue: order.orderValue,
+      createdAt: order.createdAt,
+      createdAtType: typeof order.createdAt
+    })));
     
     let thisMonthTotal = 0;
     let todayTotal = 0;
@@ -240,18 +258,63 @@ export default function Dashboard() {
         }
       }
       
-      // Calculate sales if order has value and date
-      if (order.orderValue && order.createdAt) {
-        const orderDate = new Date(order.createdAt);
+      // Calculate sales only for delivered orders
+      if (order.orderValue && order.createdAt && orderStatus && orderStatus.toLowerCase() === 'delivered') {
+        console.log('Found delivered order:', {
+          orderId: order.orderId,
+          orderValue: order.orderValue,
+          orderStatus: orderStatus,
+          createdAtType: typeof order.createdAt,
+          createdAtRaw: order.createdAt
+        });
+        
+        // Handle Firestore timestamp - convert to JavaScript Date
+        let orderDate;
+        if (order.createdAt && typeof order.createdAt === 'object') {
+          if (order.createdAt.toDate && typeof order.createdAt.toDate === 'function') {
+            // Firestore Timestamp object with toDate method
+            orderDate = order.createdAt.toDate();
+          } else if (order.createdAt.seconds) {
+            // Firestore Timestamp as plain object with seconds
+            orderDate = new Date(order.createdAt.seconds * 1000);
+          } else if (order.createdAt._seconds) {
+            // Alternative Firestore format
+            orderDate = new Date(order.createdAt._seconds * 1000);
+          } else {
+            // Try direct conversion
+            orderDate = new Date(order.createdAt);
+          }
+        } else {
+          // Regular date string or number
+          orderDate = new Date(order.createdAt);
+        }
+        
+        console.log('Processed order date:', {
+          orderId: order.orderId,
+          orderDate: orderDate,
+          orderDateString: orderDate.toString(),
+          currentMonth: currentMonth,
+          currentYear: currentYear,
+          orderMonth: orderDate.getMonth(),
+          orderYear: orderDate.getFullYear(),
+          isCurrentMonth: orderDate.getMonth() === currentMonth && orderDate.getFullYear() === currentYear,
+          isToday: orderDate.toDateString() === today
+        });
         
         // Check if order is from this month
         if (orderDate.getMonth() === currentMonth && orderDate.getFullYear() === currentYear) {
           thisMonthTotal += parseFloat(order.orderValue) || 0;
+          console.log('✅ Added to thisMonthTotal:', order.orderValue, 'New total:', thisMonthTotal);
+        } else {
+          console.log('❌ Order not from current month');
         }
         
         // Check if order is from today
         if (orderDate.toDateString() === today) {
           todayTotal += parseFloat(order.orderValue) || 0;
+          console.log('✅ Added to todayTotal:', order.orderValue, 'New total:', todayTotal);
+        } else {
+          console.log('❌ Order not from today');
         }
       }
     });

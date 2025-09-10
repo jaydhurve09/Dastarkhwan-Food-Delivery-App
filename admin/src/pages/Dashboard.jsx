@@ -289,16 +289,19 @@ export default function Dashboard() {
           orderDate = new Date(order.createdAt);
         }
         
+        const orderDateString = orderDate.toLocaleDateString();
+        
         console.log('Processed order date:', {
           orderId: order.orderId,
           orderDate: orderDate,
-          orderDateString: orderDate.toString(),
+          orderDateString: orderDateString,
+          todayString: todayString,
           currentMonth: currentMonth,
           currentYear: currentYear,
           orderMonth: orderDate.getMonth(),
           orderYear: orderDate.getFullYear(),
           isCurrentMonth: orderDate.getMonth() === currentMonth && orderDate.getFullYear() === currentYear,
-          isToday: orderDate.toDateString() === today
+          isToday: orderDateString === todayString
         });
         
         // Check if order is from this month
@@ -310,11 +313,11 @@ export default function Dashboard() {
         }
         
         // Check if order is from today
-        if (orderDate.toDateString() === today) {
+        if (orderDateString === todayString) {
           todayTotal += parseFloat(order.orderValue) || 0;
           console.log('✅ Added to todayTotal:', order.orderValue, 'New total:', todayTotal);
         } else {
-          console.log('❌ Order not from today');
+          console.log('❌ Order not from today - orderDate:', orderDateString, 'today:', todayString);
         }
       }
     });

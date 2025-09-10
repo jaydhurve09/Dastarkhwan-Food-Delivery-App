@@ -18,7 +18,7 @@ const mockDeliveryAgents = ['Albus', 'Melvin', 'Tom', 'Cross', 'Alas', 'Zane', '
 
 // --- Helper Components (Self-Contained) ---
 import { AdminContext } from '../contexts/adminContext.jsx'; // Import the AdminContext
-const OrderDetailsModal = ({ order, onClose, onAssign, onCancel, onUpdate, onTrack }) => {
+const OrderDetailsModal = ({ order, onClose, onAssign, onCancel, onUpdate, onTrack, menuItemNameCache, extractMenuItemId }) => {
 
     const { deliveryPartners, users } = useContext(AdminContext); // Only get deliveryPartners if needed
     const [isEditing, setIsEditing] = useState(false);
@@ -106,7 +106,39 @@ const OrderDetailsModal = ({ order, onClose, onAssign, onCancel, onUpdate, onTra
                     </div>
                 ))
             ) : (
-                <ul>{Array.isArray(order.items) ? order.items.map((item, i) => <li key={i}>{typeof item === 'string' ? item : item.name || JSON.stringify(item)}</li>) : null}</ul>
+                <ul>
+                    {Array.isArray(order.products) && order.products.length > 0 ? (
+                        order.products.map((p, idx) => {
+                            const id = extractMenuItemId ? extractMenuItemId(p?.productRef) : null;
+                            let name = 'Item';
+                            let price = 0;
+                            
+                            if (id && menuItemNameCache && menuItemNameCache[id]) {
+                                name = menuItemNameCache[id];
+                                price = menuItemNameCache[id + '_price'] || 0;
+                            } else if (p?.name) {
+                                name = p.name;
+                            } else if (p?.itemName) {
+                                name = p.itemName;
+                            } else if (p?.menuItemName) {
+                                name = p.menuItemName;
+                            } else {
+                                name = `Menu Item ${idx + 1}`;
+                            }
+                            
+                            const qty = p?.quantity || 1;
+                            return (
+                                <li key={idx}>
+                                    {name} x{qty} {price > 0 ? `- ₹${price * qty}` : ''}
+                                </li>
+                            );
+                        })
+                    ) : Array.isArray(order.items) ? (
+                        order.items.map((item, i) => (
+                            <li key={i}>{typeof item === 'string' ? item : item.name || JSON.stringify(item)}</li>
+                        ))
+                    ) : null}
+                </ul>
             )}
         </div>
 
@@ -1033,12 +1065,13 @@ function convertFirestoreTimestampToIST(timestamp) {
             {selectedOrder && !showOrderPopup && (
                 <OrderDetailsModal 
                     order={selectedOrder} 
-                
                     onClose={() => setSelectedOrder(null)} 
                     onAssign={() => setIsAssignModalOpen(true)}
                     onCancel={handleCancelOrder}
                     onUpdate={handleUpdateOrderItems}
                     onTrack={() => setIsTrackingModalOpen(true)}
+                    menuItemNameCache={menuItemNameCache}
+                    extractMenuItemId={extractMenuItemId}
                 />
             )}
 

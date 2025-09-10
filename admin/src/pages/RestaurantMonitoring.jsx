@@ -155,6 +155,47 @@ const Modal = ({ children, isOpen, onClose }) => {
 
 const DEFAULT_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9IiNlZWVlZWUiLz48dGV4dCB4PSI1MCIgeT0iNTAiIGZvcnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzk5OSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+';
 
+// Helper function to check if delivery partner is assigned
+const isDeliveryPartnerAssigned = (order) => {
+  // Check if deliveryPartnerId exists and is a Firestore document reference
+  if (order.deliveryPartnerId && typeof order.deliveryPartnerId === 'object' && 
+      order.deliveryPartnerId._firestore && order.deliveryPartnerId._path) {
+    return true;
+  }
+  // Fallback to existing partnerAssigned field
+  return order.partnerAssigned ? true : false;
+};
+
+// Helper function to get delivery partner info
+const getDeliveryPartnerInfo = (order, deliveryPartners = []) => {
+  // If deliveryPartnerId is a Firestore reference, try to find partner info
+  if (order.deliveryPartnerId && typeof order.deliveryPartnerId === 'object' && order.deliveryPartnerId._path) {
+    // Extract the partner ID from the Firestore document reference
+    const partnerId = order.deliveryPartnerId._path.segments[order.deliveryPartnerId._path.segments.length - 1];
+    
+    // Find the partner in deliveryPartners collection
+    const partner = deliveryPartners.find(p => p.id === partnerId);
+    if (partner) {
+      return {
+        id: partner.id,
+        display_name: partner.display_name || partner.name || 'Delivery Partner',
+        phone: partner.phone || null
+      };
+    }
+  }
+
+  // Fallback to partnerAssigned field (legacy support)
+  if (order.partnerAssigned) {
+    return {
+      id: order.partnerAssigned.partnerId || order.partnerAssigned.id,
+      display_name: order.partnerAssigned.display_name || order.partnerAssigned.partnerName || 'Delivery Partner',
+      phone: order.partnerAssigned.phone || null
+    };
+  }
+  
+  return null;
+};
+
 const RestaurantMonitoring = () => {
   const { deliveryPartners, orders, users, fetchOrders, activeDeliveryPartners, fetchActiveDeliveryPartners } = useContext(AdminContext);
   const [menuItems, setMenuItems] = useState([]);
@@ -266,11 +307,11 @@ const RestaurantMonitoring = () => {
   });
 
   const filteredOngoingOrders = ongoingOrders.filter(order => {
-    // Filter by delivery partner status
-    if (deliveryPartnerFilter === 'assigned' && !order.assigningPartner && !order.partnerAssigned) {
+    // Filter by delivery partner status using new helper function
+    if (deliveryPartnerFilter === 'assigned' && !order.assigningPartner && !isDeliveryPartnerAssigned(order)) {
       return false;
     }
-    if (deliveryPartnerFilter === 'unassigned' && (order.assigningPartner || order.partnerAssigned)) {
+    if (deliveryPartnerFilter === 'unassigned' && (order.assigningPartner || isDeliveryPartnerAssigned(order))) {
       return false;
     }
 
@@ -284,7 +325,8 @@ const RestaurantMonitoring = () => {
     const total = (order.orderTotal || 0).toString();
     const date = order.order_Date ? new Date(order.order_Date.seconds * 1000).toLocaleDateString().toLowerCase() : '';
     const items = order.products ? order.products.map(p => (p.name || '').toLowerCase()).join(' ') : '';
-    const partnerName = order.partnerAssigned?.partnerName?.toLowerCase() || '';
+    const partnerInfo = getDeliveryPartnerInfo(order, deliveryPartners);
+    const partnerName = partnerInfo?.display_name?.toLowerCase() || '';
 
     return orderId.includes(searchTerm) ||
       customerName.includes(searchTerm) ||
@@ -1579,7 +1621,7 @@ const RestaurantMonitoring = () => {
                     </td>
                     <td style={styles.td}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '200px' }}>
-                        {order.partnerAssigned ? (
+                        {isDeliveryPartnerAssigned(order) ? (
                           <div style={{
                             padding: '8px 12px',
                             backgroundColor: '#e8f5e8',
@@ -1587,11 +1629,11 @@ const RestaurantMonitoring = () => {
                             border: '1px solid #c3e6c3'
                           }}>
                             <div style={{ fontWeight: 'bold', fontSize: '0.9em', color: '#2d5f2d' }}>
-                              {order.partnerAssigned.name || order.partnerAssigned.partnerName}
+                              {getDeliveryPartnerInfo(order, deliveryPartners)?.display_name || 'Delivery Partner'}
                             </div>
-                            {(order.partnerAssigned.phone) && (
+                            {getDeliveryPartnerInfo(order)?.phone && (
                               <div style={{ fontSize: '0.8em', color: '#666' }}>
-                                📞 {order.partnerAssigned.phone}
+                                📞 {getDeliveryPartnerInfo(order).phone}
                               </div>
                             )}
                             <div style={{ fontSize: '0.75em', color: '#2d5f2d', marginTop: '4px' }}>
@@ -1624,11 +1666,11 @@ const RestaurantMonitoring = () => {
                             border: '1px solid #d1c7ff'
                           }}>
                             <div style={{ fontWeight: 'bold', fontSize: '0.9em', color: '#6b46c1' }}>
-                              {order.partnerAssigned ? (order.partnerAssigned.name || order.partnerAssigned.partnerName) : 'Delivery Partner'}
+                              {getDeliveryPartnerInfo(order, deliveryPartners)?.display_name || 'Delivery Partner'}
                             </div>
-                            {order.partnerAssigned && order.partnerAssigned.phone && (
+                            {getDeliveryPartnerInfo(order)?.phone && (
                               <div style={{ fontSize: '0.8em', color: '#666' }}>
-                                📞 {order.partnerAssigned.phone}
+                                📞 {getDeliveryPartnerInfo(order).phone}
                               </div>
                             )}
                             <div style={{ fontSize: '0.75em', color: '#6b46c1', marginTop: '4px' }}>
@@ -1973,7 +2015,7 @@ const RestaurantMonitoring = () => {
                     </td>
                     <td style={styles.td}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '200px' }}>
-                        {order.partnerAssigned ? (
+                        {isDeliveryPartnerAssigned(order) ? (
                           <div style={{
                             padding: '8px 12px',
                             backgroundColor: '#e8f5e8',
@@ -1981,11 +2023,11 @@ const RestaurantMonitoring = () => {
                             border: '1px solid #c3e6c3'
                           }}>
                             <div style={{ fontWeight: 'bold', fontSize: '0.9em', color: '#2d5f2d' }}>
-                              {order.partnerAssigned.name || order.partnerAssigned.partnerName}
+                              {getDeliveryPartnerInfo(order, deliveryPartners)?.display_name || 'Delivery Partner'}
                             </div>
-                            {(order.partnerAssigned.phone) && (
+                            {getDeliveryPartnerInfo(order)?.phone && (
                               <div style={{ fontSize: '0.8em', color: '#666' }}>
-                                📞 {order.partnerAssigned.phone}
+                                📞 {getDeliveryPartnerInfo(order).phone}
                               </div>
                             )}
                             <div style={{ fontSize: '0.75em', color: '#2d5f2d', marginTop: '4px' }}>
@@ -2018,11 +2060,11 @@ const RestaurantMonitoring = () => {
                             border: '1px solid #d1c7ff'
                           }}>
                             <div style={{ fontWeight: 'bold', fontSize: '0.9em', color: '#6b46c1' }}>
-                              {order.partnerAssigned ? (order.partnerAssigned.name || order.partnerAssigned.partnerName) : 'Delivery Partner'}
+                              {getDeliveryPartnerInfo(order, deliveryPartners)?.display_name || 'Delivery Partner'}
                             </div>
-                            {order.partnerAssigned && order.partnerAssigned.phone && (
+                            {getDeliveryPartnerInfo(order)?.phone && (
                               <div style={{ fontSize: '0.8em', color: '#666' }}>
-                                📞 {order.partnerAssigned.phone}
+                                📞 {getDeliveryPartnerInfo(order).phone}
                               </div>
                             )}
                             <div style={{ fontSize: '0.75em', color: '#6b46c1', marginTop: '4px' }}>

@@ -11,6 +11,7 @@ const AdminProvider = ({ children }) => {
   const [users, setUsers] = useState([]);
   const [feedback, setFeedback] = useState([]);
   const [complaints, setComplaints] = useState([]);
+  const [menuItems, setMenuItems] = useState([]);
 
   const fetchOrders = async () => {
     try {
@@ -66,6 +67,15 @@ const AdminProvider = ({ children }) => {
     }
   };
 
+  const fetchMenuItems = async () => {
+    try {
+      const response = await api.get('/menu-items');
+      setMenuItems(response.data.menuItems || response.data || []);
+    } catch (error) {
+      console.error('Error fetching menu items:', error);
+    }
+  };
+
   React.useEffect(() => {
     // Only fetch data if user is authenticated
     const token = localStorage.getItem('adminToken');
@@ -76,6 +86,7 @@ const AdminProvider = ({ children }) => {
       fetchUsers();
       fetchFeedback();
       fetchComplaints();
+      fetchMenuItems();
     }
   }, []);
 
@@ -84,10 +95,12 @@ const AdminProvider = ({ children }) => {
     deliveryPartners,
     activeDeliveryPartners,
     users,
+    menuItems,
     fetchOrders,
     fetchDeliveryPartners,
     fetchActiveDeliveryPartners,
     fetchUsers,
+    fetchMenuItems,
     feedback,
     fetchFeedback,
     complaints,

@@ -1243,3 +1243,86 @@ export const updateOrderDriverPositions = async (req, res) => {
     });
   }
 };
+
+// Get restaurant earnings from delivered orders
+export const getRestaurantEarnings = async (req, res) => {
+  try {
+    console.log('Fetching restaurant earnings from delivered orders...');
+    
+    // Get all orders with 'delivered' status
+    const deliveredOrdersSnapshot = await db.collection('orders')
+      .where('orderStatus', '==', 'delivered')
+      .get();
+    
+    console.log(`Found ${deliveredOrdersSnapshot.docs.length} delivered orders`);
+    
+    let totalEarnings = 0;
+    let totalDeliveryFees = 0;
+    const deliveredOrders = [];
+    
+    for (const doc of deliveredOrdersSnapshot.docs) {
+      const orderData = doc.data();
+      const orderValue = parseFloat(orderData.orderValue) || 0;
+      const deliveryFee = parseFloat(orderData.deliveryFee) || 0;
+      
+      totalEarnings += orderValue;
+      totalDeliveryFees += deliveryFee;
+      
+      // Get user info if userRef exists
+      let userInfo = null;
+      if (orderData.userRef) {
+        try {
+          let userDoc;
+          if (typeof orderData.userRef === 'string') {
+            userDoc = await db.collection('users').doc(orderData.userRef).get();
+          } else if (orderData.userRef.get) {
+            userDoc = await orderData.userRef.get();
+          } else if (orderData.userRef.path) {
+            const userId = orderData.userRef.path.split('/').pop();
+            userDoc = await db.collection('users').doc(userId).get();
+          }
+          
+          if (userDoc && userDoc.exists) {
+            userInfo = userDoc.data();
+          }
+        } catch (error) {
+          console.log('Error fetching user info:', error.message);
+        }
+      }
+      
+      deliveredOrders.push({
+        id: doc.id,
+        ...orderData,
+        userInfo: userInfo
+      });
+    }
+    
+    // Sort by createdAt (most recent first)
+    deliveredOrders.sort((a, b) => {
+      const dateA = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate() : new Date(a.createdAt)) : new Date(0);
+      const dateB = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate() : new Date(b.createdAt)) : new Date(0);
+      return dateB - dateA;
+    });
+    
+    console.log(`Total restaurant earnings: ₹${totalEarnings.toFixed(2)}`);
+    console.log(`Total delivery partner payouts: ₹${totalDeliveryFees.toFixed(2)}`);
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        totalEarnings: totalEarnings,
+        totalDeliveryFees: totalDeliveryFees,
+        orderCount: deliveredOrders.length,
+        orders: deliveredOrders
+      },
+      message: 'Restaurant earnings and delivery partner payouts calculated successfully'
+    });
+  } catch (error) {
+    console.error('Error fetching restaurant earnings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching restaurant earnings',
+      error: error.message
+    });
+  }
+};

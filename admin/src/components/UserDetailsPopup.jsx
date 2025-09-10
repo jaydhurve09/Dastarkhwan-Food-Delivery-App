@@ -139,7 +139,7 @@ const UserDetailsPopup = ({ user, isOpen, onClose, userOrders = [] }) => {
               <div>
                 <strong style={{ color: '#495057' }}>Phone:</strong>
                 <div style={{ color: '#2c3e50' }}>
-                  {user.phone || user.phoneNumber || 'N/A'}
+                  {user.phone || user.phone_number || user.phoneNumber || 'N/A'}
                 </div>
               </div>
             </div>
@@ -176,7 +176,23 @@ const UserDetailsPopup = ({ user, isOpen, onClose, userOrders = [] }) => {
                 <div>
                   <strong style={{ color: '#495057' }}>Address:</strong>
                   <div style={{ color: '#2c3e50', lineHeight: '1.4' }}>
-                    {user.address}
+                    {(() => {
+                      const addr = user.address;
+                      if (!addr) return 'N/A';
+                      if (typeof addr === 'string') return addr;
+                      if (typeof addr === 'object') {
+                        const parts = [
+                          addr.street,
+                          addr.area,
+                          addr.landmark,
+                          addr.city,
+                          addr.state,
+                          addr.pincode
+                        ].filter(Boolean);
+                        return parts.length > 0 ? parts.join(', ') : 'N/A';
+                      }
+                      return 'N/A';
+                    })()}
                   </div>
                 </div>
               </div>

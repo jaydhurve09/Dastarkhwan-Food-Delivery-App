@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FaCheck, FaTimes, FaEdit, FaTrash, FaSearch } from 'react-icons/fa';
 import OrderDetailsPopup from './OrderDetailsPopup';
+import UserDetailsPopup from './UserDetailsPopup';
 import { MdOutlineRefresh } from "react-icons/md";
 
 const IncomingOrders = ({
@@ -31,6 +32,8 @@ const IncomingOrders = ({
 }) => {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showOrderPopup, setShowOrderPopup] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [showUserPopup, setShowUserPopup] = useState(false);
 
   const handleRowClick = (order) => {
     setSelectedOrder(order);
@@ -40,6 +43,17 @@ const IncomingOrders = ({
   const closeOrderPopup = () => {
     setShowOrderPopup(false);
     setSelectedOrder(null);
+  };
+
+  const handleCustomerClick = (e, order) => {
+    e.stopPropagation();
+    setSelectedUser(order.userInfo);
+    setShowUserPopup(true);
+  };
+
+  const closeUserPopup = () => {
+    setShowUserPopup(false);
+    setSelectedUser(null);
   };
 
   return (
@@ -145,15 +159,15 @@ const IncomingOrders = ({
           <table style={{ ...styles.table, width: '100%' }}>
             <thead>
               <tr>
-                <th style={styles.th}>Order ID</th>
-                <th style={styles.th}>Customer</th>
-                <th style={styles.th}>Items</th>
-                <th style={styles.th}>Total</th>
-                <th style={styles.th}>Address</th>
-                <th style={styles.th}>Date</th>
-                <th style={styles.th}>Status</th>
-                <th style={{...styles.th, width: '200px', maxWidth: '200px'}}>Delivery Partner</th>
-                <th style={styles.th}>Actions</th>
+                <th style={{...styles.th, textAlign: 'left'}}>Order ID</th>
+                <th style={{...styles.th, textAlign: 'left'}}>Customer</th>
+                <th style={{...styles.th, textAlign: 'left'}}>Items</th>
+                <th style={{...styles.th, textAlign: 'left'}}>Total</th>
+                <th style={{...styles.th, textAlign: 'left'}}>Address</th>
+                <th style={{...styles.th, textAlign: 'left'}}>Date</th>
+                <th style={{...styles.th, textAlign: 'left'}}>Status</th>
+                <th style={{...styles.th, width: '200px', maxWidth: '200px', textAlign: 'left'}}>Delivery Partner</th>
+                <th style={{...styles.th, textAlign: 'left'}}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -189,12 +203,35 @@ const IncomingOrders = ({
                       <div style={{ fontWeight: 'bold' }}>#{order.orderId || order.id}</div>
                     </td>
                     <td style={styles.td}>
-                      {order.userInfo?.display_name || order.userInfo?.name || 'N/A'}
+                      <div 
+                        style={{
+                          maxWidth: '120px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer',
+                          color: '#3498db',
+                          textDecoration: 'none'
+                        }}
+                        onClick={(e) => handleCustomerClick(e, order)}
+                      >
+                        {order.userInfo?.display_name || order.userInfo?.name || 'N/A'}
+                      </div>
                     </td>
                     <td style={styles.td}>
                       {Array.isArray(order.products) && order.products.length > 0 ? (
-                        <div>
-                          <p className="font-medium">
+                        <div style={{
+                          maxWidth: '200px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          <p className="font-medium" style={{
+                            margin: 0,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
                             {order.products.map((p, idx) => {
                               console.log('IncomingOrders - Product:', p); // Debug log
                               const id = extractMenuItemId(p?.productRef);
@@ -254,8 +291,30 @@ const IncomingOrders = ({
                       ₹{order.orderTotal?.toFixed(2) || '0.00'}
                     </td>
                     <td style={styles.td}>
-                      <div style={{ fontSize: '0.85em', maxWidth: '200px', wordWrap: 'break-word' }}>
-                        {order.deliveryAddress || order.customerAddress || order.address || 'N/A'}
+                      <div style={{ 
+                        fontSize: '0.85em', 
+                        maxWidth: '150px', 
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {(() => {
+                          const addr = order.deliveryAddress || order.customerAddress || order.address;
+                          if (!addr) return 'N/A';
+                          if (typeof addr === 'string') return addr;
+                          if (typeof addr === 'object') {
+                            const parts = [
+                              addr.street,
+                              addr.area,
+                              addr.landmark,
+                              addr.city,
+                              addr.state,
+                              addr.pincode
+                            ].filter(Boolean);
+                            return parts.length > 0 ? parts.join(', ') : 'N/A';
+                          }
+                          return 'N/A';
+                        })()}
                       </div>
                     </td>
                     <td style={styles.td}>
@@ -438,7 +497,11 @@ const IncomingOrders = ({
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                               <select
                                 value={selectedPartners[order.id] || ''}
-                                onChange={(e) => handlePartnerSelection(order.id, e.target.value)}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  handlePartnerSelection(order.id, e.target.value);
+                                }}
+                                onClick={(e) => e.stopPropagation()}
                                 style={{
                                   flex: 1,
                                   padding: '6px 8px',
@@ -459,7 +522,10 @@ const IncomingOrders = ({
                                   ))}
                               </select>
                               <button
-                                onClick={() => handleAssignPartner(order.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAssignPartner(order.id);
+                                }}
                                 disabled={!selectedPartners[order.id] || assigningOrders.has(order.id)}
                                 style={{
                                   padding: '6px 12px',
@@ -495,7 +561,10 @@ const IncomingOrders = ({
                         {order.orderStatus === 'yetToBeAccepted' ? (
                           <>
                             <button
-                              onClick={() => handleAcceptOrderWithNotification(order.id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAcceptOrderWithNotification(order.id);
+                              }}
                               style={{
                                 ...styles.button,
                                 backgroundColor: '#2ecc71',
@@ -513,7 +582,10 @@ const IncomingOrders = ({
                               <FaCheck /> Accept
                             </button>
                             <button
-                              onClick={() => handleUpdateOrderStatus(order.id, 'declined')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUpdateOrderStatus(order.id, 'declined');
+                              }}
                               style={{
                                 ...styles.button,
                                 backgroundColor: '#e74c3c',
@@ -532,7 +604,10 @@ const IncomingOrders = ({
                         ) : order.orderStatus === 'preparing' ? (
                           <>
                             <button
-                              onClick={() => handleUpdateOrderStatus(order.id, 'prepared')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUpdateOrderStatus(order.id, 'prepared');
+                              }}
                               style={{
                                 ...styles.button,
                                 backgroundColor: '#3498db',
@@ -590,6 +665,13 @@ const IncomingOrders = ({
         isOpen={showOrderPopup}
         onClose={closeOrderPopup}
         menuItemNameCache={menuItemNameCache}
+      />
+
+      {/* User Details Popup */}
+      <UserDetailsPopup
+        user={selectedUser}
+        isOpen={showUserPopup}
+        onClose={closeUserPopup}
       />
     </div>
   );

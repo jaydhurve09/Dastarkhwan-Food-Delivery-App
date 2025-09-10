@@ -174,12 +174,68 @@ const OngoingOrders = ({
                     </td>
                     <td style={styles.td}>
                       <div style={{ fontSize: '0.85em', maxWidth: '200px', wordWrap: 'break-word' }}>
-                        {order.deliveryAddress?.address || order.customerAddress || order.address || 'N/A'}
+                        {order.deliveryAddress || order.customerAddress || order.address || 'N/A'}
                       </div>
                     </td>
                     <td style={styles.td}>
                       <div style={{ fontSize: '0.8em', color: '#666' }}>
-                        {order.order_Date ? new Date(order.order_Date.seconds * 1000).toLocaleDateString() : 'N/A'}
+                        {(() => {
+                          try {
+                            let dateToFormat = null;
+                            
+                            // Try createdAt first
+                            if (order.createdAt) {
+                              console.log('createdAt structure:', order.createdAt);
+                              
+                              // Firestore Timestamp with toDate() method
+                              if (typeof order.createdAt.toDate === 'function') {
+                                dateToFormat = order.createdAt.toDate();
+                              }
+                              // Firestore Timestamp with _seconds/_nanoseconds (underscore format)
+                              else if (order.createdAt._seconds !== undefined) {
+                                dateToFormat = new Date(order.createdAt._seconds * 1000 + (order.createdAt._nanoseconds || 0) / 1000000);
+                              }
+                              // Firestore Timestamp with seconds/nanoseconds (no underscore format)
+                              else if (order.createdAt.seconds !== undefined) {
+                                dateToFormat = new Date(order.createdAt.seconds * 1000 + (order.createdAt.nanoseconds || 0) / 1000000);
+                              }
+                              // Regular Date object or string
+                              else {
+                                dateToFormat = new Date(order.createdAt);
+                              }
+                            }
+                            // Fallback to order_Date
+                            else if (order.order_Date) {
+                              console.log('order_Date structure:', order.order_Date);
+                              
+                              if (typeof order.order_Date.toDate === 'function') {
+                                dateToFormat = order.order_Date.toDate();
+                              }
+                              else if (order.order_Date._seconds !== undefined) {
+                                dateToFormat = new Date(order.order_Date._seconds * 1000 + (order.order_Date._nanoseconds || 0) / 1000000);
+                              }
+                              else if (order.order_Date.seconds !== undefined) {
+                                dateToFormat = new Date(order.order_Date.seconds * 1000 + (order.order_Date.nanoseconds || 0) / 1000000);
+                              }
+                              else {
+                                dateToFormat = new Date(order.order_Date);
+                              }
+                            }
+                            
+                            if (dateToFormat && !isNaN(dateToFormat.getTime())) {
+                              return dateToFormat.toLocaleDateString('en-IN', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric'
+                              });
+                            }
+                            
+                            return 'N/A';
+                          } catch (error) {
+                            console.error('Date parsing error:', error, 'Order:', order);
+                            return 'Date Error';
+                          }
+                        })()}
                       </div>
                     </td>
                     <td style={styles.td}>

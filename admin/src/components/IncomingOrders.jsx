@@ -204,12 +204,80 @@ const IncomingOrders = ({
                     </td>
                     <td style={styles.td}>
                       <div style={{ fontSize: '0.85em', maxWidth: '200px', wordWrap: 'break-word' }}>
-                        {order.deliveryAddress?.address || order.customerAddress || order.address || 'N/A'}
+                        {order.deliveryAddress || order.customerAddress || order.address || 'N/A'}
                       </div>
                     </td>
                     <td style={styles.td}>
                       <div style={{ fontSize: '0.8em', color: '#666' }}>
-                        {order.order_Date ? new Date(order.order_Date.seconds * 1000).toLocaleDateString() : 'N/A'}
+                        {(() => {
+                          try {
+                            // Debug: Log all possible date fields
+                            console.log('Order date fields:', {
+                              createdAt: order.createdAt,
+                              order_Date: order.order_Date,
+                              created_at: order.created_at,
+                              timestamp: order.timestamp,
+                              date: order.date,
+                              orderDate: order.orderDate,
+                              allKeys: Object.keys(order)
+                            });
+                            
+                            let dateToFormat = null;
+                            
+                            // Try all possible date field names
+                            const dateFields = [
+                              order.createdAt,
+                              order.order_Date, 
+                              order.created_at,
+                              order.timestamp,
+                              order.date,
+                              order.orderDate
+                            ];
+                            
+                            for (const dateField of dateFields) {
+                              if (dateField) {
+                                console.log('Processing date field:', dateField);
+                                
+                                // Firestore Timestamp with toDate() method
+                                if (typeof dateField.toDate === 'function') {
+                                  dateToFormat = dateField.toDate();
+                                  break;
+                                }
+                                // Firestore Timestamp with _seconds/_nanoseconds (underscore format)
+                                else if (dateField._seconds !== undefined) {
+                                  dateToFormat = new Date(dateField._seconds * 1000 + (dateField._nanoseconds || 0) / 1000000);
+                                  break;
+                                }
+                                // Firestore Timestamp with seconds/nanoseconds (no underscore format)
+                                else if (dateField.seconds !== undefined) {
+                                  dateToFormat = new Date(dateField.seconds * 1000 + (dateField.nanoseconds || 0) / 1000000);
+                                  break;
+                                }
+                                // Regular Date object or string
+                                else {
+                                  const testDate = new Date(dateField);
+                                  if (!isNaN(testDate.getTime())) {
+                                    dateToFormat = testDate;
+                                    break;
+                                  }
+                                }
+                              }
+                            }
+                            
+                            if (dateToFormat && !isNaN(dateToFormat.getTime())) {
+                              return dateToFormat.toLocaleDateString('en-IN', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric'
+                              });
+                            }
+                            
+                            return 'No Date Found';
+                          } catch (error) {
+                            console.error('Date parsing error:', error, 'Order:', order);
+                            return 'Date Error';
+                          }
+                        })()}
                       </div>
                     </td>
                     <td style={styles.td}>
@@ -383,12 +451,14 @@ const IncomingOrders = ({
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                gap: '5px',
-                                fontSize: '12px',
-                                padding: '6px 12px'
+                                gap: '4px',
+                                fontSize: '11px',
+                                padding: '6px 10px',
+                                minWidth: 'auto',
+                                whiteSpace: 'nowrap'
                               }}
                             >
-                              <FaCheck /> Accept & Notify All Partners
+                              <FaCheck /> Accept
                             </button>
                             <button
                               onClick={() => handleUpdateOrderStatus(order.id, 'declined')}
@@ -434,9 +504,11 @@ const IncomingOrders = ({
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                gap: '5px',
-                                fontSize: '12px',
-                                padding: '6px 12px'
+                                gap: '4px',
+                                fontSize: '11px',
+                                padding: '6px 10px',
+                                minWidth: 'auto',
+                                whiteSpace: 'nowrap'
                               }}
                             >
                               <FaTimes /> Decline

@@ -74,16 +74,16 @@ const MenuManagement = ({
             <div style={{ textAlign: 'center', padding: '20px' }}>No menu items found</div>
           ) : (
             <div style={styles.tableContainer}>
-              <table style={styles.table}>
+              <table style={{...styles.table, width: '100%', tableLayout: 'fixed'}}>
                 <thead>
                   <tr>
-                    <th style={styles.tableHeader}>Image</th>
-                    <th style={styles.tableHeader}>Name</th>
-                    <th style={styles.tableHeader}>Category</th>
-                    <th style={styles.tableHeader}>Price (₹)</th>
-                    <th style={styles.tableHeader}>Type</th>
-                    <th style={styles.tableHeader}>Status</th>
-                    <th style={styles.tableHeader}>Actions</th>
+                    <th style={{...styles.tableHeader, width: '80px'}}>Image</th>
+                    <th style={{...styles.tableHeader, width: '25%'}}>Name</th>
+                    <th style={{...styles.tableHeader, width: '15%'}}>Category</th>
+                    <th style={{...styles.tableHeader, width: '12%'}}>Price (₹)</th>
+                    <th style={{...styles.tableHeader, width: '10%'}}>Type</th>
+                    <th style={{...styles.tableHeader, width: '10%'}}>Status</th>
+                    <th style={{...styles.tableHeader, width: '120px'}}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -100,11 +100,11 @@ const MenuManagement = ({
                           }}
                         />
                       </td>
-                      <td style={styles.tableCell}>
-                        <div style={{ fontWeight: 'bold' }}>{item.name || 'Unnamed Item'}</div>
-                        <div style={{ fontSize: '0.8em', color: '#666' }}>{item.description || 'No description'}</div>
+                      <td style={{...styles.tableCell, padding: '12px'}}>
+                        <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>{item.name || 'Unnamed Item'}</div>
+                        <div style={{ fontSize: '12px', color: '#666', lineHeight: '1.4' }}>{item.description || 'No description'}</div>
                       </td>
-                      <td style={styles.tableCell}>
+                      <td style={{...styles.tableCell, padding: '12px', fontSize: '14px'}}>
                         {(() => {
                           // Extract string ID from Firestore DocumentReference if needed
                           const categoryId = extractIdFromDocRef(item.categoryId);
@@ -116,19 +116,19 @@ const MenuManagement = ({
                           return item.categoryName || categoryId || 'Unknown Category';
                         })()}
                       </td>
-                      <td style={styles.tableCell}>₹{item.price ? parseFloat(item.price).toFixed(2) : '0.00'}</td>
-                      <td style={styles.tableCell}>
-                        <span style={getFoodTypeStyle(item.isVeg)}>
+                      <td style={{...styles.tableCell, padding: '12px', fontSize: '14px', fontWeight: 'bold', color: '#2c3e50'}}>₹{item.price ? parseFloat(item.price).toFixed(2) : '0.00'}</td>
+                      <td style={{...styles.tableCell, padding: '12px', textAlign: 'center'}}>
+                        <span style={{...getFoodTypeStyle(item.isVeg), padding: '4px 8px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold'}}>
                           {item.isVeg ? 'Veg' : 'Non-Veg'}
                         </span>
                       </td>
-                      <td style={styles.tableCell}>
-                        <span style={getStatusStyle(item.isActive)}>
+                      <td style={{...styles.tableCell, padding: '12px', textAlign: 'center'}}>
+                        <span style={{...getStatusStyle(item.isActive), padding: '4px 8px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold'}}>
                           {item.isActive ? 'Active' : 'Inactive'}
                         </span>
                       </td>
-                      <td style={styles.tableCell}>
-                        <div style={{ display: 'flex', gap: '8px' }}>
+                      <td style={{...styles.tableCell, padding: '12px'}}>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                           <button
                             onClick={() => {
                               // Extract string ID from DocumentReference if needed

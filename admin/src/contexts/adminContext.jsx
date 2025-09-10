@@ -70,9 +70,23 @@ const AdminProvider = ({ children }) => {
   const fetchMenuItems = async () => {
     try {
       const response = await api.get('/menu-items');
-      setMenuItems(response.data.menuItems || response.data || []);
+      console.log('AdminContext - Menu items API response:', response.data); // Debug log
+      
+      // Handle different response structures
+      let items = [];
+      if (Array.isArray(response.data)) {
+        items = response.data;
+      } else if (response.data.data && Array.isArray(response.data.data)) {
+        items = response.data.data;
+      } else if (response.data.menuItems && Array.isArray(response.data.menuItems)) {
+        items = response.data.menuItems;
+      }
+      
+      console.log('AdminContext - Extracted menu items:', items); // Debug log
+      setMenuItems(items);
     } catch (error) {
       console.error('Error fetching menu items:', error);
+      setMenuItems([]);
     }
   };
 

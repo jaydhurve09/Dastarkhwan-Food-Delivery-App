@@ -26,7 +26,7 @@ const OrderDetailsModal = ({ order, onClose, onAssign, onCancel, onUpdate, onTra
         order && Array.isArray(order.items) ? [...order.items] : []
     );
 
-    const canModify = order && order.status !== 'Delivered' && order.status !== 'Cancelled';
+    const canModify = order && order.orderStatus !== 'delivered' && order.orderStatus !== 'declined';
 
     const handleUpdate = () => {
         onUpdate(order.id, editedItems); // Send back the modified array of item objects
@@ -75,7 +75,7 @@ const OrderDetailsModal = ({ order, onClose, onAssign, onCancel, onUpdate, onTra
             <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
                 <h2 style={styles.modalHeader}>Order No: {order.orderNumber}</h2>
                 <div style={styles.detailRow}><strong>Customer:</strong> {userName}</div>
-                <div style={styles.detailRow}><strong>Status:</strong> {order.status}</div>
+                <div style={styles.detailRow}><strong>Status:</strong> {order.orderStatus}</div>
                 <div style={styles.detailRow}><strong>Delivery Agent:</strong> {deliveryAgentName || 'Not Assigned'}</div>
                 <div style={styles.detailRow}>
                     <strong>Items:</strong>
@@ -123,7 +123,7 @@ const OrderDetailsModal = ({ order, onClose, onAssign, onCancel, onUpdate, onTra
                                 )}
                             </>
                         )}
-                        {order.status === 'Out for Delivery' && <button style={{...styles.button, backgroundColor: '#8b5cf6', marginLeft: '10px'}} onClick={() => onTrack(order)}><FaMapMarkerAlt /> Track</button>}
+                        {order.orderStatus === 'dispatched' && <button style={{...styles.button, backgroundColor: '#8b5cf6', marginLeft: '10px'}} onClick={() => onTrack(order)}><FaMapMarkerAlt /> Track</button>}
                     </div>
                     <button style={{ ...styles.button, backgroundColor: '#6b7280' }} onClick={onClose}>Close</button>
                 </div>
@@ -229,7 +229,7 @@ const TrackingModal = ({ orders, onClose }) => {
             <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '8px', textAlign: 'center', maxWidth: '500px', width: '90%' }}>
                 <h3 style={{marginTop: 0}}>Tracking Order {orders.id}</h3>
                 <p>Delivery Agent: <strong>{deliveryAgentName}</strong></p>
-                {orders.status === 'Out for Delivery' && orders.agentLocation ? (
+                {orders.orderStatus === 'dispatched' && orders.agentLocation ? (
                     <>
                         <div style={mapPlaceholderStyle}>
                             <FaMapMarkerAlt size={40} color="#3b82f6" />
@@ -290,10 +290,10 @@ export default function OrdersDelivery() {
     const filteredData = useMemo(() => {
         let data = activeTab === 'Orders'
             ? orders
-            : orders.filter(o => o.deliveryPartnerId && o.status !== 'Cancelled');
+            : orders.filter(o => o.deliveryPartnerId && o.orderStatus !== 'declined');
 
         if (statusFilter !== 'All') {
-            data = data.filter(o => o.status === statusFilter);
+            data = data.filter(o => o.orderStatus === statusFilter);
         }
         
         if (searchTerm) {
@@ -355,10 +355,29 @@ export default function OrdersDelivery() {
 
     // Build menu item name cache from context menuItems
     useEffect(() => {
-        if (menuItems && menuItems.length > 0) {
+        console.log('OrdersDelivery - Building menuItemNameCache from items:', menuItems); // Debug log
+        console.log('OrdersDelivery - menuItems length:', menuItems ? menuItems.length : 'menuItems is null/undefined'); // Debug log
+        console.log('OrdersDelivery - menuItems type:', typeof menuItems); // Debug log
+        
+        // Handle different response structures
+        let itemsArray = [];
+        if (menuItems && Array.isArray(menuItems)) {
+            itemsArray = menuItems;
+        } else if (menuItems && menuItems.data && Array.isArray(menuItems.data)) {
+            itemsArray = menuItems.data;
+        } else if (menuItems && menuItems.menuItems && Array.isArray(menuItems.menuItems)) {
+            itemsArray = menuItems.menuItems;
+        }
+        
+        console.log('OrdersDelivery - Extracted items array:', itemsArray); // Debug log
+        console.log('OrdersDelivery - Items array length:', itemsArray.length); // Debug log
+        
+        if (itemsArray && itemsArray.length > 0) {
             const cache = {};
-            menuItems.forEach(item => {
+            itemsArray.forEach(item => {
                 if (item.id) {
+                    console.log(`OrdersDelivery - Processing item - original ID:`, item.id, `type:`, typeof item.id); // Debug log
+                    
                     let stringId;
                     if (typeof item.id === 'string') {
                         stringId = item.id;
@@ -374,13 +393,81 @@ export default function OrdersDelivery() {
                         stringId = String(item.id);
                     }
                     
+                    console.log(`OrdersDelivery - Extracted string ID:`, stringId); // Debug log
                     cache[stringId] = item.name || 'Unknown Item';
                     cache[stringId + '_price'] = item.price || 0;
+                    console.log(`OrdersDelivery - Added to cache: ${stringId} -> ${item.name}`); // Debug log
                 }
             });
+            console.log('OrdersDelivery - Final menuItemNameCache:', cache); // Debug log
             setMenuItemNameCache(cache);
+        } else {
+            console.log('OrdersDelivery - menuItems is empty or null, trying to fetch directly'); // Debug log
+            // Try to fetch menu items directly if AdminContext didn't provide them
+            fetchMenuItemsDirect();
         }
     }, [menuItems]);
+
+    // Direct fetch function as fallback
+    const fetchMenuItemsDirect = async () => {
+        try {
+            console.log('OrdersDelivery - Fetching menu items directly from API'); // Debug log
+            // Use the same API configuration as AdminContext
+            const token = localStorage.getItem('adminToken');
+            const response = await fetch('http://localhost:5000/api/menu-items', {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            console.log('OrdersDelivery - Direct API response:', data); // Debug log
+            
+            // Handle different response structures
+            let items = [];
+            if (Array.isArray(data)) {
+                items = data;
+            } else if (data.data && Array.isArray(data.data)) {
+                items = data.data;
+            } else if (data.menuItems && Array.isArray(data.menuItems)) {
+                items = data.menuItems;
+            }
+            console.log('OrdersDelivery - Extracted items:', items); // Debug log
+            
+            if (items && items.length > 0) {
+                const cache = {};
+                items.forEach(item => {
+                    if (item.id) {
+                        let stringId;
+                        if (typeof item.id === 'string') {
+                            stringId = item.id;
+                        } else if (item.id && typeof item.id === 'object') {
+                            if (item.id._path && item.id._path.segments) {
+                                stringId = item.id._path.segments[item.id._path.segments.length - 1];
+                            } else if (item.id.id) {
+                                stringId = item.id.id;
+                            } else {
+                                stringId = String(item.id);
+                            }
+                        } else {
+                            stringId = String(item.id);
+                        }
+                        
+                        cache[stringId] = item.name || 'Unknown Item';
+                        cache[stringId + '_price'] = item.price || 0;
+                        console.log(`OrdersDelivery - Direct fetch - Added to cache: ${stringId} -> ${item.name}`); // Debug log
+                    }
+                });
+                console.log('OrdersDelivery - Direct fetch - Final cache:', cache); // Debug log
+                setMenuItemNameCache(cache);
+            }
+        } catch (error) {
+            console.error('OrdersDelivery - Error fetching menu items directly:', error);
+        }
+    };
 
     const closeUserPopup = () => {
         setShowUserPopup(false);
@@ -587,18 +674,29 @@ function convertFirestoreTimestampToIST(timestamp) {
                         <span style={{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth: '200px'}}>
                             {Array.isArray(order.products) && order.products.length > 0 ? (
                                 order.products.map((p, idx) => {
+                                    console.log('OrdersDelivery - Product:', p); // Debug log
                                     const id = extractMenuItemId(p?.productRef);
+                                    console.log('OrdersDelivery - Extracted ID:', id); // Debug log
+                                    console.log('OrdersDelivery - MenuItemNameCache:', menuItemNameCache); // Debug log
+                                    
                                     let name = 'Item';
                                     if (id && menuItemNameCache && Object.keys(menuItemNameCache).length > 0 && menuItemNameCache[id]) {
                                         name = menuItemNameCache[id];
-                                    } else if (p?.name) {
-                                        name = p.name;
-                                    } else if (p?.itemName) {
-                                        name = p.itemName;
-                                    } else if (p?.menuItemName) {
-                                        name = p.menuItemName;
+                                        console.log('OrdersDelivery - Found name in cache:', name); // Debug log
                                     } else {
-                                        name = `Menu Item ${idx + 1}`;
+                                        console.log('OrdersDelivery - ID not found in cache. Available cache keys:', Object.keys(menuItemNameCache).slice(0, 10)); // Debug log (first 10 keys)
+                                        console.log('OrdersDelivery - Looking for ID:', id); // Debug log
+                                        console.log('OrdersDelivery - ProductRef structure:', p?.productRef); // Debug log
+                                        
+                                        if (p?.name) {
+                                            name = p.name;
+                                        } else if (p?.itemName) {
+                                            name = p.itemName;
+                                        } else if (p?.menuItemName) {
+                                            name = p.menuItemName;
+                                        } else {
+                                            name = `Menu Item ${idx + 1}`;
+                                        }
                                     }
                                     const qty = p?.quantity || 1;
                                     return (
@@ -705,14 +803,18 @@ function convertFirestoreTimestampToIST(timestamp) {
                                 borderRadius: '12px',
                                 fontSize: '0.8em',
                                 fontWeight: 'bold',
-                                backgroundColor: order.status === 'Delivered' ? '#d4edda' : 
-                                                order.status === 'Cancelled' ? '#f8d7da' : 
-                                                order.status === 'Out for Delivery' ? '#fff3cd' : '#e2e3e5',
-                                color: order.status === 'Delivered' ? '#155724' : 
-                                       order.status === 'Cancelled' ? '#721c24' : 
-                                       order.status === 'Out for Delivery' ? '#856404' : '#383d41'
+                                backgroundColor: order.orderStatus === 'delivered' ? '#d4edda' : 
+                                                order.orderStatus === 'declined' ? '#f8d7da' : 
+                                                order.orderStatus === 'dispatched' ? '#fff3cd' : 
+                                                order.orderStatus === 'preparing' ? '#cce5ff' : 
+                                                order.orderStatus === 'yetToBeAccepted' ? '#ffe6cc' : '#e2e3e5',
+                                color: order.orderStatus === 'delivered' ? '#155724' : 
+                                       order.orderStatus === 'declined' ? '#721c24' : 
+                                       order.orderStatus === 'dispatched' ? '#856404' : 
+                                       order.orderStatus === 'preparing' ? '#0066cc' : 
+                                       order.orderStatus === 'yetToBeAccepted' ? '#cc6600' : '#383d41'
                             }}>
-                                {order.status}
+                                {order.orderStatus}
                             </span>
                         </span>
                         <span>
@@ -827,14 +929,18 @@ function convertFirestoreTimestampToIST(timestamp) {
                                 borderRadius: '12px',
                                 fontSize: '0.8em',
                                 fontWeight: 'bold',
-                                backgroundColor: order.status === 'Delivered' ? '#d4edda' : 
-                                                order.status === 'Cancelled' ? '#f8d7da' : 
-                                                order.status === 'Out for Delivery' ? '#fff3cd' : '#e2e3e5',
-                                color: order.status === 'Delivered' ? '#155724' : 
-                                       order.status === 'Cancelled' ? '#721c24' : 
-                                       order.status === 'Out for Delivery' ? '#856404' : '#383d41'
+                                backgroundColor: order.orderStatus === 'delivered' ? '#d4edda' : 
+                                                order.orderStatus === 'declined' ? '#f8d7da' : 
+                                                order.orderStatus === 'dispatched' ? '#fff3cd' : 
+                                                order.orderStatus === 'preparing' ? '#cce5ff' : 
+                                                order.orderStatus === 'yetToBeAccepted' ? '#ffe6cc' : '#e2e3e5',
+                                color: order.orderStatus === 'delivered' ? '#155724' : 
+                                       order.orderStatus === 'declined' ? '#721c24' : 
+                                       order.orderStatus === 'dispatched' ? '#856404' : 
+                                       order.orderStatus === 'preparing' ? '#0066cc' : 
+                                       order.orderStatus === 'yetToBeAccepted' ? '#cc6600' : '#383d41'
                             }}>
-                                {order.status}
+                                {order.orderStatus}
                             </span>
                         </span>
                         <span>

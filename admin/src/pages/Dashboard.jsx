@@ -207,12 +207,10 @@ export default function Dashboard() {
     // Initialize status counts
     const statusCounts = {
       delivered: 0,
-      pending: 0,
-      cancelled: 0,
       dispatched: 0,
       preparing: 0,
       prepared: 0,
-      yetToBeAccepted: 0
+      declined: 0
     };
     
     orders.forEach(order => {
@@ -231,15 +229,10 @@ export default function Dashboard() {
       
       // Count order statuses
       if (orderStatus) {
+        console.log('Processing order status:', orderStatus, 'lowercase:', orderStatus.toLowerCase());
         switch (orderStatus.toLowerCase()) {
           case 'delivered':
             statusCounts.delivered++;
-            break;
-          case 'pending':
-            statusCounts.pending++;
-            break;
-          case 'cancelled':
-            statusCounts.cancelled++;
             break;
           case 'dispatched':
             statusCounts.dispatched++;
@@ -250,10 +243,11 @@ export default function Dashboard() {
           case 'prepared':
             statusCounts.prepared++;
             break;
-          case 'yettobeaccepted':
-          case 'yet to be accepted':
-          case 'yetToBeAccepted':
-            statusCounts.yetToBeAccepted++;
+          case 'declined':
+            statusCounts.declined++;
+            break;
+          default:
+            console.log('⚠️ Unknown order status found:', orderStatus);
             break;
         }
       }
@@ -423,15 +417,16 @@ export default function Dashboard() {
       daily: dailyChartData
     });
     
-    // Update order status data
+    // Log final status counts for debugging
+    console.log('Final status counts:', statusCounts);
+    
+    // Update order status data with actual order statuses
     setOrderStatusData([
       { name: "Delivered", value: statusCounts.delivered },
-      { name: "Pending", value: statusCounts.pending },
-      { name: "Cancelled", value: statusCounts.cancelled },
       { name: "Dispatched", value: statusCounts.dispatched },
       { name: "Preparing", value: statusCounts.preparing },
       { name: "Prepared", value: statusCounts.prepared },
-      { name: "Yet to be Accepted", value: statusCounts.yetToBeAccepted }
+      { name: "Declined", value: statusCounts.declined }
     ].filter(item => item.value > 0)); // Only show statuses with orders
     
     setMonthlyStats({

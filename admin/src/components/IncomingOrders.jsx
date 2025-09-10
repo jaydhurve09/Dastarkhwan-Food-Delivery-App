@@ -138,7 +138,7 @@ const IncomingOrders = ({
                 <th style={styles.th}>Address</th>
                 <th style={styles.th}>Date</th>
                 <th style={styles.th}>Status</th>
-                <th style={styles.th}>Delivery Partner</th>
+                <th style={{...styles.th, width: '200px', maxWidth: '200px'}}>Delivery Partner</th>
                 <th style={styles.th}>Actions</th>
               </tr>
             </thead>
@@ -217,8 +217,8 @@ const IncomingOrders = ({
                         {order.orderStatus || 'N/A'}
                       </span>
                     </td>
-                    <td style={styles.td}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '200px' }}>
+                    <td style={{...styles.td, width: '200px', maxWidth: '200px', padding: '8px'}}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
                         {isDeliveryPartnerAssigned(order) ? (
                           <div style={{
                             padding: '8px 12px',
@@ -226,16 +226,16 @@ const IncomingOrders = ({
                             borderRadius: '6px',
                             border: '1px solid #c3e6c3'
                           }}>
-                            <div style={{ fontWeight: 'bold', fontSize: '0.9em', color: '#2d5f2d' }}>
-                              {getDeliveryPartnerInfo(order, deliveryPartners)?.display_name || 'Delivery Partner'}
+                            <div style={{ fontWeight: 'bold', fontSize: '0.85em', color: '#2d5f2d', wordBreak: 'break-word' }}>
+                              {getDeliveryPartnerInfo(order, deliveryPartners)?.display_name || 'Partner'}
                             </div>
                             {getDeliveryPartnerInfo(order)?.phone && (
-                              <div style={{ fontSize: '0.8em', color: '#666' }}>
+                              <div style={{ fontSize: '0.75em', color: '#666' }}>
                                 📞 {getDeliveryPartnerInfo(order).phone}
                               </div>
                             )}
-                            <div style={{ fontSize: '0.75em', color: '#2d5f2d', marginTop: '4px' }}>
-                              ✅ Partner Assigned
+                            <div style={{ fontSize: '0.7em', color: '#2d5f2d', marginTop: '2px' }}>
+                              ✅ Assigned
                             </div>
                             {order.orderStatus !== 'dispatched' && order.orderStatus !== 'delivered' && (
                               <button
@@ -302,9 +302,6 @@ const IncomingOrders = ({
                             }}>
                               <div style={{ fontSize: '0.9em', color: '#0c5460', fontWeight: 'bold' }}>
                                 ⏳ Awaiting Partner Response
-                              </div>
-                              <div style={{ fontSize: '0.8em', color: '#0c5460', marginTop: '2px' }}>
-                                FCM notifications sent to all active partners
                               </div>
                             </div>
                             <div style={{

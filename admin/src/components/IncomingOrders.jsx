@@ -1,5 +1,6 @@
-import React from 'react';
-import { FaCheck, FaTimes } from 'react-icons/fa';
+import React, { useState, useEffect } from 'react';
+import { FaCheck, FaTimes, FaEdit, FaTrash, FaSearch } from 'react-icons/fa';
+import OrderDetailsPopup from './OrderDetailsPopup';
 import { MdOutlineRefresh } from "react-icons/md";
 
 const IncomingOrders = ({
@@ -28,6 +29,19 @@ const IncomingOrders = ({
   handleAcceptOrderWithNotification,
   handleUpdateOrderStatus
 }) => {
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [showOrderPopup, setShowOrderPopup] = useState(false);
+
+  const handleRowClick = (order) => {
+    setSelectedOrder(order);
+    setShowOrderPopup(true);
+  };
+
+  const closeOrderPopup = () => {
+    setShowOrderPopup(false);
+    setSelectedOrder(null);
+  };
+
   return (
     <div style={{ ...styles.card, gridColumn: '1 / -1' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -161,7 +175,16 @@ const IncomingOrders = ({
                 </tr>
               ) : (
                 filteredIncomingOrders.map((order, index) => (
-                  <tr key={`order-${order.id || index}`}>
+                  <tr 
+                    key={`order-${order.id || index}`}
+                    onClick={() => handleRowClick(order)}
+                    style={{
+                      cursor: 'pointer',
+                      transition: 'background-color 0.2s',
+                    }}
+                    onMouseEnter={(e) => e.target.closest('tr').style.backgroundColor = '#f8f9fa'}
+                    onMouseLeave={(e) => e.target.closest('tr').style.backgroundColor = 'transparent'}
+                  >
                     <td style={styles.td}>
                       <div style={{ fontWeight: 'bold' }}>#{order.orderId || order.id}</div>
                     </td>
@@ -173,11 +196,39 @@ const IncomingOrders = ({
                         <div>
                           <p className="font-medium">
                             {order.products.map((p, idx) => {
-                              const id = extractMenuItemId(
-                                p?.productRef || p?.menuItem || p?.menuItemRef || p?.itemRef || p?.itemId || p?.menuItemId || p?.productId
-                              );
-                              const name = p?.name || p?.itemName || p?.menuItemName || p?.item?.name || p?.product?.name || (id ? menuItemNameCache[id] : null) || 'Item';
-                              const qty = p?.quantity || p?.qty || 1;
+                              console.log('IncomingOrders - Product:', p); // Debug log
+                              const id = extractMenuItemId(p?.productRef);
+                              console.log('IncomingOrders - Extracted ID:', id); // Debug log
+                              console.log('IncomingOrders - MenuItemNameCache:', menuItemNameCache); // Debug log
+                              
+                              // Try to get name from cache first, then fallback to product fields
+                              let name = 'Item'; // Default fallback
+                              if (id && menuItemNameCache && menuItemNameCache[id]) {
+                                name = menuItemNameCache[id];
+                                console.log('IncomingOrders - Found name in cache:', name); // Debug log
+                              } else {
+                                console.log('IncomingOrders - ID not found in cache. Available cache keys:', Object.keys(menuItemNameCache).slice(0, 10)); // Debug log (first 10 keys)
+                                console.log('IncomingOrders - Looking for ID:', id); // Debug log
+                                console.log('IncomingOrders - ProductRef structure:', p?.productRef); // Debug log
+                                
+                                // Try alternative fallback approaches
+                                if (p?.name) {
+                                  name = p.name;
+                                  console.log('IncomingOrders - Using product name:', name); // Debug log
+                                } else if (p?.itemName) {
+                                  name = p.itemName;
+                                  console.log('IncomingOrders - Using itemName:', name); // Debug log
+                                } else if (p?.menuItemName) {
+                                  name = p.menuItemName;
+                                  console.log('IncomingOrders - Using menuItemName:', name); // Debug log
+                                } else {
+                                  // Last resort: use a generic name with the ID
+                                  name = `Menu Item (${id || 'Unknown'})`;
+                                  console.log('IncomingOrders - Using fallback name:', name); // Debug log
+                                }
+                              }
+                              
+                              const qty = p?.quantity || 1;
                               return (
                                 <span key={idx}>
                                   {name} {qty ? `x${qty}` : ''}
@@ -233,6 +284,7 @@ const IncomingOrders = ({
                               order.date,
                               order.orderDate
                             ];
+                            
                             
                             for (const dateField of dateFields) {
                               if (dateField) {
@@ -531,6 +583,14 @@ const IncomingOrders = ({
           </table>
         </div>
       )}
+
+      {/* Order Details Popup */}
+      <OrderDetailsPopup
+        order={selectedOrder}
+        isOpen={showOrderPopup}
+        onClose={closeOrderPopup}
+        menuItemNameCache={menuItemNameCache}
+      />
     </div>
   );
 };

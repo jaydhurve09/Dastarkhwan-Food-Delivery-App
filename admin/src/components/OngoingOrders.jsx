@@ -1,5 +1,6 @@
-import React from 'react';
-import { FaCheck, FaTimes } from 'react-icons/fa';
+import React, { useState, useEffect } from 'react';
+import { FaCheck, FaTimes, FaEdit, FaTrash, FaSearch } from 'react-icons/fa';
+import OrderDetailsPopup from './OrderDetailsPopup';
 import { MdOutlineRefresh } from "react-icons/md";
 
 const OngoingOrders = ({
@@ -28,6 +29,19 @@ const OngoingOrders = ({
   handleAcceptOrderWithNotification,
   handleUpdateOrderStatus
 }) => {
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [showOrderPopup, setShowOrderPopup] = useState(false);
+
+  const handleRowClick = (order) => {
+    setSelectedOrder(order);
+    setShowOrderPopup(true);
+  };
+
+  const closeOrderPopup = () => {
+    setShowOrderPopup(false);
+    setSelectedOrder(null);
+  };
+
   return (
     <div style={{ ...styles.card, gridColumn: '1 / -1' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -128,7 +142,16 @@ const OngoingOrders = ({
                 </tr>
               ) : (
                 filteredOngoingOrders.map((order, index) => (
-                  <tr key={`order-${order.id || index}`}>
+                  <tr 
+                    key={`order-${order.id || index}`}
+                    onClick={() => handleRowClick(order)}
+                    style={{
+                      cursor: 'pointer',
+                      transition: 'background-color 0.2s',
+                    }}
+                    onMouseEnter={(e) => e.target.closest('tr').style.backgroundColor = '#f8f9fa'}
+                    onMouseLeave={(e) => e.target.closest('tr').style.backgroundColor = 'transparent'}
+                  >
                     <td style={styles.td}>
                       <div style={{ fontWeight: 'bold' }}>#{order.orderId || order.id}</div>
                     </td>
@@ -140,10 +163,20 @@ const OngoingOrders = ({
                         <div>
                           <p className="font-medium">
                             {order.products.map((p, idx) => {
-                              const id = extractMenuItemId(
-                                p?.productRef || p?.menuItem || p?.menuItemRef || p?.itemRef || p?.itemId || p?.menuItemId || p?.productId
-                              );
-                              const name = p?.name || p?.itemName || p?.menuItemName || p?.item?.name || p?.product?.name || (id ? menuItemNameCache[id] : null) || 'Item';
+                              const id = extractMenuItemId(p?.productRef);
+                              
+                              // Try to get name from cache first, then fallback to product fields
+                              let name = 'Item'; // Default fallback
+                              if (id && menuItemNameCache && menuItemNameCache[id]) {
+                                name = menuItemNameCache[id];
+                              } else if (p?.name) {
+                                name = p.name;
+                              } else if (p?.itemName) {
+                                name = p.itemName;
+                              } else if (p?.menuItemName) {
+                                name = p.menuItemName;
+                              }
+                              
                               const qty = p?.quantity || p?.qty || 1;
                               return (
                                 <span key={idx}>
@@ -488,6 +521,14 @@ const OngoingOrders = ({
           </table>
         </div>
       )}
+
+      {/* Order Details Popup */}
+      <OrderDetailsPopup
+        order={selectedOrder}
+        isOpen={showOrderPopup}
+        onClose={closeOrderPopup}
+        menuItemNameCache={menuItemNameCache}
+      />
     </div>
   );
 };

@@ -52,15 +52,19 @@ const extractIdFromDocRef = (docRef) => {
 
 const extractMenuItemId = (ref) => {
   if (!ref) return null;
+  
+  // Handle string path like "/menuItems/FjyqKzgkLlhQuewZyEV"
+  if (typeof ref === 'string') {
+    if (ref.startsWith('/menuItems/')) {
+      return ref.replace('/menuItems/', '');
+    }
+    const parts = ref.split('/');
+    return parts[parts.length - 1];
+  }
 
   if (ref && ref._path && ref._path.segments) {
     const segments = ref._path.segments;
     return segments[segments.length - 1];
-  }
-
-  if (typeof ref === 'string') {
-    const parts = ref.split('/');
-    return parts[parts.length - 1];
   }
 
   if (ref && ref.id) {
@@ -466,10 +470,53 @@ const RestaurantMonitoring = () => {
       }
 
       setMenuItems(items || []);
+      
+      // Build menu item name and price cache
+      const cache = {};
+      console.log('Building menuItemNameCache from items:', items); // Debug log
+      items.forEach(item => {
+        if (item.id) {
+          console.log(`Processing item - original ID:`, item.id, `type:`, typeof item.id); // Debug log
+          
+          // More robust ID extraction
+          let stringId;
+          if (typeof item.id === 'string') {
+            stringId = item.id;
+          } else if (item.id && typeof item.id === 'object') {
+            // Handle Firestore DocumentReference
+            if (item.id._path && item.id._path.segments) {
+              stringId = item.id._path.segments[item.id._path.segments.length - 1];
+            } else if (item.id.id) {
+              stringId = item.id.id;
+            } else {
+              // Fallback: try to convert to string and extract
+              const idStr = String(item.id);
+              if (idStr !== '[object Object]') {
+                stringId = idStr;
+              } else {
+                console.warn('Could not extract string ID from:', item.id);
+                stringId = `item_${Math.random().toString(36).substr(2, 9)}`;
+              }
+            }
+          } else {
+            stringId = String(item.id);
+          }
+          
+          console.log(`Extracted string ID:`, stringId); // Debug log
+          
+          cache[stringId] = item.name || 'Unknown Item';
+          cache[stringId + '_price'] = item.price || 0;
+          console.log(`Added to cache: ${stringId} -> ${item.name}`); // Debug log
+        }
+      });
+      console.log('Final menuItemNameCache:', cache); // Debug log
+      setMenuItemNameCache(cache);
+      
     } catch (err) {
       console.error('Error fetching menu items:', err);
       setError('Failed to load menu items');
       setMenuItems([]);
+      setMenuItemNameCache({});
     } finally {
       setIsLoading(false);
     }

@@ -11,6 +11,7 @@ const AdminProvider = ({ children }) => {
   const [users, setUsers] = useState([]);
   const [feedback, setFeedback] = useState([]);
   const [complaints, setComplaints] = useState([]);
+  const [menuItems, setMenuItems] = useState([]);
 
   const fetchOrders = async () => {
     try {
@@ -66,6 +67,29 @@ const AdminProvider = ({ children }) => {
     }
   };
 
+  const fetchMenuItems = async () => {
+    try {
+      const response = await api.get('/menu-items');
+      console.log('AdminContext - Menu items API response:', response.data); // Debug log
+      
+      // Handle different response structures
+      let items = [];
+      if (Array.isArray(response.data)) {
+        items = response.data;
+      } else if (response.data.data && Array.isArray(response.data.data)) {
+        items = response.data.data;
+      } else if (response.data.menuItems && Array.isArray(response.data.menuItems)) {
+        items = response.data.menuItems;
+      }
+      
+      console.log('AdminContext - Extracted menu items:', items); // Debug log
+      setMenuItems(items);
+    } catch (error) {
+      console.error('Error fetching menu items:', error);
+      setMenuItems([]);
+    }
+  };
+
   React.useEffect(() => {
     // Only fetch data if user is authenticated
     const token = localStorage.getItem('adminToken');
@@ -76,6 +100,7 @@ const AdminProvider = ({ children }) => {
       fetchUsers();
       fetchFeedback();
       fetchComplaints();
+      fetchMenuItems();
     }
   }, []);
 
@@ -84,10 +109,12 @@ const AdminProvider = ({ children }) => {
     deliveryPartners,
     activeDeliveryPartners,
     users,
+    menuItems,
     fetchOrders,
     fetchDeliveryPartners,
     fetchActiveDeliveryPartners,
     fetchUsers,
+    fetchMenuItems,
     feedback,
     fetchFeedback,
     complaints,

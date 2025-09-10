@@ -128,6 +128,7 @@ export default function Dashboard() {
     thisMonthSales: 0,
     todaySales: 0,
     ongoingOrders: 0,
+    totalOrders: 0,
     loading: true
   });
 
@@ -164,7 +165,7 @@ export default function Dashboard() {
   
   // KPI definitions
   const kpis = [
-    { label: "Total Orders", value: orders.length, icon: <FaShoppingCart size={28} color="#22c55e" />, bg: "#e7f9f2" },
+    { label: "Total Orders", value: monthlyStats.loading ? "..." : monthlyStats.totalOrders, icon: <FaShoppingCart size={28} color="#22c55e" />, bg: "#e7f9f2" },
     { label: "This Month Sales", value: monthlyStats.loading ? "..." : `₹${monthlyStats.thisMonthSales.toLocaleString('en-IN')}`, icon: <FaRupeeSign size={24} color="#38bdf8" />, bg: "#e0f2fe" },
     { label: "Today Sales", value: monthlyStats.loading ? "..." : `₹${monthlyStats.todaySales.toLocaleString('en-IN')}`, icon: <FaRupeeSign size={24} color="#818cf8" />, bg: "#e0e7ff" },
     { label: "Total Users", value: users.length, icon: <FaUsers size={28} color="#f59e42" />, bg: "#fff3e6", id: 'totalUsers' },
@@ -175,47 +176,63 @@ export default function Dashboard() {
 
   // Function to calculate this month's and today's sales and ongoing orders
   const calculateStats = () => {
+    // Get current date dynamically from system
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
-    const today = now.toDateString();
+    const today = new Date();
+    const todayString = today.toLocaleDateString(); // Get local date string
+    
+    console.log('Current date info:', {
+      currentMonth: currentMonth,
+      currentYear: currentYear,
+      today: today,
+      totalOrders: orders.length
+    });
+    
+    console.log('First few orders sample:', orders.slice(0, 3).map(order => ({
+      orderId: order.orderId,
+      orderStatus: order.orderStatus,
+      status: order.status,
+      orderValue: order.orderValue,
+      createdAt: order.createdAt,
+      createdAtType: typeof order.createdAt
+    })));
     
     let thisMonthTotal = 0;
     let todayTotal = 0;
     let ongoingCount = 0;
+    let totalOrdersCount = 0;
     
     // Initialize status counts
     const statusCounts = {
       delivered: 0,
-      pending: 0,
-      cancelled: 0,
       dispatched: 0,
       preparing: 0,
       prepared: 0,
-      yetToBeAccepted: 0
+      declined: 0
     };
     
-    // Define ongoing order statuses
-    const ongoingStatuses = ['yetToBeAccepted', 'preparing', 'prepared', 'dispatched'];
-    
     orders.forEach(order => {
-      // Calculate ongoing orders (check both status and orderStatus fields)
+      // Get order status (check both status and orderStatus fields)
       const orderStatus = order.status || order.orderStatus;
-      if (orderStatus && ongoingStatuses.includes(orderStatus)) {
+      
+      // Calculate ongoing orders: orders that do NOT have orderStatus as "yetToBeAccepted", "delivered", or "declined"
+      if (orderStatus && !['yetToBeAccepted', 'delivered', 'declined'].includes(orderStatus)) {
         ongoingCount++;
+      }
+      
+      // Calculate total orders: orders that do NOT have orderStatus as "yetToBeAccepted" or "declined"
+      if (orderStatus && !['yetToBeAccepted', 'declined'].includes(orderStatus)) {
+        totalOrdersCount++;
       }
       
       // Count order statuses
       if (orderStatus) {
+        console.log('Processing order status:', orderStatus, 'lowercase:', orderStatus.toLowerCase());
         switch (orderStatus.toLowerCase()) {
           case 'delivered':
             statusCounts.delivered++;
-            break;
-          case 'pending':
-            statusCounts.pending++;
-            break;
-          case 'cancelled':
-            statusCounts.cancelled++;
             break;
           case 'dispatched':
             statusCounts.dispatched++;
@@ -226,26 +243,75 @@ export default function Dashboard() {
           case 'prepared':
             statusCounts.prepared++;
             break;
-          case 'yettobeaccepted':
-          case 'yet to be accepted':
-          case 'yetToBeAccepted':
-            statusCounts.yetToBeAccepted++;
+          case 'declined':
+            statusCounts.declined++;
+            break;
+          default:
+            console.log('⚠️ Unknown order status found:', orderStatus);
             break;
         }
       }
       
-      // Calculate sales if order has value and date
-      if (order.orderValue && order.createdAt) {
-        const orderDate = new Date(order.createdAt);
+      // Calculate sales only for delivered orders
+      if (order.orderValue && order.createdAt && orderStatus && orderStatus.toLowerCase() === 'delivered') {
+        console.log('Found delivered order:', {
+          orderId: order.orderId,
+          orderValue: order.orderValue,
+          orderStatus: orderStatus,
+          createdAtType: typeof order.createdAt,
+          createdAtRaw: order.createdAt
+        });
+        
+        // Handle Firestore timestamp - convert to JavaScript Date
+        let orderDate;
+        if (order.createdAt && typeof order.createdAt === 'object') {
+          if (order.createdAt.toDate && typeof order.createdAt.toDate === 'function') {
+            // Firestore Timestamp object with toDate method
+            orderDate = order.createdAt.toDate();
+          } else if (order.createdAt.seconds) {
+            // Firestore Timestamp as plain object with seconds
+            orderDate = new Date(order.createdAt.seconds * 1000);
+          } else if (order.createdAt._seconds) {
+            // Alternative Firestore format
+            orderDate = new Date(order.createdAt._seconds * 1000);
+          } else {
+            // Try direct conversion
+            orderDate = new Date(order.createdAt);
+          }
+        } else {
+          // Regular date string or number
+          orderDate = new Date(order.createdAt);
+        }
+        
+        const orderDateString = orderDate.toLocaleDateString();
+        
+        console.log('Processed order date:', {
+          orderId: order.orderId,
+          orderDate: orderDate,
+          orderDateString: orderDateString,
+          todayString: todayString,
+          currentMonth: currentMonth,
+          currentYear: currentYear,
+          orderMonth: orderDate.getMonth(),
+          orderYear: orderDate.getFullYear(),
+          isCurrentMonth: orderDate.getMonth() === currentMonth && orderDate.getFullYear() === currentYear,
+          isToday: orderDateString === todayString
+        });
         
         // Check if order is from this month
         if (orderDate.getMonth() === currentMonth && orderDate.getFullYear() === currentYear) {
           thisMonthTotal += parseFloat(order.orderValue) || 0;
+          console.log('✅ Added to thisMonthTotal:', order.orderValue, 'New total:', thisMonthTotal);
+        } else {
+          console.log('❌ Order not from current month');
         }
         
         // Check if order is from today
-        if (orderDate.toDateString() === today) {
+        if (orderDateString === todayString) {
           todayTotal += parseFloat(order.orderValue) || 0;
+          console.log('✅ Added to todayTotal:', order.orderValue, 'New total:', todayTotal);
+        } else {
+          console.log('❌ Order not from today - orderDate:', orderDateString, 'today:', todayString);
         }
       }
     });
@@ -351,21 +417,23 @@ export default function Dashboard() {
       daily: dailyChartData
     });
     
-    // Update order status data
+    // Log final status counts for debugging
+    console.log('Final status counts:', statusCounts);
+    
+    // Update order status data with actual order statuses
     setOrderStatusData([
       { name: "Delivered", value: statusCounts.delivered },
-      { name: "Pending", value: statusCounts.pending },
-      { name: "Cancelled", value: statusCounts.cancelled },
       { name: "Dispatched", value: statusCounts.dispatched },
       { name: "Preparing", value: statusCounts.preparing },
       { name: "Prepared", value: statusCounts.prepared },
-      { name: "Yet to be Accepted", value: statusCounts.yetToBeAccepted }
+      { name: "Declined", value: statusCounts.declined }
     ].filter(item => item.value > 0)); // Only show statuses with orders
     
     setMonthlyStats({
       thisMonthSales: thisMonthTotal,
       todaySales: todayTotal,
       ongoingOrders: ongoingCount,
+      totalOrders: totalOrdersCount,
       loading: false
     });
   };

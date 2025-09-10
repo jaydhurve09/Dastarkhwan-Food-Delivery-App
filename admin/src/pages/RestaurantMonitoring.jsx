@@ -1597,22 +1597,24 @@ const RestaurantMonitoring = () => {
                             <div style={{ fontSize: '0.75em', color: '#2d5f2d', marginTop: '4px' }}>
                               ✅ Partner Assigned
                             </div>
-                            <button
-                              onClick={() => handleDispatchOrder(order.id)}
-                              style={{
-                                marginTop: '8px',
-                                padding: '6px 12px',
-                                backgroundColor: '#9b59b6',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '4px',
-                                fontSize: '0.8em',
-                                cursor: 'pointer',
-                                width: '100%'
-                              }}
-                            >
-                              Dispatch
-                            </button>
+                            {order.orderStatus !== 'dispatched' && order.orderStatus !== 'delivered' && (
+                              <button
+                                onClick={() => handleDispatchOrder(order.id)}
+                                style={{
+                                  marginTop: '8px',
+                                  padding: '6px 12px',
+                                  backgroundColor: '#9b59b6',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  fontSize: '0.8em',
+                                  cursor: 'pointer',
+                                  width: '100%'
+                                }}
+                              >
+                                Dispatch
+                              </button>
+                            )}
                           </div>
                         ) : order.orderStatus === 'dispatched' ? (
                           <div style={{
@@ -1989,22 +1991,24 @@ const RestaurantMonitoring = () => {
                             <div style={{ fontSize: '0.75em', color: '#2d5f2d', marginTop: '4px' }}>
                               ✅ Partner Assigned
                             </div>
-                            <button
-                              onClick={() => handleDispatchOrder(order.id)}
-                              style={{
-                                marginTop: '8px',
-                                padding: '6px 12px',
-                                backgroundColor: '#9b59b6',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '4px',
-                                fontSize: '0.8em',
-                                cursor: 'pointer',
-                                width: '100%'
-                              }}
-                            >
-                              Dispatch
-                            </button>
+                            {order.orderStatus !== 'dispatched' && order.orderStatus !== 'delivered' && (
+                              <button
+                                onClick={() => handleDispatchOrder(order.id)}
+                                style={{
+                                  marginTop: '8px',
+                                  padding: '6px 12px',
+                                  backgroundColor: '#9b59b6',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  fontSize: '0.8em',
+                                  cursor: 'pointer',
+                                  width: '100%'
+                                }}
+                              >
+                                Dispatch
+                              </button>
+                            )}
                           </div>
                         ) : order.orderStatus === 'dispatched' ? (
                           <div style={{

@@ -96,7 +96,7 @@ export const createMenuItem = async (req, res, next) => {
       name,
       categoryId,
       subCategory,
-      price: parseFloat(price),
+      price: Math.round(parseFloat(price) * 100), // Convert to cents (integer)
       tags: typeof tags === 'string' ? JSON.parse(tags) : tags || [],
       description,
       isActive: isActive !== 'false',
@@ -104,7 +104,7 @@ export const createMenuItem = async (req, res, next) => {
       addOns: Array.isArray(addOns) 
         ? addOns.map(addOn => ({
             name: addOn.name || '',
-            price: typeof addOn.price === 'number' ? addOn.price : 0
+            price: typeof addOn.price === 'number' ? Math.round(addOn.price * 100) : 0
           }))
         : [],
       ...(fileUploadResult && { 
@@ -173,7 +173,7 @@ export const updateMenuItem = async (req, res, next) => {
       name: name !== undefined ? name : existingData.name,
       categoryId: categoryId || (existingData.categoryId?.id || existingData.categoryId),
       subCategory: subCategory !== undefined ? subCategory : existingData.subCategory,
-      price: price !== undefined ? parseFloat(price) : existingData.price,
+      price: price !== undefined ? Math.round(parseFloat(price) * 100) : existingData.price,
       tags: tags !== undefined 
         ? (typeof tags === 'string' ? JSON.parse(tags) : tags) 
         : existingData.tags,
@@ -184,7 +184,7 @@ export const updateMenuItem = async (req, res, next) => {
         ? (Array.isArray(addOns) 
             ? addOns.map(addOn => ({
                 name: addOn.name || '',
-                price: typeof addOn.price === 'number' ? addOn.price : parseFloat(addOn.price) || 0
+                price: typeof addOn.price === 'number' ? Math.round(addOn.price * 100) : Math.round(parseFloat(addOn.price) * 100) || 0
               }))
             : [])
         : existingData.addOns,

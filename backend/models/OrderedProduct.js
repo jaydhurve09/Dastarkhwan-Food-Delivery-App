@@ -19,7 +19,7 @@ export class OrderedProduct extends BaseModel {
     this.itemId = data.itemId || '';
     this.itemName = data.itemName || '';
     this.quantity = data.quantity || 1;
-    this.price = data.price || 0;
+    this.price = typeof data.price === 'number' ? Math.round(data.price * 100) : 0; // Price in cents (integer)
     this.orderStatus = data.orderStatus || OrderedProduct.ORDER_STATUS.YET_TO_BE_ACCEPTED;
     this.createdAt = data.createdAt || new Date();
     this.updatedAt = data.updatedAt || new Date();

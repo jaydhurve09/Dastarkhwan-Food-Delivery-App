@@ -96,7 +96,7 @@ export const createMenuItem = async (req, res, next) => {
       name,
       categoryId,
       subCategory,
-      price: parseFloat(price),
+      price: Math.round(parseFloat(price) * 100), // Convert to cents (integer)
       tags: typeof tags === 'string' ? JSON.parse(tags) : tags || [],
       description,
       isActive: isActive !== 'false',

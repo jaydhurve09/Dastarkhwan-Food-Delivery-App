@@ -13,7 +13,7 @@ export class MenuItem extends BaseModel {
     this.categoryId = data.categoryId || ''; // Reference to menuCategories document ID
     this.categoryName = data.categoryName || ''; // Denormalized category name for easier queries
     this.subCategory = data.subCategory || ''; // Subcategory name (must exist in the category's subCategories array)
-    this.price = data.price || 0; // Price in smallest currency unit (e.g., cents)
+    this.price = typeof data.price === 'number' ? Math.round(data.price * 100) : 0; // Price in smallest currency unit (cents as integer)
     this.tags = data.tags || []; // Array of tags like ["Recommended for You", "Most Loved"]
     this.description = data.description || ''; // Item description
     this.isActive = data.isActive !== undefined ? data.isActive : true; // Item active status
@@ -22,7 +22,7 @@ export class MenuItem extends BaseModel {
     this.addOns = Array.isArray(data.addOns) 
       ? data.addOns.map(addOn => ({
           name: addOn.name || '',
-          price: typeof addOn.price === 'number' ? addOn.price : 0
+          price: typeof addOn.price === 'number' ? Math.round(addOn.price * 100) : 0
         }))
       : []; // Array of add-ons with name and price
     this.createdAt = data.createdAt || new Date();

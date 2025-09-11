@@ -718,7 +718,7 @@ const RestaurantMonitoring = () => {
         </div>
 
         {/* Reviews & Ratings Card */}
-        <div style={styles.card}>
+        {/* <div style={styles.card}>
           <h2 style={styles.cardTitle}>Reviews & Ratings</h2>
           {reviews.map(review => (
             <div key={review.id} style={{ borderBottom: '1px solid #eee', padding: '15px 0' }}>
@@ -732,7 +732,7 @@ const RestaurantMonitoring = () => {
               <small style={{ color: '#777' }}>{new Date(review.date).toLocaleDateString()}</small>
             </div>
           ))}
-        </div>
+        </div> */}
       </div>
     </div>
   );

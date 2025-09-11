@@ -192,6 +192,12 @@ const styles = {
       backgroundColor: "#7c3aed"
     }
   },
+  btnPayout: { 
+    backgroundColor: "#f59e0b",
+    ":hover": {
+      backgroundColor: "#d97706"
+    }
+  },
 
  
 
@@ -354,6 +360,19 @@ export default function DeliveryPartnerManagement() {
   const [showDocPopup, setShowDocPopup] = useState(false);
   const [currentDoc, setCurrentDoc] = useState(null);
   const [docDropdown, setDocDropdown] = useState(null);
+
+  const [showPayoutPopup, setShowPayoutPopup] = useState(false);
+  const [payoutPartner, setPayoutPartner] = useState(null);
+  const [payoutForm, setPayoutForm] = useState({
+    selectedOrderId: '',
+    orderTotal: '',
+    orderValue: '',
+    deliveryFee: '',
+    paymentReceived: '',
+    notes: ''
+  });
+  const [payoutLoading, setPayoutLoading] = useState(false);
+  const [partnerOrders, setPartnerOrders] = useState([]);
 
   // Format date from Firestore (handles both ISO strings and timestamps)
   const formatDate = (dateValue) => {
@@ -530,6 +549,140 @@ const toggleBlockPartner = async (id) => {
     setCurrentDoc(url);
     setShowDocPopup(true);
     setDocDropdown(null);
+  };
+
+  // Open payout modal
+  const openPayoutModal = (partner) => {
+    setPayoutPartner(partner);
+    
+    // Filter orders for this delivery partner with specific criteria
+    const deliveredCODOrders = orders.filter(order => {
+      // Check if order meets all criteria for payout
+      const isDelivered = order.orderStatus === 'delivered' || order.status === 'delivered';
+      const isCOD = order.paymentMethod === 'COD' || 
+                    (order.paymentDetails && order.paymentDetails.method === 'COD');
+      
+      // Check if order is assigned to this specific delivery partner
+      let isAssignedToPartner = false;
+      
+      // Check Firestore document reference format
+      if (order.deliveryPartnerId && typeof order.deliveryPartnerId === 'object' && order.deliveryPartnerId._path) {
+        const partnerId = order.deliveryPartnerId._path.segments[order.deliveryPartnerId._path.segments.length - 1];
+        isAssignedToPartner = partnerId === partner.id;
+      }
+      // Check direct string ID
+      else if (order.deliveryPartnerId === partner.id) {
+        isAssignedToPartner = true;
+      }
+      // Check partnerAssigned object
+      else if (order.partnerAssigned && order.partnerAssigned.partnerId === partner.id) {
+        isAssignedToPartner = true;
+      }
+      
+      return isDelivered && isCOD && isAssignedToPartner;
+    });
+    
+    setPartnerOrders(deliveredCODOrders);
+    setPayoutForm({
+      selectedOrderId: '',
+      orderTotal: '',
+      orderValue: '',
+      deliveryFee: '',
+      paymentReceived: '',
+      notes: ''
+    });
+    setShowPayoutPopup(true);
+  };
+
+  // Handle payout form changes
+  const handlePayoutChange = (e) => {
+    const { name, value } = e.target;
+    
+    if (name === 'selectedOrderId') {
+      // Find the selected order and auto-populate fields
+      const selectedOrder = partnerOrders.find(order => order.id === value);
+      if (selectedOrder) {
+        setPayoutForm(prev => ({
+          ...prev,
+          selectedOrderId: value,
+          orderTotal: selectedOrder.orderTotal || '',
+          orderValue: selectedOrder.orderValue || '',
+          deliveryFee: selectedOrder.deliveryFee || '',
+          paymentReceived: selectedOrder.orderTotal || ''
+        }));
+      } else {
+        setPayoutForm(prev => ({
+          ...prev,
+          selectedOrderId: value,
+          orderTotal: '',
+          orderValue: '',
+          deliveryFee: '',
+          paymentReceived: ''
+        }));
+      }
+    } else {
+      setPayoutForm(prev => ({ ...prev, [name]: value }));
+    }
+  };
+
+  // Submit payout
+  const submitPayout = async (e) => {
+    e.preventDefault();
+    setPayoutLoading(true);
+
+    try {
+      const orderTotal = parseFloat(payoutForm.orderTotal);
+      const orderValue = parseFloat(payoutForm.orderValue);
+      const deliveryFee = parseFloat(payoutForm.deliveryFee);
+      const paymentReceived = parseFloat(payoutForm.paymentReceived);
+
+      if (isNaN(orderTotal) || isNaN(orderValue) || isNaN(deliveryFee) || isNaN(paymentReceived)) {
+        alert('Please enter valid amounts');
+        return;
+      }
+
+      if (paymentReceived !== orderTotal) {
+        alert('Payment received must equal the order total');
+        return;
+      }
+
+      // For COD orders: Partner collected orderValue + deliveryFee, keeps deliveryFee, owes restaurant orderValue
+      // Since orderTotal = orderValue + deliveryFee, we only credit the orderValue (restaurant's share)
+      const amountToCredit = orderValue;
+
+      // Credit the delivery partner's wallet with the remaining amount after restaurant share and delivery fee
+      const response = await fetch(`/api/wallet/${payoutPartner.id}/credit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+        },
+        body: JSON.stringify({
+          amount: amountToCredit,
+          description: `COD Settlement for order ${payoutForm.selectedOrderId} - Partner returned restaurant share of ₹${orderValue} from collected amount ₹${orderTotal}. Wallet balance credited back after restaurant payment.`,
+          transactionType: 'credit',
+          paymentMethod: 'cash',
+          orderId: payoutForm.selectedOrderId,
+          notes: payoutForm.notes
+        })
+      });
+
+      if (response.ok) {
+        alert('Payout processed successfully!');
+        setShowPayoutPopup(false);
+        setPayoutPartner(null);
+        // Refresh delivery partners data
+        await fetchDeliveryPartners();
+      } else {
+        const error = await response.json();
+        alert(`Error processing payout: ${error.message}`);
+      }
+    } catch (error) {
+      console.error('Payout error:', error);
+      alert('Error processing payout. Please try again.');
+    } finally {
+      setPayoutLoading(false);
+    }
   };
 
   return (
@@ -872,6 +1025,7 @@ const toggleBlockPartner = async (id) => {
                     <div style={styles.actionRow}>
                       <button style={{...styles.btn, ...styles.btnView}} onClick={() => setPartnerDetail(p)}>View Profile</button>
                       <button style={{...styles.btn, ...styles.btnEdit}} onClick={() => openEditModal(p)}>Edit Info</button>
+                      <button style={{...styles.btn, ...styles.btnPayout}} onClick={() => openPayoutModal(p)}>Payout</button>
                       <button style={{...styles.btn, ...p.isActive ? styles.btnBlock : styles.btnUnblock}} onClick={() => toggleBlockPartner(p.id)}>
                         {p.isActive? "Block" : "Unblock"}
                       </button>
@@ -1200,6 +1354,214 @@ const toggleBlockPartner = async (id) => {
             )}
           </div>
         </div>
+      )}
+
+      {/* Payout Modal */}
+      {showPayoutPopup && payoutPartner && (
+        <>
+          <div style={styles.modalOverlay} onClick={() => setShowPayoutPopup(false)} />
+          <div style={styles.modal} role="dialog" aria-modal="true" aria-labelledby="payoutTitle">
+            <button style={styles.closeBtn} onClick={() => setShowPayoutPopup(false)} aria-label="Close modal">&times;</button>
+            <h2 id="payoutTitle" style={styles.modalHeader}>Process Payout for {payoutPartner.name}</h2>
+            
+            <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#64748b' }}>
+                <strong>Partner:</strong> {payoutPartner.name} ({payoutPartner.phone || payoutPartner.mobile})
+              </p>
+              <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#64748b' }}>
+                <strong>Current Wallet Balance:</strong> ₹{payoutPartner.walletBalance || 0}
+              </p>
+              <p style={{ margin: '0', fontSize: '12px', color: '#64748b', fontStyle: 'italic' }}>
+                Process COD settlement: Partner returns restaurant share and gets wallet balance credited back. Transaction will be recorded in walletTransactions subcollection.
+              </p>
+            </div>
+
+            <form onSubmit={submitPayout}>
+              <label>
+                Select Order:
+                <select 
+                  name="selectedOrderId" 
+                  value={payoutForm.selectedOrderId} 
+                  onChange={handlePayoutChange} 
+                  required 
+                  style={styles.inputField}
+                >
+                  <option value="">Select an order for payout</option>
+                  {partnerOrders.map(order => (
+                    <option key={order.id} value={order.id}>
+                      Order #{order.id.slice(-8)} | ₹{order.orderTotal} | Fee: ₹{order.deliveryFee} | {formatDate(order.createdAt)} | COD
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {partnerOrders.length === 0 && (
+                <div style={{ 
+                  padding: '12px', 
+                  backgroundColor: '#fef3c7', 
+                  borderRadius: '6px', 
+                  border: '1px solid #f59e0b',
+                  marginBottom: '15px'
+                }}>
+                  <p style={{ margin: '0', fontSize: '14px', color: '#92400e' }}>
+                    No COD orders with "delivered" status found for this delivery partner.
+                  </p>
+                </div>
+              )}
+
+              <label>
+                Order Total Amount (₹):
+                <input 
+                  type="number" 
+                  name="orderTotal" 
+                  value={payoutForm.orderTotal} 
+                  onChange={handlePayoutChange} 
+                  required 
+                  min="0"
+                  step="0.01"
+                  style={styles.inputField}
+                  placeholder="Auto-filled from selected order"
+                  readOnly
+                />
+              </label>
+
+              <label>
+                Restaurant Share - Order Value (₹):
+                <input 
+                  type="number" 
+                  name="orderValue" 
+                  value={payoutForm.orderValue} 
+                  onChange={handlePayoutChange} 
+                  required 
+                  min="0"
+                  step="0.01"
+                  style={styles.inputField}
+                  placeholder="Auto-filled from selected order"
+                  readOnly
+                />
+              </label>
+
+              <label>
+                Delivery Fee (₹):
+                <input 
+                  type="number" 
+                  name="deliveryFee" 
+                  value={payoutForm.deliveryFee} 
+                  onChange={handlePayoutChange} 
+                  required 
+                  min="0"
+                  step="0.01"
+                  style={styles.inputField}
+                  placeholder="Auto-filled from selected order"
+                  readOnly
+                />
+              </label>
+
+              <label>
+                Payment Received from Customer (₹):
+                <input 
+                  type="number" 
+                  name="paymentReceived" 
+                  value={payoutForm.paymentReceived} 
+                  onChange={handlePayoutChange} 
+                  required 
+                  min="0"
+                  step="0.01"
+                  style={styles.inputField}
+                  placeholder="Enter payment received from customer"
+                />
+              </label>
+
+              <label>
+                Notes (Optional):
+                <textarea 
+                  name="notes" 
+                  value={payoutForm.notes} 
+                  onChange={handlePayoutChange} 
+                  style={{...styles.inputField, minHeight: '80px', resize: 'vertical'}}
+                  placeholder="Add any additional notes about this payout..."
+                />
+              </label>
+
+              {partnerOrders.length > 0 && (
+                <div style={{ 
+                  marginTop: '15px', 
+                  padding: '12px', 
+                  backgroundColor: '#f0f9ff', 
+                  borderRadius: '6px', 
+                  border: '1px solid #bae6fd' 
+                }}>
+                  <p style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: '600', color: '#0369a1' }}>
+                    Available COD Orders for Payout ({partnerOrders.length} orders):
+                  </p>
+                  <div style={{ fontSize: '12px', color: '#0c4a6e', maxHeight: '120px', overflowY: 'auto' }}>
+                    {partnerOrders.map((order, index) => (
+                      <div key={order.id} style={{ 
+                        marginBottom: '6px', 
+                        padding: '6px', 
+                        backgroundColor: '#ffffff', 
+                        borderRadius: '4px',
+                        border: '1px solid #e0f2fe'
+                      }}>
+                        <div style={{ fontWeight: '600' }}>#{order.id.slice(-8)} - Total: ₹{order.orderTotal} | Restaurant: ₹{order.orderValue}</div>
+                        <div style={{ fontSize: '11px', color: '#64748b' }}>
+                          Delivery Fee (kept): ₹{order.deliveryFee} | Wallet Credit After Settlement: ₹{order.orderValue} | {formatDate(order.createdAt)} | COD
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {payoutForm.orderTotal && payoutForm.orderValue && payoutForm.deliveryFee && (
+                <div style={{ 
+                  marginTop: '15px', 
+                  padding: '12px', 
+                  backgroundColor: '#ecfdf5', 
+                  borderRadius: '6px', 
+                  border: '1px solid #d1fae5' 
+                }}>
+                  <p style={{ margin: '0 0 5px 0', fontSize: '14px', fontWeight: '600', color: '#065f46' }}>
+                    COD Settlement Summary:
+                  </p>
+                  <p style={{ margin: '0 0 3px 0', fontSize: '13px', color: '#047857' }}>
+                    • Total Collected from Customer: ₹{payoutForm.orderTotal}
+                  </p>
+                  <p style={{ margin: '0 0 3px 0', fontSize: '13px', color: '#047857' }}>
+                    • Restaurant Share to Return: ₹{payoutForm.orderValue}
+                  </p>
+                  <p style={{ margin: '0 0 3px 0', fontSize: '13px', color: '#047857' }}>
+                    • Delivery Fee (Partner Keeps): ₹{payoutForm.deliveryFee}
+                  </p>
+                  <p style={{ margin: '0', fontSize: '13px', fontWeight: '600', color: '#065f46' }}>
+                    • Wallet Credit After Restaurant Payment: ₹{payoutForm.orderValue}
+                  </p>
+                  <p style={{ margin: '5px 0 0 0', fontSize: '11px', color: '#6b7280', fontStyle: 'italic' }}>
+                    This transaction will be recorded in the partner's walletTransactions subcollection.
+                  </p>
+                </div>
+              )}
+
+              <div style={{display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 20}}>
+                <button 
+                  type="button" 
+                  onClick={() => setShowPayoutPopup(false)} 
+                  style={{ ...styles.btn, backgroundColor: "#6c757d" }}
+                  disabled={payoutLoading}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  style={{ ...styles.btn, backgroundColor: "#10b981" }}
+                  disabled={payoutLoading || !payoutForm.orderTotal || !payoutForm.paymentReceived}
+                >
+                  {payoutLoading ? 'Processing...' : 'Process Payout'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </>
       )}
 
       <style>{`

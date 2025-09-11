@@ -18,6 +18,7 @@ import deliveryPartnerRoutes from './routes/deliveryPartnerRoutes.js'; // Import
 import promoCodeRoutes from './routes/promoCodeRoutes.js'; // Import promo code routes
 import feedbackRoutes from './routes/feedbackRoutes.js'; // Import feedback routes
 import orderedProductRoutes from './routes/orderedProductRoutes.js'; // Import ordered product routes
+import walletRoutes from './routes/walletRoutes.js'; // Import wallet routes
 // Get current file path
 import complaintsRoutes from './routes/complaintsRoutes.js'; // Import complaints routes
 
@@ -48,6 +49,7 @@ app.use('/api/promo-codes', promoCodeRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/complaints', complaintsRoutes);
 app.use('/api/ordered-products', orderedProductRoutes); // Use ordered product routes
+app.use('/api/wallet', walletRoutes); // Use wallet routes
 
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);

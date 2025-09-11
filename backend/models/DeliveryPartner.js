@@ -1,4 +1,6 @@
 import { BaseModel } from './BaseModel.js';
+import { WalletTransaction } from './WalletTransaction.js';
+import { db } from '../config/firebase.js';
 
 export class DeliveryPartner extends BaseModel {
   static collectionName = 'deliveryPartners';
@@ -283,6 +285,187 @@ export class DeliveryPartner extends BaseModel {
   clearDriverPosition() {
     this.driverPositions = { lat: null, lng: null };
     return this;
+  }
+
+  // Wallet Transaction Methods
+
+  // Add a wallet transaction
+  async addWalletTransaction(transactionData) {
+    const transaction = new WalletTransaction({
+      ...transactionData,
+      deliveryPartnerId: this.id,
+      balanceBefore: this.walletBalance
+    });
+
+    // Calculate balance after transaction
+    if (transaction.transactionType === WalletTransaction.TRANSACTION_TYPES.CREDIT) {
+      transaction.balanceAfter = this.walletBalance + transaction.amount;
+      this.walletBalance += transaction.amount;
+    } else if (transaction.transactionType === WalletTransaction.TRANSACTION_TYPES.DEBIT) {
+      if (this.walletBalance < transaction.amount) {
+        throw new Error('Insufficient wallet balance');
+      }
+      transaction.balanceAfter = this.walletBalance - transaction.amount;
+      this.walletBalance -= transaction.amount;
+    }
+
+    // Validate transaction
+    const validation = transaction.validate();
+    if (!validation.isValid) {
+      throw new Error(`Transaction validation failed: ${validation.errors.join(', ')}`);
+    }
+
+    // Save transaction to subcollection
+    const walletTransactionRef = db
+      .collection('deliveryPartners')
+      .doc(this.id)
+      .collection('walletTransactions')
+      .doc();
+
+    await walletTransactionRef.set(transaction.toFirestore());
+
+    // Update delivery partner's wallet balance
+    await this.save();
+
+    return {
+      ...transaction.toFirestore(),
+      id: walletTransactionRef.id
+    };
+  }
+
+  // Get wallet transactions
+  async getWalletTransactions(options = {}) {
+    const {
+      limit = 50,
+      orderBy = 'createdAt',
+      orderDirection = 'desc',
+      startAfter = null,
+      transactionType = null,
+      status = null
+    } = options;
+
+    let query = db
+      .collection('deliveryPartners')
+      .doc(this.id)
+      .collection('walletTransactions')
+      .orderBy(orderBy, orderDirection);
+
+    if (transactionType) {
+      query = query.where('transactionType', '==', transactionType);
+    }
+
+    if (status) {
+      query = query.where('status', '==', status);
+    }
+
+    if (limit) {
+      query = query.limit(limit);
+    }
+
+    if (startAfter) {
+      query = query.startAfter(startAfter);
+    }
+
+    const snapshot = await query.get();
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+  }
+
+  // Get wallet transaction by ID
+  async getWalletTransaction(transactionId) {
+    const doc = await db
+      .collection('deliveryPartners')
+      .doc(this.id)
+      .collection('walletTransactions')
+      .doc(transactionId)
+      .get();
+
+    if (!doc.exists) {
+      return null;
+    }
+
+    return {
+      id: doc.id,
+      ...doc.data()
+    };
+  }
+
+  // Update wallet transaction status
+  async updateWalletTransactionStatus(transactionId, status) {
+    if (!Object.values(WalletTransaction.STATUS).includes(status)) {
+      throw new Error('Invalid transaction status');
+    }
+
+    await db
+      .collection('deliveryPartners')
+      .doc(this.id)
+      .collection('walletTransactions')
+      .doc(transactionId)
+      .update({
+        status,
+        updatedAt: new Date()
+      });
+
+    return this.getWalletTransaction(transactionId);
+  }
+
+  // Get wallet balance summary
+  async getWalletSummary() {
+    const transactions = await this.getWalletTransactions({ limit: 1000 });
+    
+    const summary = {
+      currentBalance: this.walletBalance,
+      totalCredits: 0,
+      totalDebits: 0,
+      totalTransactions: transactions.length,
+      pendingTransactions: 0,
+      completedTransactions: 0,
+      recentTransactions: transactions.slice(0, 10)
+    };
+
+    transactions.forEach(transaction => {
+      if (transaction.transactionType === WalletTransaction.TRANSACTION_TYPES.CREDIT) {
+        summary.totalCredits += transaction.amount;
+      } else {
+        summary.totalDebits += transaction.amount;
+      }
+
+      if (transaction.status === WalletTransaction.STATUS.PENDING) {
+        summary.pendingTransactions++;
+      } else if (transaction.status === WalletTransaction.STATUS.COMPLETED) {
+        summary.completedTransactions++;
+      }
+    });
+
+    return summary;
+  }
+
+  // Create order payment collection transaction
+  async createOrderPaymentTransaction(orderId, orderRef, amount, description = null) {
+    return this.addWalletTransaction({
+      amount,
+      description: description || `Order payment collection - Order #${orderId}`,
+      orderId,
+      orderRef,
+      paymentMethod: '',
+      status: WalletTransaction.STATUS.COMPLETED,
+      transactionType: WalletTransaction.TRANSACTION_TYPES.DEBIT
+    });
+  }
+
+  // Create earnings credit transaction
+  async createEarningsTransaction(orderId, orderRef, amount, description = null) {
+    return this.addWalletTransaction({
+      amount,
+      description: description || `Delivery earnings - Order #${orderId}`,
+      orderId,
+      orderRef,
+      paymentMethod: '',
+      status: WalletTransaction.STATUS.COMPLETED,
+      transactionType: WalletTransaction.TRANSACTION_TYPES.CREDIT
+    });
   }
 }
 

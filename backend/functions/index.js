@@ -5,48 +5,87 @@ const admin = require('firebase-admin');
 admin.initializeApp();
 
 // Accept Order By Partner Code - NO AUTHENTICATION REQUIRED
-// This function bypasses all authentication checks to resolve UNAUTHENTICATED errors
-exports.acceptOrderByPartnerCode = functions.https.onCall(async (data, context) => {
+// This function handles both direct HTTP and callable requests
+exports.acceptOrderByPartnerCode = functions.https.onRequest(async (req, res) => {
+  // Handle CORS
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, POST');
+  res.set('Access-Control-Allow-Headers', 'Content-Type');
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+
   try {
-    const { orderId, partnerId } = data;
+    // Get data from either POST body or query parameters
+    const data = req.method === 'POST' ? req.body : req.query;
+    // Extract from data object if it's a callable function request
+    const requestData = data.data || data;
+    console.log('🔧 DEBUG: acceptOrderByPartnerCode called with raw data:', data);
+    console.log('🔧 DEBUG: data type:', typeof data);
+    console.log('🔧 DEBUG: data keys:', Object.keys(data || {}));
+    
+    const { orderId, partnerId } = requestData;
+    
+    console.log('🔧 DEBUG: Extracted values:');
+    console.log('🔧 orderId:', orderId, 'type:', typeof orderId);
+    console.log('🔧 partnerId:', partnerId, 'type:', typeof partnerId);
     
     console.log('Accept order by partner code called:', { orderId, partnerId });
     
     if (!orderId || !partnerId) {
+      console.log('🔧 DEBUG: Validation failed - orderId or partnerId missing');
       throw new functions.https.HttpsError('invalid-argument', 'orderId and partnerId are required');
     }
     
+    // Log the successful call
+    console.log('✅ Processing order acceptance:', { orderId, partnerId });
+    
     // Update order status in Firestore
-    await admin.firestore()
-      .collection('orders')
-      .doc(orderId)
-      .update({
-        orderStatus: 'preparing',
-        deliveryPartnerId: admin.firestore().doc(`users/${partnerId}`),
-        assignedAt: admin.firestore.FieldValue.serverTimestamp()
+    const orderRef = admin.firestore().collection('orders').doc(orderId);
+    
+    // Get the current order data
+    const orderDoc = await orderRef.get();
+    
+    if (!orderDoc.exists) {
+      console.error('❌ Order not found:', orderId);
+      res.status(404).json({
+        success: false,
+        message: 'Order not found',
+        error: 'ORDER_NOT_FOUND'
       });
-    
-    console.log(`Order ${orderId} assigned to partner ${partnerId}`);
-    
-    // Trigger notification to partner
-    try {
-      await exports.sendNotificationToPartner.handler({ orderId, partnerId });
-      console.log('Notification sent successfully');
-    } catch (notificationError) {
-      console.error('Notification failed but order was assigned:', notificationError);
-      // Don't fail the entire operation if notification fails
+      return;
     }
     
-    return { 
-      success: true,
-      message: 'Order assigned successfully',
-      orderId: orderId,
-      partnerId: partnerId
-    };
+    // Update the order status
+    await orderRef.update({
+      status: 'accepted',
+      acceptedBy: partnerId,
+      acceptedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    console.log('✅ Order accepted successfully:', orderId);
+    
+    // Send success response
+    res.status(200).json({ 
+      success: true, 
+      message: 'Order accepted successfully',
+      orderId,
+      partnerId
+    });
     
   } catch (error) {
-    console.error('Error in acceptOrderByPartnerCode:', error);
-    throw new functions.https.HttpsError('internal', error.message);
+    console.error('❌ Error accepting order:', error);
+    
+    // Send error response
+    res.status(500).json({
+      success: false,
+      message: 'Failed to accept order',
+      error: error.message || 'INTERNAL_ERROR',
+      details: error.details || null
+    });
   }
 });
 

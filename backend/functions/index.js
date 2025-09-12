@@ -5,12 +5,11 @@ const admin = require('firebase-admin');
 admin.initializeApp();
 
 // Accept Order By Partner Code - NO AUTHENTICATION REQUIRED
-// This function handles both direct HTTP and callable requests
 exports.acceptOrderByPartnerCode = functions.https.onRequest(async (req, res) => {
   // Handle CORS
   res.set('Access-Control-Allow-Origin', '*');
-  res.set('Access-Control-Allow-Methods', 'GET, POST');
-  res.set('Access-Control-Allow-Headers', 'Content-Type');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
@@ -19,73 +18,113 @@ exports.acceptOrderByPartnerCode = functions.https.onRequest(async (req, res) =>
   }
 
   try {
-    // Get data from either POST body or query parameters
-    const data = req.method === 'POST' ? req.body : req.query;
-    // Extract from data object if it's a callable function request
-    const requestData = data.data || data;
-    console.log('🔧 DEBUG: acceptOrderByPartnerCode called with raw data:', data);
-    console.log('🔧 DEBUG: data type:', typeof data);
-    console.log('🔧 DEBUG: data keys:', Object.keys(data || {}));
+    console.log('🔧 DEBUG: acceptOrderByPartnerCode called with method:', req.method);
     
-    const { orderId, partnerId } = requestData;
+    // Handle both POST and GET requests
+    let requestData;
+    if (req.method === 'POST') {
+      requestData = req.body.data || req.body; // Handle both callable and direct requests
+    } else if (req.method === 'GET') {
+      requestData = req.query;
+    } else {
+      throw new Error('Method not allowed');
+    }
+    
+    console.log('🔧 DEBUG: Processed request data:', requestData);
+    
+    // Extract orderId and partnerId from the request data
+    const { orderId, partnerId } = requestData || {};
+    
+    console.log('🔧 DEBUG: Extracted values - orderId:', orderId, 'partnerId:', partnerId);
+    
+    // Input validation
+    if (!orderId || !partnerId) {
+      console.error('❌ Validation failed - orderId or partnerId missing');
+      res.status(400).json({
+        success: false,
+        message: 'orderId and partnerId are required',
+        error: 'INVALID_ARGUMENT'
+      });
+      return;
+    }
     
     console.log('🔧 DEBUG: Extracted values:');
     console.log('🔧 orderId:', orderId, 'type:', typeof orderId);
     console.log('🔧 partnerId:', partnerId, 'type:', typeof partnerId);
     
-    console.log('Accept order by partner code called:', { orderId, partnerId });
+    console.log('✅ Accept order by partner code called:', { orderId, partnerId });
     
-    if (!orderId || !partnerId) {
-      console.log('🔧 DEBUG: Validation failed - orderId or partnerId missing');
-      throw new functions.https.HttpsError('invalid-argument', 'orderId and partnerId are required');
-    }
-    
-    // Log the successful call
-    console.log('✅ Processing order acceptance:', { orderId, partnerId });
-    
-    // Update order status in Firestore
-    const orderRef = admin.firestore().collection('orders').doc(orderId);
-    
-    // Get the current order data
-    const orderDoc = await orderRef.get();
-    
-    if (!orderDoc.exists) {
-      console.error('❌ Order not found:', orderId);
-      res.status(404).json({
-        success: false,
-        message: 'Order not found',
-        error: 'ORDER_NOT_FOUND'
+    try {
+      // Get the order reference
+      const orderRef = admin.firestore().collection('orders').doc(orderId);
+      const orderDoc = await orderRef.get();
+      
+      if (!orderDoc.exists) {
+        console.error(`❌ Order ${orderId} not found`);
+        res.status(404).json({
+          success: false,
+          message: 'Order not found',
+          error: 'ORDER_NOT_FOUND',
+          orderId
+        });
+        return;
+      }
+      
+      // Update the order with the partner ID and status
+      await orderRef.update({
+        status: 'accepted',
+        deliveryPartnerId: partnerId,
+        acceptedBy: partnerId,
+        acceptedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
-      return;
+      
+      console.log(`✅ Order ${orderId} assigned to partner ${partnerId}`);
+      
+      // Send notification to partner
+      try {
+        await sendNotificationToPartner(orderId, partnerId);
+      } catch (notifError) {
+        console.error('⚠️ Error sending notification:', notifError);
+        // Don't fail the whole operation if notification fails
+      }
+      
+      // Send success response
+      res.status(200).json({
+        success: true,
+        message: 'Order accepted successfully',
+        orderId,
+        partnerId,
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      console.error('❌ Error updating order:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to update order',
+        error: error.message || 'Unknown error occurred',
+        details: error.details || null
+      });
     }
-    
-    // Update the order status
-    await orderRef.update({
-      status: 'accepted',
-      acceptedBy: partnerId,
-      acceptedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    console.log('✅ Order accepted successfully:', orderId);
-    
-    // Send success response
-    res.status(200).json({ 
-      success: true, 
-      message: 'Order accepted successfully',
-      orderId,
-      partnerId
-    });
-    
   } catch (error) {
-    console.error('❌ Error accepting order:', error);
-    
-    // Send error response
+    console.error('❌ Error in acceptOrderByPartnerCode:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to accept order',
-      error: error.message || 'INTERNAL_ERROR',
+      message: 'Internal server error',
+      error: error.message || 'Unknown error occurred',
       details: error.details || null
     });
+      if (error.code && error.message) {
+        throw error;
+      }
+      
+      // Otherwise, wrap the error
+    throw new functions.https.HttpsError(
+      'internal',
+      'Failed to process order acceptance',
+      error.message || 'Unknown error occurred'
+    );
   }
 });
 

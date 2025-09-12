@@ -70,10 +70,29 @@ exports.acceptOrderByPartnerCode = functions.https.onRequest(async (req, res) =>
         return;
       }
       
-      // Update the order with the partner ID and status
+      // Get delivery partner information
+      const partnerRef = admin.firestore().collection('deliveryPartners').doc(partnerId);
+      const partnerDoc = await partnerRef.get();
+      
+      if (!partnerDoc.exists) {
+        console.error(`❌ Delivery partner ${partnerId} not found`);
+        res.status(404).json({
+          success: false,
+          message: 'Delivery partner not found',
+          error: 'PARTNER_NOT_FOUND',
+          partnerId
+        });
+        return;
+      }
+      
+      const partnerData = partnerDoc.data();
+      const deliveryBoyName = partnerData.name || partnerData.displayName || partnerData.fullName || 'Unknown Partner';
+      
+      // Update the order with the partner reference and partnerAssigned status
       await orderRef.update({
-        status: 'accepted',
-        deliveryPartnerId: partnerId,
+        partnerAssigned: true,
+        deliveryPartnerId: partnerRef, // Firestore document reference
+        deliveryBoyName: deliveryBoyName, // String name of delivery partner
         acceptedBy: partnerId,
         acceptedAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),

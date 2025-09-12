@@ -86,7 +86,9 @@ exports.acceptOrderByPartnerCode = functions.https.onRequest(async (req, res) =>
       }
       
       const partnerData = partnerDoc.data();
-      const deliveryBoyName = partnerData.name || partnerData.displayName || partnerData.fullName || 'Unknown Partner';
+      console.log('🔧 DEBUG: Partner data:', JSON.stringify(partnerData, null, 2));
+      const deliveryBoyName = partnerData.display_name || partnerData.name || partnerData.displayName || partnerData.fullName || partnerData.firstName || 'Unknown Partner';
+      console.log('🔧 DEBUG: Extracted deliveryBoyName:', deliveryBoyName);
       
       // Update the order with the partner reference and partnerAssigned status
       await orderRef.update({
@@ -102,7 +104,7 @@ exports.acceptOrderByPartnerCode = functions.https.onRequest(async (req, res) =>
       
       // Send notification to partner
       try {
-        await sendNotificationToPartner(orderId, partnerId);
+        await _sendNotification(orderId, partnerId);
       } catch (notifError) {
         console.error('⚠️ Error sending notification:', notifError);
         // Don't fail the whole operation if notification fails
@@ -147,7 +149,84 @@ exports.acceptOrderByPartnerCode = functions.https.onRequest(async (req, res) =>
   }
 });
 
-// Send Notification to Partner - FCM Integration
+// Internal helper function to send notifications
+async function _sendNotification(orderId, partnerId) {
+  // Get partner's FCM token from Firestore
+  const partnerDoc = await admin.firestore()
+    .collection('deliveryPartners') // Corrected collection name
+    .doc(partnerId)
+    .get();
+
+  if (!partnerDoc.exists) {
+    throw new Error('Partner not found');
+  }
+
+  const partnerData = partnerDoc.data();
+  const fcmToken = partnerData.fcmToken;
+
+  if (!fcmToken) {
+    console.log('No FCM token found for partner:', partnerId);
+    throw new Error('Partner has no FCM token');
+  }
+
+  // Get order details for a richer notification
+  const orderDoc = await admin.firestore().collection('orders').doc(orderId).get();
+  if (!orderDoc.exists) {
+    throw new Error('Order not found');
+  }
+  const orderData = orderDoc.data();
+
+  // Construct orderDetails string from products array
+  const orderDetails = orderData.products
+    .map(p => `${p.quantity}x ${p.productName}`)
+    .join(', ');
+
+  // Prepare FCM message
+  const message = {
+    token: fcmToken,
+    notification: {
+      title: `New Order from ${orderData.restaurantName}!`,
+      body: `Order #${orderId} - ₹${orderData.orderTotal.toFixed(2)}`
+    },
+    data: {
+      orderId: orderId,
+      type: 'new_order', // Use 'new_order' type for the overlay
+      partnerId: partnerId,
+      restaurantName: orderData.restaurantName || 'Restaurant',
+      customerAddress: orderData.deliveryAddress.formattedAddress || 'Customer Address',
+      orderDetails: orderDetails,
+      orderTotal: orderData.orderTotal.toString(),
+      timestamp: Date.now().toString()
+    },
+    android: {
+      priority: 'high',
+      notification: {
+        sound: 'default',
+        channelId: 'order_notifications',
+        clickAction: 'FLUTTER_NOTIFICATION_CLICK'
+      }
+    },
+    apns: {
+      payload: {
+        aps: {
+          sound: 'default',
+          badge: 1,
+          alert: {
+            title: `New Order from ${orderData.restaurantName}!`,
+            body: `Order #${orderId} - ₹${orderData.orderTotal.toFixed(2)}`
+          }
+        }
+      }
+    }
+  };
+
+  // Send FCM notification
+  const response = await admin.messaging().send(message);
+  console.log('FCM notification sent successfully:', response);
+  return response;
+}
+
+// Send Notification to Partner - FCM Integration (Callable wrapper)
 exports.sendNotificationToPartner = functions.https.onCall(async (data, context) => {
   try {
     const { orderId, partnerId } = data;
@@ -158,62 +237,7 @@ exports.sendNotificationToPartner = functions.https.onCall(async (data, context)
       throw new functions.https.HttpsError('invalid-argument', 'orderId and partnerId are required');
     }
     
-    // Get partner's FCM token from Firestore
-    const partnerDoc = await admin.firestore()
-      .collection('partners')
-      .doc(partnerId)
-      .get();
-    
-    if (!partnerDoc.exists) {
-      throw new functions.https.HttpsError('not-found', 'Partner not found');
-    }
-    
-    const partnerData = partnerDoc.data();
-    const fcmToken = partnerData.fcmToken;
-    
-    if (!fcmToken) {
-      console.log('No FCM token found for partner:', partnerId);
-      throw new functions.https.HttpsError('failed-precondition', 'Partner has no FCM token');
-    }
-    
-    // Prepare FCM message
-    const message = {
-      token: fcmToken,
-      notification: {
-        title: 'New Order Assigned 🚀',
-        body: `Order ${orderId} has been assigned to you.`
-      },
-      data: {
-        orderId: orderId,
-        type: 'ORDER_ASSIGNED',
-        partnerId: partnerId,
-        timestamp: Date.now().toString()
-      },
-      android: {
-        priority: 'high',
-        notification: {
-          sound: 'default',
-          channelId: 'order_notifications',
-          clickAction: 'FLUTTER_NOTIFICATION_CLICK'
-        }
-      },
-      apns: {
-        payload: {
-          aps: {
-            sound: 'default',
-            badge: 1,
-            alert: {
-              title: 'New Order Assigned 🚀',
-              body: `Order ${orderId} has been assigned to you.`
-            }
-          }
-        }
-      }
-    };
-    
-    // Send FCM notification
-    const response = await admin.messaging().send(message);
-    console.log('FCM notification sent successfully:', response);
+    const response = await _sendNotification(orderId, partnerId);
     
     return {
       success: true,

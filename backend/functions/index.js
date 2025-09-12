@@ -185,12 +185,12 @@ async function _sendNotification(orderId, partnerId) {
   const message = {
     token: fcmToken,
     notification: {
-      title: `New Order from ${orderData.restaurantName}!`,
-      body: `Order #${orderId} - ₹${orderData.orderTotal.toFixed(2)}`
+      title: `Order Assigned Successfully!`,
+      body: `You've been assigned Order #${orderId} from ${orderData.restaurantName} - ₹${orderData.orderTotal.toFixed(2)}`
     },
     data: {
       orderId: orderId,
-      type: 'new_order', // Use 'new_order' type for the overlay
+      type: 'order_assigned', // Use 'order_assigned' type to prevent overlay from showing again
       partnerId: partnerId,
       restaurantName: orderData.restaurantName || 'Restaurant',
       customerAddress: orderData.deliveryAddress.formattedAddress || 'Customer Address',
@@ -212,8 +212,8 @@ async function _sendNotification(orderId, partnerId) {
           sound: 'default',
           badge: 1,
           alert: {
-            title: `New Order from ${orderData.restaurantName}!`,
-            body: `Order #${orderId} - ₹${orderData.orderTotal.toFixed(2)}`
+            title: `Order Assigned Successfully!`,
+            body: `You've been assigned Order #${orderId} from ${orderData.restaurantName} - ₹${orderData.orderTotal.toFixed(2)}`
           }
         }
       }

@@ -1098,9 +1098,10 @@ export const acceptOrderAndNotifyPartners = async (req, res) => {
 
     const orderData = orderDoc.data();
     
-    // Update order status to 'preparing' (accepted)
+    // Update order status to 'preparing' (accepted) and set deliveryProgress
     await db.collection('orders').doc(orderId).update({
       orderStatus: 'preparing',
+      deliveryProgress: 'partner_not_assigned',
       acceptedAt: new Date(),
       updatedAt: new Date()
     });

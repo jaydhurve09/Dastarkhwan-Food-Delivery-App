@@ -13,6 +13,16 @@ export class Order extends BaseModel {
     DECLINED: 'declined',
   };
 
+  // Delivery progress enum
+  static DELIVERY_PROGRESS = {
+    PARTNER_NOT_ASSIGNED: 'partner_not_assigned',
+    PARTNER_ASSIGNED: 'partner_assigned',
+    REACHED_PICKUP: 'reached_pickup',
+    PICKED_UP: 'picked_up',
+    REACHED_DROP: 'reached_drop',
+    DELIVERED: 'delivered',
+  };
+
   constructor(data = {}) {
     super();
     
@@ -41,6 +51,9 @@ export class Order extends BaseModel {
     
     // Order status (enum)
     this.orderStatus = data.orderStatus || Order.ORDER_STATUS.YET_TO_BE_ACCEPTED;
+    
+    // Delivery progress (enum)
+    this.deliveryProgress = data.deliveryProgress || Order.DELIVERY_PROGRESS.PARTNER_NOT_ASSIGNED;
     
     // List fields
     this.menuItems = data.menuItems || []; // List < Doc Reference (menuItems) >
@@ -73,6 +86,7 @@ export class Order extends BaseModel {
       timeLeft: this.timeLeft,
       distanceLeft: this.distanceLeft,
       orderStatus: this.orderStatus,
+      deliveryProgress: this.deliveryProgress,
       menuItems: this.menuItems,
       products: this.products,
       driverPositions: this.driverPositions,
@@ -111,6 +125,11 @@ export class Order extends BaseModel {
       throw new Error(`Invalid order status. Must be one of: ${Object.values(Order.ORDER_STATUS).join(', ')}`);
     }
     
+    // Validate delivery progress
+    if (!Object.values(Order.DELIVERY_PROGRESS).includes(this.deliveryProgress)) {
+      throw new Error(`Invalid delivery progress. Must be one of: ${Object.values(Order.DELIVERY_PROGRESS).join(', ')}`);
+    }
+    
     return true;
   }
 
@@ -121,6 +140,18 @@ export class Order extends BaseModel {
     }
     
     this.orderStatus = newStatus;
+    this.updatedAt = new Date();
+    
+    return this.save();
+  }
+
+  // Method to update delivery progress
+  async updateDeliveryProgress(newProgress, notes = '') {
+    if (!Object.values(Order.DELIVERY_PROGRESS).includes(newProgress)) {
+      throw new Error(`Invalid delivery progress: ${newProgress}`);
+    }
+    
+    this.deliveryProgress = newProgress;
     this.updatedAt = new Date();
     
     return this.save();

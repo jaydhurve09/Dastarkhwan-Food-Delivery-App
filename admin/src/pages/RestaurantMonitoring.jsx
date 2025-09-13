@@ -10,6 +10,12 @@ import MenuManagement from '../components/MenuManagement';
 
 // Helper function to check if delivery partner is assigned
 const isDeliveryPartnerAssigned = (order) => {
+  // Check deliveryProgress field first (new logic)
+  if (order.deliveryProgress && order.deliveryProgress !== 'partner_not_assigned') {
+    return true;
+  }
+  
+  // Fallback to old logic for backward compatibility
   if (order.deliveryPartnerId && typeof order.deliveryPartnerId === 'object' && 
       order.deliveryPartnerId._firestore && order.deliveryPartnerId._path) {
     return true;

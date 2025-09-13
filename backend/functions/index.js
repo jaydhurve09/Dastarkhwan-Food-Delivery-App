@@ -90,9 +90,9 @@ exports.acceptOrderByPartnerCode = functions.https.onRequest(async (req, res) =>
       const deliveryBoyName = partnerData.display_name || partnerData.name || partnerData.displayName || partnerData.fullName || partnerData.firstName || 'Unknown Partner';
       console.log('🔧 DEBUG: Extracted deliveryBoyName:', deliveryBoyName);
       
-      // Update the order with the partner reference and partnerAssigned status
+      // Update the order with the partner reference and deliveryProgress status
       await orderRef.update({
-        partnerAssigned: true,
+        deliveryProgress: "partner_assigned",
         deliveryPartnerId: partnerRef, // Firestore document reference
         deliveryBoyName: deliveryBoyName, // String name of delivery partner
         acceptedBy: partnerId,
